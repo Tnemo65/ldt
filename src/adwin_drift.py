@@ -21,8 +21,8 @@ from dataclasses import dataclass, field
 
 import pipeline_utils as pu
 
-DATA_DIR = Path('d:/final/data/raw')
-OUTPUT_DIR = Path('d:/final/output')
+DATA_DIR = Path('data/raw')
+OUTPUT_DIR = Path('output')
 
 
 # ─────────────────────────────────────────────────────────────────────────────

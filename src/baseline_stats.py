@@ -17,9 +17,9 @@ import time
 
 import pipeline_utils as pu
 
-DATA_DIR = Path('d:/final/data/raw')
-CLEAN_DIR = Path('d:/final/data')
-OUTPUT_DIR = Path('d:/final/output')
+DATA_DIR = Path('data/raw')
+CLEAN_DIR = Path('data')
+OUTPUT_DIR = Path('output')
 OUTPUT_DIR.mkdir(exist_ok=True)
 
 BASELINE_COLS = ['fare_amount', 'trip_distance', 'total_amount', 'passenger_count']
