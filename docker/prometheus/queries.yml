@@ -1,0 +1,110 @@
+# PostgreSQL exporter custom queries
+# Extends default metrics with CA-DQStream specific queries
+
+pg_stat_database:
+  query: |
+    SELECT datname, numbackends, xact_commit, xact_rollback,
+           blks_read, blks_hit, tup_returned, tup_fetched,
+           tup_inserted, tup_updated, tup_deleted, conflicts,
+           temp_files, temp_bytes, deadlocks
+    FROM pg_stat_database
+    WHERE datname = 'cadqstream'
+  metrics:
+    - datname:
+        usage: "LABEL"
+    - numbackends:
+        usage: "GAUGE"
+    - xact_commit:
+        usage: "COUNTER"
+    - xact_rollback:
+        usage: "COUNTER"
+    - blks_read:
+        usage: "COUNTER"
+    - blks_hit:
+        usage: "COUNTER"
+    - tup_returned:
+        usage: "COUNTER"
+    - tup_fetched:
+        usage: "COUNTER"
+    - tup_inserted:
+        usage: "COUNTER"
+    - tup_updated:
+        usage: "COUNTER"
+    - tup_deleted:
+        usage: "COUNTER"
+
+pg_stat_bgwriter:
+  query: |
+    SELECT checkpoints_timed, checkpoints_req, checkpoint_write_time,
+           checkpoint_sync_time, buffers_checkpoint, buffers_clean,
+           buffers_backend, buffers_alloc
+    FROM pg_stat_bgwriter
+  metrics:
+    - checkpoints_timed:
+        usage: "COUNTER"
+    - checkpoints_req:
+        usage: "COUNTER"
+    - checkpoint_write_time:
+        usage: "COUNTER"
+    - buffers_checkpoint:
+        usage: "COUNTER"
+
+pg_stat_activity:
+  query: |
+    SELECT state, COUNT(*) AS count
+    FROM pg_stat_activity
+    WHERE datname = 'cadqstream'
+    GROUP BY state
+  metrics:
+    - state:
+        usage: "LABEL"
+    - count:
+        usage: "GAUGE"
+
+cadqstream_tables:
+  query: |
+    SELECT
+      'taxi_clean' AS tbl, COALESCE(COUNT(*), 0) AS row_count
+      FROM taxi_clean
+    UNION ALL
+    SELECT
+      'rule_violations', COALESCE(COUNT(*), 0)
+      FROM rule_violations
+    UNION ALL
+    SELECT
+      'ml_anomalies', COALESCE(COUNT(*), 0)
+      FROM ml_anomalies
+    UNION ALL
+    SELECT
+      'quality_metrics', COALESCE(COUNT(*), 0)
+      FROM quality_metrics
+  metrics:
+    - tbl:
+        usage: "LABEL"
+    - row_count:
+        usage: "GAUGE"
+
+cadqstream_violation_rates:
+  query: |
+    SELECT
+      'l2_violations' AS metric, COUNT(*) AS value,
+      NOW() AS ts
+      FROM rule_violations
+      WHERE layer = 2
+        AND created_at > NOW() - INTERVAL '1 hour'
+    UNION ALL
+    SELECT
+      'l3_violations', COUNT(*), NOW()
+      FROM rule_violations
+      WHERE layer = 3
+        AND created_at > NOW() - INTERVAL '1 hour'
+    UNION ALL
+    SELECT
+      'ml_anomalies', COUNT(*), NOW()
+      FROM ml_anomalies
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+  metrics:
+    - metric:
+        usage: "LABEL"
+    - value:
+        usage: "GAUGE"
