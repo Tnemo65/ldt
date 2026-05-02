@@ -1,0 +1,886 @@
+\newpage
+\chapter{CA-DQSTREAM FRAMEWORK DESIGN}
+\pagestyle{fancy}
+\pagenumbering{arabic}
+
+% ================================================
+% 3.1 Overview
+% ================================================
+\section{Overview}
+
+CA-DQStream is a context-aware framework for streaming data quality monitoring. This chapter details the framework architecture, including the formal context model, the 4-layer validation pipeline, the ML ensemble, and the ADWIN-based self-monitoring mechanism.
+
+\begin{figure}[H]
+\centering
+\begin{small}
+\begin{tabular}{l}
+\textbf{Layer 0:} Data Ingestion $\rightarrow$ Kafka \\
+\textbf{Layer 1:} Schema Checker (NULL checks, dedup) $\rightarrow$ \texttt{dq-schema-violations} \\
+\textbf{Layer 2:} Hard Rules (fare$\geq$0, speed$<$100mph) $\rightarrow$ \texttt{dq-hard-rule-violations} \\
+\textbf{Layer 3:} Context-Aware Rules (z-score per context group) $\rightarrow$ \texttt{dq-ctx-rule-violations} \\
+\textbf{Layer 4:} ML Layer (IF + LOF + OC-SVM) $\rightarrow$ \texttt{dq-anomaly-scores} \\
+\textbf{Meta-Level:} ADWIN Drift Detection on Quality Meta-Stream $\rightarrow$ Self-Adaptation \\
+\end{tabular}
+\end{small}
+\caption{CA-DQStream Architecture Overview. Raw taxi records flow through four validation layers: Schema Checker, Hard Rules, Context-Aware Rules, and ML Layer. Each layer emits violations to dedicated Kafka topics. Quality meta-streams (aggregated metrics) are fed to ADWIN for drift detection, triggering self-adaptation when baselines become stale.}
+\label{fig:architecture_overview}
+\end{figure}
+
+% ================================================
+% 3.2 Formal Context Model
+% ================================================
+\section{Formal Context Model}
+
+The context model is the theoretical foundation of CA-DQStream. This section provides the first formal mathematical definition of context for streaming DQ.
+
+\subsection{Context Element Definition}
+
+A \textbf{context element} $c$ is defined as a 2-dimensional tuple:
+
+\begin{equation}
+c = (c_{time}, c_{rate}) \in C_{time\_slot} \times C_{ratecode\_type}
+\end{equation}
+
+where the context dimensions are:
+
+\begin{longtable}{|m{3cm}|m{5cm}|m{5.5cm}|}
+\hline
+\textbf{Dimension} & \textbf{Domain} & \textbf{Partition} \\ \hline
+$C_{time\_slot}$ & \{night, morning, afternoon, evening\} & night=(0--4h), morning=(5--10h), afternoon=(11--16h), evening=(17--23h) \\ \hline
+$C_{ratecode\_type}$ & \{standard, special\} & standard=(RatecodeID$=1$), special=(RatecodeID$\neq$1) \\ \hline
+\end{longtable}
+
+The time slot boundaries are fixed: $\texttt{bins} = [-1, 5, 11, 17, 24]$, implemented as $\texttt{pd.cut(hours, bins=[-1, 5, 11, 17, 24], labels=['night','morning','afternoon','evening'])}$.
+
+The 2D combination yields 8 context groups: night\_standard, night\_special, morning\_standard, morning\_special, afternoon\_standard, afternoon\_special, evening\_standard, evening\_special.
+
+\subsection{Context Group Definition}
+
+For each context element $c$, the \textbf{context group} $G(c)$ is the set of all records satisfying the context:
+
+\begin{equation}
+G(c) = \{ r \in R \mid r.time\_slot = c_{time} \land r.ratecode\_type = c_{rate} \}
+\end{equation}
+
+where $R$ is the record stream.
+
+\subsection{Baseline Computation}
+
+For each context group $G(c)$ and each feature $f \in F = \{fare\_amount, trip\_distance, total\_amount\}$, the baseline is computed on a sliding window $W$ (default: 7 days):
+
+\begin{equation}
+\mu_c^{(f)} = \frac{1}{|G(c) \cap W|} \sum_{r \in G(c) \cap W} r.f
+\end{equation}
+
+\begin{equation}
+\sigma_c^{(f)} = \sqrt{\frac{1}{|G(c) \cap W|} \sum_{r \in G(c) \cap W} (r.f - \mu_c^{(f)})^2}
+\end{equation}
+
+The baseline has three vectors: $\vec{\mu}_c = (\mu_c^{fare}, \mu_c^{dist}, \mu_c^{total})$ and $\vec{\sigma}_c = (\sigma_c^{fare}, \sigma_c^{dist}, \sigma_c^{total})$.
+
+\subsection{Context-Aware Threshold Selection}
+
+For each feature $f$, the \textbf{context-aware threshold} $R_c^{(f)}$ is:
+
+\begin{equation}
+R_c^{(f)} = 
+\begin{cases}
+\mu_c^{(f)} + 2 \sigma_c^{(f)} & \text{if } |G(c)| \geq n_{min} \\
+\mu_{parent(c)}^{(f)} + 2 \sigma_{parent(c)}^{(f)} & \text{if } |G(c)| < n_{min}
+\end{cases}
+\end{equation}
+
+where $n_{min} = 100$ is the minimum sample threshold.
+
+The parent fallback mechanism follows a hierarchical chain:
+
+\begin{equation}
+parent(c) = 
+\begin{cases}
+(c_{time}, \emptyset) & \text{fallback to time-only} \\
+(\emptyset, c_{rate}) & \text{fallback to ratecode-only} \\
+(\emptyset, \emptyset) & \text{global fallback}
+\end{cases}
+\end{equation}
+
+Fallback coverage, defined as the fraction of records hitting parent/global fallback, is targeted at less than 20\%.
+
+\subsection{Context Separation Score}
+
+The \textbf{Context Separation Score} (CSS) measures how well special and standard groups are separated:
+
+\begin{equation}
+\text{CSS}(time\_slot, f) = \frac{T_{special}}{T_{standard}} = \frac{\mu_{special} + 2\sigma_{special}}{\mu_{standard} + 2\sigma_{standard}}
+\end{equation}
+
+CSS $>$ 2.0 indicates that the special ratecode threshold is at least 2$\times$ higher than the standard threshold for the same feature, justifying separate context groups.
+
+Empirical results from January 2024 show CSS values of 2.4--3.1 for fare\_amount across all time slots, confirming H1.
+
+% ================================================
+% 3.3 4-Layer Pipeline
+% ================================================
+\section{4-Layer Validation Pipeline}
+
+The pipeline processes records sequentially through four layers, with each layer handling a specific type of violation.
+
+\subsection{Layer 1: Schema Checker}
+
+Layer 1 is deterministic, stateless, and applies to all incoming records. It addresses the Completeness dimension of DAMA-DMBOK.
+
+Rules:
+\begin{itemize}
+    \item \texttt{passenger\_count IS NOT NULL}
+    \item \texttt{RatecodeID IS NOT NULL}
+    \item \texttt{VendorID $\in$ \{1, 2, 6\}}
+    \item \texttt{pickup\_datetime IS NOT NULL}
+    \item Key deduplication: (tpep\_pickup\_datetime, PULocationID, fare\_amount, passenger\_count) seen before?
+\end{itemize}
+
+Deduplication uses Flink KeyedState with TTL of 7 days. Records failing deduplication are flagged as duplicates, counted in the dedup\_rate metric, and not passed to subsequent layers.
+
+Output: Layer 1 violations are emitted to the \texttt{dq-schema-violations} Kafka topic. Records passing Layer 1 proceed to Layer 2.
+
+Scale: Approximately 310,000 records out of 3M (10\%) are rejected at Layer 1.
+
+\subsection{Layer 2: Hard Rules}
+
+Layer 2 applies deterministic, stateless rules that require no context. It addresses the Validity and Consistency dimensions of DAMA-DMBOK.
+
+Rules:
+\begin{itemize}
+    \item \texttt{fare\_amount $\geq$ 0} $\to$ negative\_fare
+    \item \texttt{trip\_distance $>$ 0} $\to$ zero\_distance
+    \item \texttt{dropoff\_datetime $>$ pickup\_datetime} $\to$ dropoff\_before\_pickup
+    \item \texttt{speed $<$ 100 mph} $\to$ speed\_extreme
+    \item \texttt{fare\_amount $<$ 500} $\to$ fare\_bounds
+    \item Cross-feature: \texttt{payment\_type$\neq$1 $\to$ tip\_amount = 0} $\to$ tip\_payment\_inconsistency
+\end{itemize}
+
+The speed computation requires derived feature calculation:
+\begin{equation}
+speed\_mph = \frac{trip\_distance}{duration\_min / 60}, \quad \text{clipped at 100 mph}
+\end{equation}
+
+Output: Layer 2 violations are emitted to the \texttt{dq-hard-rule-violations} Kafka topic. Records passing Layer 2 proceed to Layer 3 with context assigned.
+
+Scale: Approximately 150,000 records out of 3M (5\%) are rejected at Layer 2.
+
+\subsection{Layer 3: Context-Aware Rules}
+
+Layer 3 applies z-score based thresholds computed per context group. It addresses the Accuracy and Consistency dimensions of DAMA-DMBOK.
+
+For each record passing Layer 2, the context is assigned as:
+
+\begin{enumerate}
+    \item Extract pickup hour from \texttt{tpep\_pickup\_datetime}
+    \item Map hour to time\_slot using fixed bins: $[-1, 5, 11, 17, 24]$
+    \item Map RatecodeID to ratecode\_type: 1 $\to$ standard, $\neq$1 $\to$ special
+    \item Combine: context\_key = time\_slot + ``\_{}'' + ratecode\_type
+\end{enumerate}
+
+Rules (per context group, baseline from 7-day sliding window):
+\begin{itemize}
+    \item $\dfrac{|fare\_amount - \mu_{context}|}{\sigma_{context}} > 2$ $\to$ fare\_outlier
+    \item $\dfrac{|trip\_distance - \mu_{context}|}{\sigma_{context}} > 2$ $\to$ distance\_outlier
+    \item $\dfrac{|total\_amount - \mu_{context}|}{\sigma_{context}} > 2$ $\to$ total\_outlier
+\end{itemize}
+
+Cross-feature: \texttt{payment\_type$\neq$1 $\to$ tip\_amount = 0} (enforced at Layer 3 for boundary cases).
+
+Baseline state is maintained in Flink KeyedState backed by RocksDB, with TTL of 7 days. When the fallback mechanism is activated, the \texttt{fallback\_used} flag is set to true and the fallback path is logged.
+
+Output: Layer 3 violations are emitted to the \texttt{dq-ctx-rule-violations} Kafka topic. Records passing Layer 3 proceed to Layer 4 for ML scoring.
+
+Scale: Approximately 253,000 records out of 3M (8\%) are flagged at Layer 3.
+
+\begin{algorithm}[H]
+\caption{Context-Aware Z-Score Check}
+\label{alg:ctx_zscore}
+\begin{algorithmic}[1]
+\Procedure{ContextAwareCheck}{$record, baseline, context\_key$}
+    \State $ctx \gets baseline.get(context\_key)$
+    \If{$ctx$ is empty}
+        \State \textbf{return} $FALLBACK\_TO\_PARENT$
+    \EndIf
+    \State $n \gets ctx.count$
+    \If{$n < n_{min}$}
+        \State \textbf{return} $FALLBACK\_TO\_PARENT$
+    \EndIf
+    \ForEach{$feature \in$ [fare\_amount, trip\_distance, total\_amount]}
+        \State $\mu \gets ctx[feature].mean$
+        \State $\sigma \gets ctx[feature].std$
+        \If{$\sigma < 0.01$}
+            \State \textbf{continue}
+        \EndIf
+        \State $value \gets record.get(feature)$
+        \State $z\_score \gets |value - \mu| / \sigma$
+        \State $threshold \gets \mu + 2 \times \sigma$
+        \If{$z\_score > 2$}
+            \State \textbf{emit} $violation\_to\_kafka(feature, value, z\_score, threshold)$
+        \EndIf
+    \EndFor
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Layer 4: ML Layer (3-Method Ensemble)}
+
+Layer 4 detects multivariate anomalies that rules cannot express. This layer is complementary to, not a replacement for, rules. It addresses the Consistency and Accuracy dimensions of DAMA-DMBOK for edge cases.
+
+The ML layer compares three methods: Isolation Forest (IF), Local Outlier Factor (LOF), and One-Class SVM (OC-SVM). All three are trained on clean records from 2024 (after Layers 1/2/3 filtering). Method selection is based on ablation study results (Chapter 4).
+
+\textbf{Feature Engineering (8 features):}
+\begin{longtable}{|m{1cm}|m{4cm}|m{4cm}|m{4cm}|}
+\hline
+\textbf{\#} & \textbf{Feature} & \textbf{Source} & \textbf{Formula} \\ \hline
+1 & fare\_amount & Raw & --- \\ \hline
+2 & trip\_distance & Raw & --- \\ \hline
+3 & duration\_min & Computed & (dropoff - pickup).seconds / 60 \\ \hline
+4 & speed\_mph & Computed & trip\_distance / (duration\_min / 60), clip upper=100 \\ \hline
+5 & tip\_ratio & Computed & tip\_amount / fare\_amount (if fare $>$ 0) \\ \hline
+6 & fare\_per\_mile & Computed & fare\_amount / trip\_distance (if dist $>$ 0) \\ \hline
+7 & fare\_deviation & Layer 3 & $|fare - \mu_{context}| / \sigma_{context}$ \\ \hline
+8 & distance\_deviation & Layer 3 & $|distance - \mu_{context}| / \sigma_{context}$ \\ \hline
+\end{longtable}
+
+\textbf{Isolation Forest parameters:} n\_estimators$=100$, max\_samples$=256$, contamination$=0.01$, random\_state$=42$.
+
+\textbf{LOF parameters:} n\_neighbors$=20$, contamination$=0.01$, novelty$=True$.
+
+\textbf{OC-SVM parameters:} kernel$=``$rbf'', nu$=0.01$, gamma$=``$scale'', subsampled to 50,000 records due to O($n^2$) complexity.
+
+Ensemble scoring:
+\begin{equation}
+score_{ensemble} = w_{IF} \cdot score_{IF} + w_{LOF} \cdot score_{LOF} + w_{SVM} \cdot score_{SVM}
+\end{equation}
+
+with initial weights $w_{IF}=0.45$, $w_{LOF}=0.30$, $w_{SVM}=0.25$, refined after ablation study.
+
+Priority assignment:
+\begin{equation}
+priority = 
+\begin{cases}
+HIGH & \text{if } score_{ensemble} > 0.7 \\
+MEDIUM & \text{if } 0.5 < score_{ensemble} \leq 0.7 \\
+LOW & \text{if } score_{ensemble} \leq 0.5
+\end{cases}
+\end{equation}
+
+Output: Anomaly scores and priorities are emitted to the \texttt{dq-anomaly-scores} Kafka topic and written to the anomaly\_scores table.
+
+Online retraining: IF and LOF support partial\_fit() for incremental training. When the buffer reaches 100,000 records, the model is retrained on the recent window.
+
+% ================================================
+% 3.4 ADWIN Self-Monitoring
+% ================================================
+\section{Self-Monitoring via Quality Meta-Streams}
+
+A distinguishing feature of CA-DQStream is self-monitoring: the framework monitors its own output to detect when baselines have become stale.
+
+\subsection{Quality Meta-Stream}
+
+The quality meta-stream is an aggregated view of DQ metrics computed every 1-minute window:
+
+\begin{itemize}
+    \item \texttt{null\_rate\_c(t)} = |NULL records in G(c)| / |records in G(c)|
+    \item \texttt{violation\_rate\_c(t)} = |violations in G(c)| / |records in G(c)|
+    \item \texttt{volume\_c(t)} = |records in G(c)|
+    \item \texttt{anomaly\_rate\_c(t)} = |ML anomalies in G(c)| / |records in G(c)|
+    \item \texttt{consumer\_lag\_ms} = event-time vs. processing-time delta
+    \item \texttt{dedup\_rate\_c(t)} = |duplicates detected| / |total|
+\end{itemize}
+
+These metrics are emitted to the \texttt{dq-meta-stream} Kafka topic and fed to ADWIN for drift detection.
+
+Evidence from NYC Taxi data: NULL rates increase from 2024 to 2026, showing gradual upstream drift. Vendor-specific patterns (Vendor 2/6 with 60\%+ NULL rates on special ratecode) indicate vendor-specific data quality issues.
+
+\subsection{ADWIN-Based Drift Detection}
+
+ADWIN (Adaptive Windowing) maintains two windows of recent values. When the statistical properties of the two windows differ significantly (detected by a statistical hypothesis test), a drift alarm is raised.
+
+For each meta-metric, a dedicated DriftDetector maintains an ADWIN instance with configurable $\delta$ (sensitivity parameter):
+
+\begin{algorithm}[H]
+\caption{ADWIN Drift Detection on Quality Meta-Stream}
+\label{alg:adwin}
+\begin{algorithmic}[1]
+\State $drift\_detectors \gets$ \{
+    \texttt{null\_rate}: ADWIN($\delta=0.002$),
+    \texttt{violation\_rate}: ADWIN($\delta=0.002$),
+    \texttt{volume}: ADWIN($\delta=0.005$),
+    \texttt{anomaly\_rate}: ADWIN($\delta=0.001$)
+\}
+\Statex
+\Procedure{OnMetaMetric}{$metric\_name, value$}
+    \State $detector \gets drift\_detectors[metric\_name]$
+    \State $drifted\_flag \gets detector.update(value)$
+    \If{$drifted\_flag$}
+        \State \textbf{trigger\_self\_adaptation}$(metric\_name, value)$
+    \EndIf
+\EndProcedure
+\Statex
+\Procedure{TriggerSelfAdaptation}{$metric\_name, value$}
+    \If{$metric\_name =$ ``null\_rate''}
+        \State \textbf{expand\_sliding\_window}(7d $\to$ 14d)
+        \State \textbf{increase\_min\_samples}(100 $\to$ 200)
+        \State \textbf{recalculate\_baseline}()
+        \State \textbf{emit\_alert}(``DQ baseline stale, recalculating...'')
+    \ElsIf{$metric\_name =$ ``volume''}
+        \State \textbf{fallback\_context}(2D $\to$ 1D $\to$ global)
+        \State \textbf{emit\_alert}(``Context group has insufficient data'')
+    \ElsIf{$metric\_name =$ ``anomaly\_rate''}
+        \State \textbf{force\_retrain\_IF}()
+        \State \textbf{emit\_alert}(``ML model retrained due to score shift'')
+    \EndIf
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}
+
+ADWIN parameters: window aggregation $= 1$ minute, $\delta = 0.002$ for quality metrics (sensitive to drift), $\delta = 0.005$ for volume (less sensitive).
+
+\subsection{Alert Conditions}
+
+Meta-level monitoring triggers alerts when thresholds are exceeded:
+
+\begin{longtable}{|m{4cm}|m{6cm}|m{4cm}|}
+\hline
+\textbf{Metric} & \textbf{What it reveals} & \textbf{Alert Condition} \\ \hline
+null\_rate\_c(t) & Schema drift, upstream bugs & $>$2$\times$ baseline in 15 minutes \\ \hline
+violation\_rate\_c(t) & DQ degradation per context & $>$30\% change vs. 7-day rolling avg \\ \hline
+volume\_c(t) & Source availability, vendor offline & Drop $>$50\% below baseline \\ \hline
+schema\_violation\_count & Breaking schema changes & Any non-zero in production \\ \hline
+anomaly\_rate\_c(t) & ML model staleness & Shift in ML score distribution \\ \hline
+consumer\_lag & Pipeline throughput issues & Sustained growth $>$10 minutes \\ \hline
+dedup\_rate\_c(t) & Duplicate record rate & Spike above baseline + 2$\sigma$ \\ \hline
+\end{longtable}
+
+% ================================================
+% 3.5 Architecture
+% ================================================
+\section{System Architecture}
+
+CA-DQStream is implemented on Apache Kafka and Apache Flink, with PostgreSQL for persistence and Prometheus/Grafana for monitoring.
+
+\subsection{Kafka Message Schema}
+
+Kafka serves as the streaming backbone, organizing all pipeline data into dedicated topics:
+
+\begin{longtable}{|m{3.5cm}|m{4.5cm}|m{5cm}|}
+\hline
+\textbf{Topic} & \textbf{Producer} & \textbf{Content} \\ \hline
+taxi-nyc-raw & Data Ingestion & Raw NYC taxi records with ingestion\_timestamp \\ \hline
+dq-schema-violations & Layer 1 & NULL records, invalid types, duplicates \\ \hline
+dq-hard-rule-violations & Layer 2 & Negative fare, zero distance, extreme speed violations \\ \hline
+dq-ctx-rule-violations & Layer 3 & Z-score outliers per context group \\ \hline
+dq-anomaly-scores & Layer 4 & ML scores per method + ensemble + priority \\ \hline
+dq-meta-stream & MetaAggregator & Quality metrics per 1-minute window (ADWIN feed) \\ \hline
+\end{longtable}
+
+Each Kafka message carries a UUID-based record\_id for end-to-end tracing. The message schema for taxi-nyc-raw:
+
+\begin{lstlisting}[language=Python]
+{
+    "record_id": "uuid",
+    "vendor_id": 1,
+    "tpep_pickup_datetime": "2024-07-15T14:32:00",
+    "tpep_dropoff_datetime": "2024-07-15T14:45:00",
+    "passenger_count": 2,
+    "trip_distance": 2.3,
+    "RatecodeID": 1,
+    "PULocationID": 238,
+    "DOLocationID": 166,
+    "payment_type": 1,
+    "fare_amount": 12.50,
+    "tip_amount": 2.50,
+    "total_amount": 16.70,
+    "ingestion_timestamp": "2024-07-15T14:45:01.234Z"
+}
+\end{lstlisting}
+
+Kafka configuration uses key-based partitioning by PULocationID for locality, replication factor 1 for development and 3 for production, and 7-day retention for replay capability.
+
+\subsection{Data Ingestion Layer}
+
+Raw taxi records are ingested from the NYC TLC Parquet files (simulated as streaming via Kafka). Each message contains the full record schema plus an ingestion timestamp. Kafka topics:
+
+\begin{itemize}
+    \item \texttt{taxi-nyc-raw}: raw events (input)
+    \item \texttt{dq-schema-violations}: Layer 1 rejects
+    \item \texttt{dq-hard-rule-violations}: Layer 2 rejects
+    \item \texttt{dq-ctx-rule-violations}: Layer 3 rejects
+    \item \texttt{dq-anomaly-scores}: Layer 4 anomaly scores
+    \item \texttt{dq-meta-stream}: quality meta-metrics (ADWIN feed)
+\end{itemize}
+
+\subsection{Flink Processing Layer}
+
+Flink operators implement each layer as a stateful operator:
+
+\begin{itemize}
+    \item \textbf{SchemaOperator}: stateless, deterministic filtering
+    \item \textbf{HardRulesOperator}: stateless, derives speed and validates rules
+    \item \textbf{ContextAwareOperator}: stateful, maintains baselines per context group in RocksDB
+    \item \textbf{MLScoringOperator}: calls ML models (IF, LOF, OC-SVM) for each record
+    \item \textbf{MetaAggregator}: aggregates metrics per 1-minute window, emits to dq-meta-stream
+\end{itemize}
+
+Checkpointing is enabled with 1-minute intervals, ensuring exactly-once processing semantics.
+
+\subsection{Baseline State Management}
+
+Baseline statistics per context group are stored in Flink KeyedState with RocksDB backend:
+
+\begin{itemize}
+    \item Key: context\_key (e.g., ``afternoon\_standard'')
+    \item Value: \{count, fare\_mean, fare\_std, dist\_mean, dist\_std, total\_mean, total\_std, timestamp\}
+    \item TTL: 7 days (configurable)
+    \item Update: incremental Welford's algorithm for O(1) update
+\end{itemize}
+
+The hierarchical fallback chain is implemented as: try exact 2D key $\to$ if $|G(c)| < n_{min}$, try 1D time-only key $\to$ if still insufficient, try 1D ratecode-only key $\to$ if still insufficient, use global fallback.
+
+% ================================================
+% 3.5 Persistent Storage Layer
+% ================================================
+\section{PostgreSQL Persistent Storage Layer}
+
+PostgreSQL serves as the persistent storage layer for all processed data. Flink writes clean records, violations, and aggregated metrics to PostgreSQL via JDBC sink, enabling historical analysis, ad-hoc queries, and dashboard backends.
+
+\subsection{Schema Design}
+
+The database schema consists of eight core tables, each optimized for specific query patterns:
+
+\begin{longtable}{|m{4cm}|m{9.5cm}|}
+\hline
+\textbf{Table} & \textbf{Description} \\ \hline
+taxi\_clean & Clean records passing all 4 layers, with ML scores and context assigned \\ \hline
+schema\_violations & Layer 1 rejects (NULL fields, invalid types) \\ \hline
+hard\_rule\_violations & Layer 2 rejects (negative fare, zero distance, extreme speed) \\ \hline
+ctx\_rule\_violations & Layer 3 rejects (z-score outliers per context group) \\ \hline
+ml\_anomalies & Layer 4 detections with per-method scores and ensemble vote \\ \hline
+quality\_metrics & Aggregated DQ metrics per 1-minute window with drift flags \\ \hline
+baseline\_stats & Rolling baseline statistics per context group and feature \\ \hline
+ml\_experiment\_results & ML ablation study results (Precision/Recall/F1/FPR per method) \\ \hline
+\end{longtable}
+
+The \texttt{taxi\_clean} table stores all records passing the 4-layer pipeline, enriched with ML scores and context metadata. The ML anomaly score and selected method columns enable comparison of method performance over time.
+
+The \texttt{quality\_metrics} table stores ADWIN input data, enabling post-hoc drift analysis. The \texttt{drift\_detected} and \texttt{drift\_metric} columns allow querying for all drift events and correlating them with data quality trends.
+
+Key indexes support the Grafana dashboard queries: \texttt{idx\_clean\_pickup} on pickup\_datetime for time-range queries, \texttt{idx\_quality\_metrics\_drift} on drift\_detected for alert history, and \texttt{idx\_ml\_anomaly\_priority} on ml\_anomalies(priority) for HIGH-priority anomaly retrieval.
+
+\subsection{Flink JDBC Sink Configuration}
+
+Flink writes to PostgreSQL using the JDBC Sink connector with batch buffering:
+
+\begin{lstlisting}[language=Python]
+from pyflink.connectors.jdbc import JdbcConnectionOptions, JdbcSink
+
+clean_sink = JdbcSink.builder() \
+    .set_drivers("org.postgresql.Driver") \
+    .set_db_url("jdbc:postgresql://postgres:5432/cadqstream") \
+    .set_username("cadqstream") \
+    .set_password("cadqstream_pass") \
+    .set_statement("""
+        INSERT INTO taxi_clean (
+            record_id, vendor_id, pickup_datetime, dropoff_datetime,
+            passenger_count, trip_distance, ratecode_id, pu_location_id,
+            do_location_id, payment_type, fare_amount, tip_amount, total_amount,
+            duration_min, speed_mph, pickup_hour, time_slot, ratecode_type,
+            context_group, ml_anomaly_score, ml_priority, ml_method,
+            zone_zscore, ingestion_time
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """) \
+    .set_batch_size(1000) \
+    .set_batch_interval_ms(5000) \
+    .build()
+\end{lstlisting}
+
+Batch size of 1,000 records or 5-second flush interval balances throughput against latency.
+
+% ================================================
+% 3.6 Observability Stack
+% ================================================
+\section{Observability: Prometheus and Grafana}
+
+CA-DQStream integrates Prometheus for metrics collection and Grafana for visualization, providing real-time operational visibility across all pipeline components.
+
+\subsection{Prometheus Metrics Collection}
+
+Prometheus scrapes metrics from three sources:
+
+\begin{longtable}{|m{4cm}|m{3.5cm}|m{6cm}|}
+\hline
+\textbf{Source} & \textbf{Job Name} & \textbf{Metrics} \\ \hline
+Flink TaskManagers & flink & records\_processed, processing\_latency, numRecordsOut, consumer\_lag \\ \hline
+PostgreSQL & postgres & pg\_statements\_total, pg\_connections, pg\_write\_latency \\ \hline
+Kafka & kafka & kafka\_consumer\_lag\_sum, kafka\_messages\_in\_per\_sec \\ \hline
+\end{longtable}
+
+Flink exposes custom DQ metrics via the Prometheus reporter:
+
+\begin{lstlisting}[language=Python]
+from pyflink.metrics import MetricGroup
+
+class DQMetrics:
+    def __init__(self, metric_group: MetricGroup):
+        self.total_records = metric_group.counter("dq_total_records")
+        self.layer1_violations = metric_group.counter("dq_layer1_schema_violations")
+        self.layer2_violations = metric_group.counter("dq_layer2_hard_rule_violations")
+        self.layer3_violations = metric_group.counter("dq_layer3_ctx_rule_violations")
+        self.layer4_anomalies = metric_group.counter("dq_layer4_ml_anomalies")
+        self.clean_records = metric_group.counter("dq_clean_records")
+        self.null_rate = metric_group.gauge("dq_null_rate")
+        self.violation_rate = metric_group.gauge("dq_violation_rate")
+        self.ml_anomaly_rate = metric_group.gauge("dq_ml_anomaly_rate")
+        self.processing_latency = metric_group.histogram("dq_processing_latency")
+        # ML per-method counters
+        self.if_anomaly_count = metric_group.counter("dq_if_anomalies")
+        self.lof_anomaly_count = metric_group.counter("dq_lof_anomalies")
+        self.svm_anomaly_count = metric_group.counter("dq_svm_anomalies")
+        self.ensemble_anomaly_count = metric_group.counter("dq_ensemble_anomalies")
+        self.drift_detected = metric_group.gauge("dq_drift_detected")
+\end{lstlisting}
+
+Prometheus scrape configuration uses 15-second intervals for near-real-time monitoring.
+
+\subsection{Grafana Dashboards}
+
+Four pre-built Grafana dashboards provide operational visibility:
+
+\textbf{Dashboard 1: DQ Overview} --- Total records (24h gauge + time series), Violation Rate by Layer (stacked bar chart), NULL Rate Trend (line chart per context group), ML Anomaly Rate (time series split by method), and Drift Alerts (state timeline with red = drift detected).
+
+\textbf{Dashboard 2: ML Layer Comparison} --- Anomaly Count by Method (bar chart IF vs LOF vs SVM vs Ensemble), ML Precision/Recall/F1 (stat panels from ml\_experiment\_results table), Anomaly Score Distribution (histogram per method), and Selected Method Over Time (pie chart).
+
+\textbf{Dashboard 3: Context-Aware Rules} --- Violations per Context Group (heatmap: time\_slot $\times$ ratecode\_type), Z-Score Distribution (histogram per feature), Fallback Coverage (\% records using fallback), and Context Separation Score (gauge per time slot showing CSS values).
+
+\textbf{Dashboard 4: System Performance} --- Flink Throughput (records/sec per TaskManager), Kafka Consumer Lag (ms, per topic), Processing Latency P50/P95/P99 (heatmap), PostgreSQL Write Latency (histogram), and Consumer Lag by Kafka Topic (stacked area).
+
+Key PromQL queries drive the dashboards: violation rates use \texttt{rate(dq\_layerN\_violations[1m])}, ML method comparison uses \texttt{rate(dq\_if\_anomalies[1m])} vs \texttt{rate(dq\_lof\_anomalies[1m])} vs \texttt{rate(dq\_svm\_anomalies[1m])}, and drift status uses \texttt{dq\_drift\_detected} mapped to green/red state panels.
+
+% ================================================
+% 3.7 ML Service Architecture
+% ================================================
+\section{ML Service Architecture}
+
+CA-DQStream trains ML models offline on the full 2024 dataset and serves predictions via a FastAPI microservice, keeping compute-intensive training out of the streaming pipeline.
+
+\subsection{Training Pipeline}
+
+All three ML models (Isolation Forest, LOF, One-Class SVM) are trained on the complete 2024 dataset (Jan--Dec) after Layer 1/2/3 filtering. This produces clean training data where all obvious violations have been removed:
+
+\begin{enumerate}
+    \item Export clean records from PostgreSQL for full year 2024
+    \item Engineer 8 features per record (fare, distance, duration, speed, tip\_ratio, fare\_per\_mile, fare\_deviation, distance\_deviation)
+    \item Train IF, LOF, and OC-SVM on clean data (OC-SVM subsampled to 50,000 records due to O($n^2$) complexity)
+    \item Evaluate on synthetic anomaly dataset (50,000 injected anomalies, 5 types)
+    \item Compare Precision/Recall/F1/FPR across all methods and ensemble
+    \item Persist best model(s) and weights to model registry (FastAPI /models endpoint)
+\end{enumerate}
+
+\subsection{FastAPI Service}
+
+The ML Service exposes a FastAPI REST interface:
+
+\begin{longtable}{|m{3.5cm}|m{2.5cm}|m{7cm}|}
+\hline
+\textbf{Endpoint} & \textbf{Method} & \textbf{Description} \\ \hline
+/ping & GET & Health check for Flink connectivity \\ \hline
+/score & POST & Batch scoring (records $\to$ anomaly\_scores) \\ \hline
+/metrics & GET & Prometheus metrics endpoint \\ \hline
+/models & GET & List trained models with metadata \\ \hline
+/models/\{id\}/reload & POST & Reload model (triggered by ADWIN drift) \\ \hline
+\end{longtable}
+
+The scoring endpoint receives batch records in JSON format and returns per-record anomaly scores with method breakdown:
+
+\begin{lstlisting}[language=Python]
+# POST /score
+{
+  "records": [
+    {"fare_amount": 15.5, "trip_distance": 2.3, ...},
+    ...
+  ]
+}
+# Response
+{
+  "scores": [
+    {
+      "if_score": 0.82, "lof_score": 0.61,
+      "svm_score": 0.74, "ensemble_score": 0.73,
+      "priority": "HIGH", "method": "IF"
+    }
+  ]
+}
+\end{lstlisting}
+
+Flink calls the ML Service via HTTP for each batch of records passing Layer 3. The MLScoringOperator collects records into micro-batches of 500, calls POST /score, and writes results to PostgreSQL via JDBC sink.
+
+On drift detection (ADWIN triggers self-adaptation), the system POSTs to /models/if/reload, which retrains Isolation Forest on the updated window and hot-swaps the model in memory without restarting the service.
+
+% ================================================
+% 3.8 Concept Drift Detection Layer
+% ================================================
+\section{Concept Drift Detection Layer (Layer 5)}
+
+Concept drift refers to the gradual change in the statistical properties of data over time, which causes models trained on historical data to become less accurate. In the context of streaming DQ, drift manifests as changes in baseline statistics (e.g., average fare increasing over time) or quality metrics (e.g., NULL rate increasing). CA-DQStream implements a dedicated Concept Drift Detection Layer (Layer 5) that monitors quality meta-streams and triggers self-adaptation when drift is detected.
+
+\subsection{Drift Types and Their Impact on DQ}
+
+CA-DQStream addresses four types of concept drift that affect data quality monitoring:
+
+\begin{longtable}{|m{3.5cm}|m{3.5cm}|m{4cm}|m{4cm}|}
+\hline
+\textbf{Drift Type} & \textbf{Description} & \textbf{DQ Impact} & \textbf{Detection Method} \\ \hline
+Sudden Drift & Abrupt change in data distribution & Immediate FPR increase & ADWIN (fast detection) \\ \hline
+Gradual Drift & Slow transition over weeks/months & Progressive FPR degradation & ADWIN (cumulative) \\ \hline
+Recurring Drift & Cyclic patterns (seasonal) & Periodic FPR fluctuation & Time-series analysis \\ \hline
+Concept Shift & $P(y|X)$ changes, $P(X)$ stable & Threshold becomes miscalibrated & Label drift monitoring \\ \hline
+\end{longtable}
+
+For the NYC Taxi dataset, the most significant drift type is gradual drift in the NULL rate, observed increasing from 4.3\% in January 2024 to 5.9\% in February 2026. This gradual increase causes the Layer 3 baseline (computed from January 2024) to become progressively stale, eventually causing FPR to approach the 5\% threshold by January 2026.
+
+\subsection{ADWIN-Based Drift Detection}
+
+ADWIN (Adaptive Windowing) maintains two sub-windows of the incoming metric stream and uses a statistical hypothesis test to detect when the means of the two windows differ significantly. Unlike fixed-window methods, ADWIN automatically shrinks the window when the data distribution is stable and expands it when drift is detected.
+
+The drift detection algorithm for each quality metric $m$:
+
+\begin{enumerate}
+    \item Initialize ADWIN instance with configurable $\delta$ (significance level).
+    \item For each new metric value $v$ at time $t$, call $detector.add(v)$.
+    \item If $detector.drift\_detected()$ returns true, emit a drift event with metric name, timestamp, and old/new means.
+    \item Trigger self-adaptation: expand window, recalculate baseline, optionally retrain ML models.
+\end{enumerate}
+
+ADWIN parameters are configured per metric type:
+
+\begin{longtable}{|m{4cm}|m{3cm}|m{3cm}|m{4cm}|}
+\hline
+\textbf{Metric} & \textbf{$\delta$} & \textbf{Window Aggregation} & \textbf{Self-Adaptation Action} \\ \hline
+null\_rate & 0.002 & 1-minute & Expand window, recalculate baseline \\ \hline
+violation\_rate & 0.002 & 1-minute & Recalculate layer thresholds \\ \hline
+anomaly\_rate & 0.001 & 1-minute & Retrain ML models (IF + LOF + OC-SVM) \\ \hline
+volume & 0.005 & 5-minute & Increase fallback coverage, alert operators \\ \hline
+ML\_score\_mean & 0.001 & 5-minute & Retrain ML models, reload via API \\ \hline
+\end{longtable}
+
+A lower $\delta$ (e.g., 0.001) provides higher sensitivity but more false positives; $\delta=0.002$ is recommended for most quality metrics, balancing detection speed against false alarm rate.
+
+\subsection{Self-Adaptation Protocol}
+
+When ADWIN detects drift, the system executes a tiered self-adaptation protocol:
+
+\textbf{Tier 1 (Fast adaptation, within 1 minute):}
+\begin{itemize}
+    \item Expand sliding window from 7 days to 14 days.
+    \item Increase minimum samples from 100 to 200 for baseline computation.
+    \item Temporarily increase fallback coverage (2D $\to$ 1D $\to$ global).
+    \item Emit drift alert to Prometheus/Grafana with metric name and drift magnitude.
+\end{itemize}
+
+\textbf{Tier 2 (Baseline recalculation, within 10 minutes):}
+\begin{itemize}
+    \item Retain existing model as backup.
+    \item Compute new baseline from expanded window (7d $\to$ 14d).
+    \item Recalculate all 8 context group thresholds.
+    \item A/B validate: run new thresholds on recent data, compare FPR.
+    \item If new FPR $<$ old FPR, commit new baseline.
+\end{itemize}
+
+\textbf{Tier 3 (ML model retraining, within 1 hour):}
+\begin{itemize}
+    \item Trigger Isolation Forest retraining via POST /models/if/reload.
+    \item Retrain LOF and OC-SVM on updated clean data.
+    \item Re-evaluate ensemble weights using recent synthetic anomalies.
+    \item Hot-swap updated models in ML Service memory.
+\end{itemize}
+
+The self-adaptation protocol is implemented as a Flink ProcessFunction that subscribes to the dq-meta-stream topic. When drift is detected, it calls the ML Service API and writes updated baselines to PostgreSQL.
+
+\begin{figure}[H]
+\centering
+\subfloat[ADWIN drift detection on NULL rate meta-stream]{
+\label{fig:adwin_null_drift}
+}
+\subfloat[ADWIN drift detection on anomaly rate]{
+\label{fig:adwin_anomaly_drift}
+}
+\caption{ADWIN drift detection on quality meta-streams. Each panel shows the metric value over time with drift detection events marked. (Left) NULL rate drift detected at month 3 of gradual increase (red marker). (Right) Anomaly rate drift detected when ML score distribution shifts.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\subfloat[Self-adaptation timeline]{
+\label{fig:self_adapt_timeline}
+}
+\subfloat[Drift detection MTTD by ADWIN $\delta$]{
+\label{fig:mttd_delta}
+}
+\caption{(Left) Self-adaptation timeline showing the three-tier response: fast adaptation (1 min), baseline recalculation (10 min), and ML retraining (1 hour). (Right) Mean Time To Detect (MTTD) vs. false positive rate for different ADWIN $\delta$ values, showing the sensitivity-specificity trade-off.}
+\end{figure}
+
+% ================================================
+% 3.9 MLflow Integration for ML Lifecycle Management
+% ================================================
+\section{MLflow Integration for ML Lifecycle Management}
+
+CA-DQStream integrates MLflow to manage the complete ML lifecycle, including experiment tracking, model registry, and reproducibility. The ML Service logs all training runs to MLflow, enabling systematic comparison of ML methods and ensuring reproducible model selection.
+
+\subsection{MLflow Components Used}
+
+CA-DQStream uses four MLflow components:
+
+\begin{longtable}{|m{3.5cm}|m{6cm}|m{5cm}|}
+\hline
+\textbf{Component} & \textbf{Usage in CA-DQStream} & \textbf{Backend} \\ \hline
+MLflow Tracking & Log all training runs (parameters, metrics, artifacts) for IF, LOF, OC-SVM & File store (local) \\ \hline
+MLflow Models & Package trained models as Docker-compatible containers for serving & Model registry (local) \\ \hline
+MLflow Registry & Version control for models, stage transitions (Staging $\to$ Production) & PostgreSQL backend \\ \hline
+MLflow Projects & Reproducible training runs with conda environment specification & Local execution \\ \hline
+\end{longtable}
+
+The MLflow tracking server runs as a Docker service alongside the ML Service, with all experiment data stored in a local file store mapped to a Docker volume.
+
+\subsection{Experiment Tracking}
+
+Each training run logs the following to MLflow:
+
+\begin{itemize}
+    \item \textbf{Parameters}: model type, contamination factor, number of estimators (IF), n\_neighbors (LOF), nu/gamma (OC-SVM), feature set, training window.
+    \item \textbf{Metrics}: Precision, Recall, F1, FPR on validation set (synthetic anomalies), inference latency (ms/record), model size (MB).
+    \item \textbf{Artifacts}: serialized model file (joblib), feature importance plot (IF), decision boundary visualization (2D projection).
+    \item \textbf{Tags}: dataset version, training date, baseline version, ADWIN drift status.
+\end{itemize}
+
+The MLflow UI provides a searchable experiment dashboard where data scientists can compare all training runs, filter by model type or date range, and register the best-performing model.
+
+\subsection{Model Registry Workflow}
+
+CA-DQStream follows a three-stage model registry workflow:
+
+\begin{enumerate}
+    \item \textbf{Staging}: After initial training on clean 2024 data, models are registered in the Staging stage. They are evaluated on the synthetic anomaly dataset and recent real data before promotion.
+    \item \textbf{Production}: After validation passes quality thresholds (FPR $<$ 2\%, F1 $>$ 0.80), models are promoted to Production. The ML Service loads the Production model via the MLflow Models API.
+    \item \textbf{Archived}: When ADWIN detects drift and a new model is promoted, the previous Production model is moved to Archived for rollback capability.
+\end{enumerate}
+
+Model promotion is automated when MLflow detects that a new run's metrics exceed the current Production model's metrics by a configurable margin (default: 5\% improvement in F1). The ML Service polls the registry for model updates every 60 seconds.
+
+\begin{figure}[H]
+\centering
+\subfloat[MLflow experiment dashboard (placeholder)]{
+\label{fig:mlflow_dashboard}
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{3cm}\textbf{[Figure: MLflow Experiment Dashboard --- to be inserted]}\newline\normalsize\selectfont Showcasing experiment tracking with parallel coordinate plots for Precision/Recall/F1/FPR across IF, LOF, and OC-SVM runs.}}
+}
+\subfloat[MLflow model registry stages]{
+\label{fig:mlflow_registry}
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{3cm}\textbf{[Figure: MLflow Model Registry --- to be inserted]}\newline\normalsize\selectfont Model registry workflow: Staging $\to$ Production $\to$ Archived, with automated promotion based on validation metrics.}}
+}
+\caption{MLflow integration for ML lifecycle management: experiment tracking and model registry stages.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textbf{[Figure: Kafka Architecture Diagram --- to be inserted]}\newline\normalsize\selectfont Kafka architecture showing broker replication, topic partitioning, consumer groups, and the role of ZooKeeper in CA-DQStream's streaming pipeline.}}
+\caption{Kafka architecture overview (placeholder for detailed Kafka diagram).}
+\label{fig:kafka_architecture}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textbf{[Figure: Apache Flink Architecture Diagram --- to be inserted]}\newline\normalsize\selectfont Flink architecture showing JobManager, TaskManagers, processing slots, RocksDB state backend, checkpointing, and the four-layer pipeline operators (Schema, HardRules, ContextAware, MLScoring).}}
+\caption{Apache Flink architecture overview (placeholder for detailed Flink diagram).}
+\label{fig:flink_architecture}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}\textbf{[Figure: PostgreSQL Schema Diagram --- to be inserted]}\newline\normalsize\selectfont PostgreSQL schema showing all eight tables (taxi\_clean, schema\_violations, hard\_rule\_violations, ctx\_rule\_violations, ml\_anomalies, quality\_metrics, baseline\_stats, ml\_experiment\_results) with primary keys, foreign keys, and index columns.}}
+\caption{PostgreSQL schema overview (placeholder for detailed ER diagram).}
+\label{fig:postgres_schema}
+\end{figure}
+
+% ================================================
+% 3.10 Deployment Architecture
+% ================================================
+\section{Deployment: Docker Compose Full Stack}
+
+CA-DQStream is deployed as a Docker Compose stack with ten core services:
+
+\begin{longtable}{|m{3cm}|m{4cm}|m{6.5cm}|}
+\hline
+\textbf{Service} & \textbf{Image} & \textbf{Role} \\ \hline
+zookeeper & confluentinc/cp-zookeeper:7.5.0 & Kafka coordination \\ \hline
+kafka & confluentinc/cp-kafka:7.5.0 & Message streaming backbone \\ \hline
+kafka-exporter & danielqsj/kafka-exporter:v1.7.0 & Kafka consumer lag metrics \\ \hline
+jobmanager & flink:1.18-scala\_2.12-java11 & Flink JobManager (coordination) \\ \hline
+taskmanager & flink:1.18-scala\_2.12-java11 & Flink TaskManager (processing) \\ \hline
+postgres & postgres:16-alpine & Persistent storage (records, violations, metrics) \\ \hline
+postgres-exporter & prometheuscommunity/postgres-exporter:v0.15.0 & PostgreSQL metrics \\ \hline
+mlflow & ghcr.io/mlflow/mlflow:v2.12.0 & ML experiment tracking and model registry \\ \hline
+prometheus & prom/prometheus:v2.48.0 & Metrics collection \\ \hline
+grafana & grafana/grafana:10.2.0 & Visualization and alerting \\ \hline
+ml-service & Custom FastAPI Docker image & ML model serving \\ \hline
+\end{longtable}
+
+Kafka uses 6 topics: taxi-nyc-raw (input), and five output topics (dq-schema-violations, dq-hard-rule-violations, dq-ctx-rule-violations, dq-anomaly-scores, dq-meta-stream). Topic configuration enables exactly-once semantics with replication factor 1 (development) or 3 (production).
+
+Flink runs in standalone mode with 1 JobManager and 2 TaskManagers. The Prometheus reporter is enabled in flink-conf.yaml:
+
+\begin{lstlisting}
+metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+metrics.reporter.prom.port: 9250
+\end{lstlisting}
+
+Grafana is provisioned automatically via dashboard JSON files and Prometheus datasource configuration, enabling zero-config deployment.
+
+% ================================================
+% 3.11 Key Improvements
+% ================================================
+\section{Key Improvements Over Prior Work}
+
+\begin{longtable}{|m{3.5cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|m{4cm}|}
+\hline
+\textbf{Feature} & \textbf{GE} & \textbf{Deequ} & \textbf{Stream DaQ} & \textbf{CA-DQStream} \\ \hline
+Streaming native & No & No & Yes & Yes \\ \hline
+4-layer pipeline & No & No & No & Yes \\ \hline
+Formal context model & No & No & No & Yes \\ \hline
+Context-aware thresholds & No & No & Limited & Yes (8 groups) \\ \hline
+Hierarchical fallback & No & No & No & Yes (2D$\to$1D$\to$global) \\ \hline
+ML anomaly detection & No & Stats only & No & Yes (IF+LOF+OC-SVM) \\ \hline
+Drift detection & Batch only & Batch only & Windowed & ADWIN on meta-stream \\ \hline
+Concept Drift Layer (Layer 5) & No & No & No & Yes (ADWIN-based) \\ \hline
+Self-adaptation & No & No & Partial & Yes (3-tier retrain) \\ \hline
+Layer accountability & No & No & No & Yes (each $\to$ one layer) \\ \hline
+Persistent storage & No & No & No & Yes (PostgreSQL) \\ \hline
+Metrics + dashboards & No & No & No & Yes (Prometheus + Grafana) \\ \hline
+ML model serving & N/A & N/A & N/A & FastAPI Docker service \\ \hline
+MLflow integration & No & No & No & Yes (tracking + registry) \\ \hline
+Containerized deploy & No & No & No & Yes (Docker Compose) \\ \hline
+FPR & 25--40\% & 15--25\% & 10--15\% & $<$5\% \\ \hline
+\end{longtable}
+
+The formal context model enables mathematically rigorous threshold computation, the ML layer catches multivariate edge cases, self-monitoring ensures the system adapts when its own baselines become obsolete, and the PostgreSQL/Prometheus/Grafana stack provides operational observability.
+
+% ================================================
+% 3.12 Chapter Summary
+% ================================================
+\section{Chapter Summary}
+
+This chapter detailed the CA-DQStream framework design across seven layers:
+
+\begin{enumerate}
+    \item \textbf{Formal Context Model}: Context elements as 2D tuples (time\_slot $\times$ ratecode\_type), with mathematically rigorous baseline computation, threshold selection ($\mu + 2\sigma$), and hierarchical fallback (2D $\to$ 1D $\to$ global).
+    \item \textbf{4-Layer Pipeline}: Layer 1 addresses completeness (10\% of records), Layer 2 addresses validity/consistency (5\%), Layer 3 addresses accuracy within context (8\%), and Layer 4 handles multivariate anomalies ($\sim$1--3\%).
+    \item \textbf{Concept Drift Detection Layer (Layer 5)}: ADWIN-based drift detection on quality meta-streams, monitoring null\_rate, violation\_rate, anomaly\_rate, and volume. Triggers three-tier self-adaptation (fast adaptation, baseline recalculation, ML retraining).
+    \item \textbf{Self-Monitoring via ADWIN}: Quality meta-streams (aggregated metrics per window) enable drift detection on the DQ system itself, triggering automatic recalculation and model retraining.
+    \item \textbf{PostgreSQL Storage}: JDBC sink persists clean records, violations, and quality metrics for historical analysis and dashboard backends.
+    \item \textbf{Prometheus + Grafana}: Real-time observability across all pipeline components with four pre-built dashboards for DQ overview, ML comparison, context-aware rules, and system performance.
+    \item \textbf{ML Service (FastAPI)}: Offline training on 2024 data with HTTP API for real-time scoring, isolated from the streaming pipeline.
+    \item \textbf{MLflow Integration}: Experiment tracking for all ML training runs, model registry with Staging/Production/Archived stages, and automated model promotion based on validation metrics.
+    \item \textbf{Docker Compose}: Containerized full stack deployment with Kafka, Flink, PostgreSQL, ML Service, MLflow, Prometheus, and Grafana.
+\end{enumerate}
+
+The next chapter presents the experimental evaluation of all components, including FPR comparison, layer coverage analysis, ML ablation study, drift detection effectiveness, and new experiments on PostgreSQL throughput and Grafana dashboard latency.

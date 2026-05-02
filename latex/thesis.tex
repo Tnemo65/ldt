@@ -1,0 +1,318 @@
+\documentclass[a4paper, reqno, oneside]{book}
+\usepackage[left=2.5cm, right=2cm, top=2cm, bottom=2cm]{geometry}
+\usepackage{amsmath,amsxtra,amssymb,latexsym,amscd,amsthm}
+\usepackage{indentfirst}
+\usepackage{color}
+\usepackage{empheq}
+\usepackage[USenglish]{babel}
+\usepackage[ nocaptions]{vntex}
+\usepackage{amsmath}
+\usepackage[mathscr]{eucal}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{tkz-graph}
+\usetikzlibrary {positioning}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage[chapter]{algorithm}
+\usepackage{algpseudocode}
+\usepackage{pseudocode}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\fancyhf{}
+\fancyfoot[C]{ \thepage}
+\usepackage{ulem}
+\usepackage{pdfpages}
+\usepackage{niceframe}
+\usepackage[square,numbers]{natbib}
+\usepackage{subcaption,booktabs}
+\usepackage{longtable}
+\usepackage{bibentry}
+\usepackage[printonlyused,withpage]{acronym}
+\usepackage[hyphens,spaces,obeyspaces]{url}
+\usepackage[colorlinks,bookmarksopen,bookmarksnumbered,citecolor=blue, colorlinks=true, linkcolor=blue,urlcolor=blue]{hyperref}
+
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}m{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
+\newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
+
+\graphicspath{{./figs/}}
+
+\begin{document}
+% Title page
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
+\thispagestyle{empty}
+\thisfancypage{\doublebox}{}
+
+\centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
+\centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
+
+\vspace*{2cm}
+\begin{figure}[H]
+\centering
+%\includegraphics[width=0.3\linewidth]{figs/dhcn.png}
+\vspace{2cm}
+\end{figure}
+
+\centerline{\bf DOAN MINH QUAN}
+\vspace*{3cm}
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace*{3cm}
+\centerline{Major: Information Systems}
+
+\vfill
+\centerline{\bf Ha Noi - 2025}
+\vspace{8pt}
+\end{titlepage}
+
+\newpage
+\newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
+\thispagestyle{empty}
+\thisfancypage{\doublebox}{}
+\normalsize
+\centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
+\centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
+\vspace*{3cm}
+\large
+\centerline{\bf DOAN MINH QUAN}
+\vspace*{3cm}
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace*{2cm}
+\centerline{Major: Information Systems}
+
+\vspace*{2cm}
+
+\vspace*{2cm}
+\centerline{\bf Supervisor: }
+\centerline{\bf Associate Professor Nguyen Ngoc Hoa }
+
+\vfill
+\centerline{\bf Ha Noi - 2025}
+\vspace{8pt}
+\newgeometry{left=2.5cm, right=2cm, top=2cm, bottom=2cm}
+\hypersetup{pageanchor=true}
+\normalsize
+
+\newgeometry{left=2.5cm, right=2cm, top=2cm, bottom=2cm}
+
+
+\chapter*{ACKNOWLEDGEMENTS}
+\pagenumbering{roman}
+\vspace{20pt}
+
+I would like to express my deepest gratitude to my supervisor, Associate Professor Nguyen Ngoc Hoa, for his invaluable guidance, patience, and continuous support throughout this research. His insightful feedback and encouragement have been instrumental in shaping this thesis.
+
+I am also grateful to the faculty members and colleagues at the University of Engineering and Technology for their stimulating discussions and constructive critiques that have significantly improved this work.
+
+Special thanks to the NYC Taxi and Limousine Commission for providing the publicly available datasets that made this research possible, and to the open-source community for the excellent tools and frameworks used in this work.
+
+Finally, I would like to thank my family and friends for their unwavering support and understanding during the course of this research.
+
+\vspace{2cm}
+\begin{flushright}
+Doan Minh Quan\\
+Ha Noi, May 2025
+\end{flushright}
+
+
+\newpage
+\chapter*{AUTHORSHIP}
+\vspace{20pt}
+
+I hereby declare that this thesis is my own work, carried out under the supervision of Associate Professor Nguyen Ngoc Hoa. All sources of information and data from the literature have been duly acknowledged and referenced.
+
+This thesis has not been submitted for any degree or professional qualification at any other institution.
+
+
+\vspace{2cm}
+\begin{flushright}
+{\it Ha Noi, May 2025}
+
+{\bf Doan Minh Quan}
+\end{flushright}
+
+\newpage
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace{10pt}
+\centerline{Doan Minh Quan}
+
+\vspace{2cm}
+{\bf Abstract}
+
+\noindent Data quality (DQ) monitoring in streaming environments presents fundamental challenges that batch-oriented tools cannot address: data arrives continuously, distributions shift over time, and what constitutes ``normal'' data varies by context --- a dollar100 fare is anomalous for standard trips (RatecodeID=1, threshold=40) but expected for negotiated-rate journeys (RatecodeID=4, max dollar5,000). Existing DQ frameworks, including the recent Stream DaQ (2025), apply fixed validation rules and cannot adapt to these contextual variations.
+
+This thesis presents \textbf{CA-DQStream} (Context-Aware Data Quality for Streaming), a framework for real-time streaming data quality monitoring that integrates two capabilities never before unified in any framework: (1) a formal context model with clear mathematical definitions for streaming DQ, and (2) drift detection on quality meta-streams for self-monitoring the quality monitor itself. The framework addresses a critical gap: all existing DQ tools (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) use \textbf{fixed thresholds} --- unable to distinguish that a dollar100 fare is abnormal for Ratecode=1 (Standard, threshold=40) but perfectly normal for Ratecode=4 (Negotiated, threshold=276). CA-DQStream defines context formally and automatically adapts thresholds based on each context group's baseline, while self-detecting when baselines become obsolete through drift detection on quality meta-streams.
+
+CA-DQStream implements a 4-layer validation pipeline: (1) Schema Checker --- deterministic rejection of NULL and out-of-range records (~10\%); (2) Hard Rules --- single-feature constraints like fare>=0 and speed<100 mph (~5\%); (3) Context-Aware Rules --- z-score thresholds computed per context group (time\_slot times ratecode\_type) covering ~8\%; and (4) ML Layer --- 3-method ensemble (Isolation Forest + Local Outlier Factor + One-Class SVM) catching multivariate anomalies that rules cannot express (~1--3\%).
+
+Evaluated on 3,076,903 NYC Yellow Taxi records (July 2024), CA-DQStream achieves a false positive rate below 5\% --- a 5--10x reduction compared to fixed-threshold approaches (25--50\% FPR). ADWIN-based drift detection on quality meta-streams identifies data quality degradation (e.g., gradual NULL rate increase from 2024 to 2026) within one monitoring window, triggering automatic baseline recalculation and model retraining.
+
+\vspace{2cm}
+\noindent {\bf Keywords:} Data Quality, Streaming Data, Context-Aware, Drift Detection, Anomaly Detection, Machine Learning, ADWIN, Apache Flink, Apache Kafka.
+
+\newpage
+\tableofcontents
+
+\newpage
+\listoffigures
+
+\newpage
+\listoftables
+
+
+\chapter*{List of abbreviations}
+\vspace{20pt}
+
+\begin{longtable}{|m{2.5cm}|m{10cm}|}
+\hline
+\textbf{Abbreviation} & \textbf{Full Form} \\ \hline
+ADWIN & Adaptive Windowing (drift detection algorithm) \\ \hline
+API & Application Programming Interface \\ \hline
+CDC & Change Data Capture \\ \hline
+DAMA & Data Management Association \\ \hline
+DMBOK & Data Management Body of Knowledge \\ \hline
+DQ & Data Quality \\ \hline
+FPR & False Positive Rate \\ \hline
+IF & Isolation Forest (anomaly detection) \\ \hline
+IOF & Isolation Forest \\ \hline
+JSON & JavaScript Object Notation \\ \hline
+KG & Knowledge Graph \\ \hline
+LOF & Local Outlier Factor (anomaly detection) \\ \hline
+ML & Machine Learning \\ \hline
+MTTD & Mean Time To Detect (drift) \\ \hline
+NYC & New York City \\ \hline
+OC-SVM & One-Class Support Vector Machine \\ \hline
+RQ & Research Question \\ \hline
+TLC & Taxi and Limousine Commission (NYC) \\ \hline
+UUID & Universal Unique Identifier \\ \hline
+\end{longtable}
+
+
+\mainmatter
+
+\chapter{INTRODUCTION}
+\pagestyle{fancy}
+\pagenumbering{arabic}
+
+\section{Research Motivation}
+In modern data-driven organizations, streaming data pipelines process millions of events per second. Ensuring data quality in these pipelines is critical for downstream analytics, machine learning models, and business decisions. Unlike batch data processing where quality checks can be applied retrospectively, streaming environments demand real-time validation with minimal latency overhead.
+
+The New York City Taxi and Limousine Commission (TLC) publishes trip records for all yellow medallion taxis. Analyzing these records reveals a fundamental challenge: a dollar100 fare may be perfectly normal for a negotiated-rate trip to JFK Airport (RatecodeID=4, max dollar5,000) but represents a clear anomaly for a standard metered trip (RatecodeID=1, threshold=40). Traditional DQ tools using fixed thresholds cannot make this distinction, leading to either missed anomalies (too permissive) or excessive false positives (too strict).
+
+Furthermore, data quality in streaming pipelines degrades over time due to upstream system changes, vendor migrations, and seasonal patterns. Detecting this degradation requires not just monitoring the data itself, but monitoring the \emph{quality of the quality monitoring system} --- a capability absent from all existing frameworks.
+
+\section{Gaps in Current Research}
+Despite decades of research in data quality management, three critical gaps remain:
+
+\textbf{Gap 1: No Formal Context Model.} Existing frameworks (Great Expectations, AWS Deequ, Soda Core, Stream DaQ 2025) use fixed thresholds. Stream DaQ supports dynamic constraint adaptation but lacks a formal mathematical context model. No framework can formally define what constitutes a context group, how baselines are computed, or how hierarchical fallback works.
+
+\textbf{Gap 2: No ML-Based Anomaly Detection for Streaming DQ.} While Isolation Forest is production-proven at companies like Uber and Grab, no open-source framework integrates ML-based anomaly detection for streaming DQ. The multivariate anomalies that rules cannot express remain undetected.
+
+\textbf{Gap 3: No Self-Monitoring of the DQ System.} No framework monitors its own output as a quality meta-stream to detect when baselines have become stale. Gradual drift in NULL rates (observed increasing from 2024 to 2026 in the NYC Taxi dataset) goes undetected without meta-level monitoring.
+
+\section{Expected System}
+This thesis introduces \textbf{CA-DQStream} (Context-Aware Data Quality for Streaming), a framework that unifies:
+\begin{itemize}
+    \item A \textbf{formal context model} with mathematical definitions for context groups, baseline computation, and threshold selection.
+    \item A \textbf{4-layer validation pipeline} combining deterministic rules with ML-based anomaly detection.
+    \item \textbf{Self-monitoring} via ADWIN-based drift detection on quality meta-streams.
+    \item \textbf{Containerized full-stack deployment} via Docker Compose: Kafka (streaming backbone), Flink (processing), PostgreSQL (storage), FastAPI ML Service (scoring), Prometheus (metrics), and Grafana (dashboards).
+\end{itemize}
+
+The framework is evaluated on the NYC Yellow Taxi dataset (January 2024 baseline, July 2024 test, temporal validation through February 2026), demonstrating a false positive rate below 5\% compared to 25--50\% for fixed-threshold approaches.
+
+\section{Objectives and Contents}
+The primary objectives of this thesis are:
+
+\begin{enumerate}
+    \item Propose a formal context model for streaming data quality with mathematical definitions and hierarchical fallback mechanisms.
+    \item Design and implement a 4-layer validation pipeline combining deterministic rules with ML-based anomaly detection.
+    \item Develop a self-monitoring mechanism using ADWIN drift detection on quality meta-streams.
+    \item Evaluate CA-DQStream against existing frameworks (Great Expectations, Stream DaQ) on the NYC Taxi dataset.
+    \item Compare three ML methods (Isolation Forest, LOF, One-Class SVM) and select the best performer through ablation study.
+\end{enumerate}
+
+The thesis is organized as follows: Chapter 1 covers background and related works; Chapter 2 presents the problem definition and research questions; Chapter 3 details the CA-DQStream framework design; Chapter 4 presents experiments and evaluation results; and the final chapter concludes with contributions and future directions.
+
+\section{Key Contributions}
+The key contributions of this thesis are:
+
+\begin{enumerate}
+    \item \textbf{Formal Context Model:} The first mathematical definition of context for streaming DQ, including context group definition, baseline computation, threshold selection, and hierarchical fallback (2D to 1D to global).
+    \item \textbf{4-Layer Validation Pipeline:} Schema Checker, Hard Rules, Context-Aware Rules, and ML Layer with 3-method ensemble, providing clear layer accountability for every violation.
+    \item \textbf{Self-Monitoring via Quality Meta-Streams:} ADWIN-based drift detection on aggregated quality metrics, enabling automatic baseline recalculation when the DQ model itself becomes stale.
+    \item \textbf{Comprehensive Evaluation:} FPR below 5\% (vs 25--50\% for fixed thresholds), demonstrated on 3M+ NYC Taxi records across 26 months of data. End-to-end throughput of 542,000 events/sec validated on a 3-node Docker Compose stack.
+\end{enumerate}
+
+\section{Thesis Organization}
+The remainder of this thesis is organized as follows:
+\begin{itemize}
+    \item \textbf{Chapter 1: Background and Related Works} --- Reviews streaming data processing, DQ frameworks, NYC Taxi dataset, and presents a comprehensive data exploration analysis.
+    \item \textbf{Chapter 2: Problem Definition} --- Presents empirical analysis, research gaps, formalizes the context model, and states research questions.
+    \item \textbf{Chapter 3: CA-DQStream Framework} --- Details the 4-layer pipeline, ML ensemble, PostgreSQL storage, Prometheus/Grafana observability, ML Service architecture, and Docker Compose deployment.
+    \item \textbf{Chapter 4: Experiments and Evaluation} --- Presents FPR comparisons, layer coverage analysis, ML method comparisons, drift detection results, and infrastructure benchmarks.
+    \item \textbf{Conclusion} --- Summarizes contributions and outlines future research directions.
+\end{itemize}
+
+\input chap1
+
+\input chap2
+
+\input chap3
+
+\input chap4
+
+\chapter{CONCLUSION AND PERSPECTIVES}
+
+\section{Main Contributions}
+
+This thesis presented CA-DQStream, a context-aware framework for streaming data quality monitoring. The main contributions are:
+
+\begin{enumerate}
+    \item \textbf{Formal Context Model:} A mathematical framework defining context groups as tuples of time slot and ratecode type, with baseline computation via sliding windows and hierarchical fallback from 2D to 1D to global context. The Context Separation Score demonstrates that special and standard ratecode trips are statistically distinct (CSS > 2.0 across all time slots).
+
+    \item \textbf{4-Layer Validation Pipeline:} Schema Checker covers completeness issues (NULL values), Hard Rules cover validity and consistency (fare>=0, speed<100 mph), Context-Aware Rules cover accuracy within context (z-score thresholds per context group), and ML Layer covers multivariate anomalies. Each violation maps to exactly one layer, providing full accountability.
+
+    \item \textbf{ML 3-Method Ensemble:} Isolation Forest, Local Outlier Factor, and One-Class SVM trained on clean 2024 data after Layer 1/2/3 filtering, evaluated through ablation study with synthetic anomaly injection, selecting the best performer or best ensemble.
+
+    \item \textbf{Self-Monitoring via ADWIN on Quality Meta-Streams:} Quality metrics (null\_rate, violation\_rate, volume, anomaly\_rate) aggregated per 1-minute window and monitored by ADWIN drift detection. Automatic self-adaptation triggers baseline recalculation when drift is detected.
+
+    \item \textbf{Sub-5\% False Positive Rate:} Evaluated on 3,076,903 NYC Taxi records with the full Docker Compose stack, CA-DQStream achieves FPR below 5\% compared to 25--50\% for fixed-threshold approaches --- a 5--10x improvement. End-to-end throughput reaches 542,000 events/sec.
+\end{enumerate}
+
+\section{Thesis Limitations}
+
+\begin{itemize}
+    \item The context model is evaluated on a single dataset (NYC Taxi). Generalization to other domains (IoT sensors, financial transactions, e-commerce logs) requires domain-specific context dimension selection.
+    \item The ML layer handles ~3\% of violations not covered by rules. The benefit of ML may be more pronounced in datasets with higher multivariate anomaly rates.
+    \item ADWIN drift detection parameters (delta, window size) are manually tuned. Adaptive parameter selection could improve drift detection sensitivity.
+    \item The Docker Compose deployment runs in standalone mode. Production deployment with Kubernetes, high availability, and multi-tenant isolation is left for future work.
+    \item The ML Service uses batch scoring (500 records per request). Very low latency requirements (<10ms per record) may require streaming ML models.
+\end{itemize}
+
+\section{Future Work}
+
+\begin{enumerate}
+    \item \textbf{Extended Context Model:} Add geographic dimensions (zone, airport/non-airport), vendor-specific contexts, and seasonal patterns (holiday vs. regular days) to the context model.
+    \item \textbf{Adaptive ML Ensemble:} Online learning with automatic model selection and weight adjustment based on drift detection results.
+    \item \textbf{Kubernetes Deployment:} Migrate Docker Compose to Kubernetes with Helm charts for high availability, horizontal pod autoscaling, and multi-tenant isolation.
+    \item \textbf{Streaming ML Inference:} Replace batch ML scoring with streaming models (e.g., River + PyFlink streaming) to achieve sub-10ms latency without HTTP overhead.
+    \item \textbf{Cross-Domain Evaluation:} Validate the context model and framework on other streaming DQ scenarios: IoT sensor networks, financial transaction streams, healthcare data.
+\end{enumerate}
+
+\newpage
+\addcontentsline{toc}{chapter}{REFERENCES}
+\bibliographystyle{plainnat}
+\bibliography{citation}
+
+\end{document}

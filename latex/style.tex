@@ -1,0 +1,193 @@
+\documentclass[12pt, a4paper, reqno, oneside]{book}
+\usepackage[left=2.5cm, right=2cm, top=2cm, bottom=2cm]{geometry}
+\usepackage{amsmath,amsxtra,amssymb,latexsym, amscd,amsthm}
+\usepackage{indentfirst}
+\usepackage{color}
+\usepackage{empheq}
+\usepackage[USenglish]{babel}
+% \usepackage[nocaptions]{vntex}
+\usepackage{amsmath}
+\usepackage[mathscr]{eucal}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{verbatim}
+%\usepackage{tikz}
+\usepackage{tkz-graph}
+\usetikzlibrary {positioning}
+\usepackage{float}
+\usepackage{array}
+\usepackage{multirow}
+%\usepackage{algorithm}
+\usepackage[ruled,vlined,linesnumbered, algochapter]{algorithm2e}
+% \usepackage{algpseudocode} 
+\usepackage{pseudocode} % Chau sua de compile tren Linux
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\fancyhf{}
+\fancyhead[LE,RO]{}%\small{\rightmark}
+\fancyhead[LO,RE]{\small{\leftmark}}
+\fancyfoot[C]{ \thepage}
+\usepackage{ulem}
+\usepackage{pdfpages}
+\usepackage{niceframe}
+\usepackage[square,numbers]{natbib}
+\usepackage{subcaption,booktabs}
+
+%\input setbmp
+\usepackage[hyphens,spaces,obeyspaces]{url}
+\usepackage[unicode,breaklinks=true]{hyperref}
+% \usepackage{url}
+
+% \usepackage{enumitem}
+%\usepackage{titledot}
+%\titlename{Chương}
+%+ formating
+%\setlength{\oddsidemargin}{0in}
+%\setlength{\textwidth}{6.in}
+%\setlength{\topmargin}{-0.5in}
+%\setlength{\textheight}{9.25in}
+\renewcommand{\baselinestretch}{1.25}
+
+%Chương không số
+\newcommand \chap[1]{%
+  \chapter*{#1}%
+  \addcontentsline{toc}{chapter}{#1}
+  \markboth{#1}{}
+}
+\newcommand \sect[1]{%
+  \section*{#1}%
+  \addcontentsline{toc}{section}{#1}}
+  
+%+ Dinh nghia mot so ky hieu toan hoc.
+\def\B{\mathscr B}
+\def\one{\mathbf 1}
+\def\R{{\mathbb R}}
+\def\LL{{\mathbb L}}
+\newcommand\abs[1]{|#1|}
+\newcommand\set[1]{\{#1\}}
+\newcommand\norm[1]{||#1||}
+\DeclareMathOperator{\vrai}{vrai}
+\DeclareMathOperator{\const}{const}
+\newcommand{\eoproof}{\hfill $\square$}
+\newcommand{\spro}[1]{\left<#1\right>}
+\newcommand{\argmin}{\arg\min}
+
+\renewcommand{\theequation}{\arabic{chapter}.\arabic{equation}} %\arabic{section}.
+\newtheorem{lemma}{\bf Bổ đề}[chapter]
+\newtheorem{theorem}{\bf Định lý}[chapter]
+\newtheorem{proposition}{\bf Mệnh đề}[chapter]
+\newtheorem{corollary}{\bf Hệ quả}[chapter]
+\newtheorem{definition}{\bf Định nghĩa}[chapter]
+\newtheorem{remark}{\bf Chú ý}[section]
+% \newtheorem{problem}{Bài toán}
+\renewcommand*{\listalgorithmcfname}{Danh sách thuật toán}
+\renewcommand*{\algorithmcfname}{Thuật toán}
+\renewcommand*{\algorithmautorefname}{thuật toán}
+
+%mức tiêu đề
+\titleclass{\subsubsubsection}{straight}[\subsection]
+
+\newcounter{subsubsubsection}[subsubsection]
+\renewcommand\thesubsubsubsection{\thesubsubsection.\arabic{subsubsubsection}}
+\renewcommand\theparagraph{\thesubsubsubsection.\arabic{paragraph}} % optional; useful if paragraphs are to be numbered
+
+\titleformat{\subsubsubsection}
+  {\normalfont\normalsize\bfseries}{\thesubsubsubsection}{1em}{}
+\titlespacing*{\subsubsubsection}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
+
+\makeatletter
+\renewcommand\paragraph{\@startsection{paragraph}{5}{\z@}%
+  {3.25ex \@plus1ex \@minus.2ex}%
+  {-1em}%
+  {\normalfont\normalsize\bfseries}}
+\renewcommand\subparagraph{\@startsection{subparagraph}{6}{\parindent}%
+  {3.25ex \@plus1ex \@minus .2ex}%
+  {-1em}%
+  {\normalfont\normalsize\bfseries}}
+\def\toclevel@subsubsubsection{4}
+\def\toclevel@paragraph{5}
+\def\toclevel@paragraph{6}
+\def\l@subsubsubsection{\@dottedtocline{4}{7em}{4em}}
+\def\l@paragraph{\@dottedtocline{5}{10em}{5em}}
+\def\l@subparagraph{\@dottedtocline{6}{14em}{6em}}
+\makeatother
+
+\setcounter{secnumdepth}{4}
+\setcounter{tocdepth}{4}
+
+
+%thư mục hình
+\graphicspath{{./figs/}}
+
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mymauve}{rgb}{0.58,0,0.82}
+
+\lstdefinestyle{customc}{
+  belowcaptionskip=1\baselineskip,
+  breaklines=true,
+  frame=single,
+  xleftmargin=\parindent,
+  language=C,
+  showstringspaces=false,
+  basicstyle=\footnotesize\ttfamily,
+  keywordstyle=\bfseries\color{green!40!black},
+  commentstyle=\itshape\color{purple!40!black},
+  identifierstyle=\color{blue},
+  stringstyle=\color{orange},
+  numbers=left,                   % where to put the line-numbers
+  numberstyle=\tiny\color{gray},  % the style that is used for the line-numbers
+  stepnumber=1, 
+}
+
+\lstdefinestyle{customasm}{
+  belowcaptionskip=1\baselineskip,
+  frame=single,
+  xleftmargin=\parindent,
+  language=[x86masm]Assembler,
+  basicstyle=\footnotesize\ttfamily,
+  commentstyle=\itshape\color{purple!40!black},
+  numbers=left,                   % where to put the line-numbers
+  numberstyle=\tiny\color{gray},  % the style that is used for the line-numbers
+  stepnumber=1, 
+}
+
+\lstset{
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue},
+  commentstyle=\color{green},
+  stringstyle=\color{red},
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  stepnumber=1,
+  numbersep=10pt,
+  frame=single,
+  breaklines=true,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=2
+}
+
+\definecolor {processblue}{cmyk}{0.96,0,0,0}
+
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+
+% \algnewcommand\algorithmicrequir{\textbf{Require:}}
+% \algnewcommand\REQUIRE{\item[\algorithmicrequir]}
+
+% \algnewcommand\algorithmicinput{\textbf{Input:}}
+% \algnewcommand\INPUT{\item[\algorithmicinput]}
+% \algnewcommand\algorithmicoutput{\textbf{Output:}}
+% \algnewcommand\OUTPUT{\item[\algorithmicoutput]}
+
+% \makeatletter
+% \renewcommand{\ALG@beginalgorithmic}{\scriptsize}
+% \makeatother
+
+\SetKwProg{KwFn}{Function}{}{} 

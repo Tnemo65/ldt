@@ -1,2 +1,0 @@
-train_samples,test_samples,n_anomalies,anomaly_rate,best_model,best_f1,best_precision,best_recall,best_fpr,best_threshold,train_time_IF,train_time_LOF,train_time_SVM,train_time_AE
-180000,480000,47935,9.986%,LOF+SVM+AE(tuned),0.8917732472246844,0.9023041277840654,0.8814853447376656,0.010588684572923055,0.1,0.9097020626068115,2.667198657989502,0.4243626594543457,18.387861251831055

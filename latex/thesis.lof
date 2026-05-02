@@ -1,0 +1,14 @@
+\babel@toc {USenglish}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Comparison of fare and distance distributions between Standard (RatecodeID$=1$) and Special (RatecodeID$\neq $1) ratecode groups on January 2024 data. Special trips have significantly higher median fares and greater variance, justifying the context-aware approach.}}{3}{figure.caption.8}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Standard vs Special: volume and average fare by time bin. Special trips are consistently 2--3$\times $ higher in average fare across all time slots, demonstrating the need for context-specific thresholds.}}{4}{figure.caption.9}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Scatter plots of fare vs. distance and distance vs. duration by VendorID. The linear relationship (slope $\approx $ \$2.5/mile) provides a reference for detecting multivariate anomalies.}}{5}{figure.caption.10}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces (Left) Monthly record volume showing seasonal variations of 2--3$\times $ between peak and off-peak months. January 2024 (training) and July 2024 (test drift) are highlighted. (Right) Violation breakdown by rule type, with NULL passenger and ratecode violations dominating at 278,989 records each.}}{6}{figure.caption.11}%
+\contentsline {figure}{\numberline {2.5}{\ignorespaces Violation rates vary significantly by VendorID. Vendor 6 (Unknown) consistently shows higher violation rates, and Vendor 2 shows distinct seasonal patterns. This vendor-specific variation is captured by context-aware rules but would be missed by a single global threshold.}}{6}{figure.caption.12}%
+\contentsline {figure}{\numberline {2.6}{\ignorespaces Stacked violation counts over 26 months. The stacked area shows total violations growing with data volume, while the bottom panel reveals the violation rate trends. NULL passenger violations show a gradual increase from 2024 to 2026 --- evidence of gradual concept drift requiring ADWIN-based monitoring.}}{7}{figure.caption.13}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces CA-DQStream Architecture Overview. Raw taxi records flow through four validation layers: Schema Checker, Hard Rules, Context-Aware Rules, and ML Layer. Each layer emits violations to dedicated Kafka topics. Quality meta-streams (aggregated metrics) are fed to ADWIN for drift detection, triggering self-adaptation when baselines become stale.}}{1}{figure.caption.14}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Context Separation Score (CSS) analysis. All time slots achieve CSS > 2.0, confirming H1 and justifying the 2D context model.}}{2}{figure.caption.15}%
+\addvspace {10\p@ }

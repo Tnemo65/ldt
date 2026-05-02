@@ -1,0 +1,255 @@
+\chap{BACKGROUND AND RELATED WORKS}
+\pagestyle{fancy}
+\pagenumbering{arabic}
+
+% ================================================
+% 1.1 Overview
+% ================================================
+\section{Overview}
+
+Data quality (DQ) is a critical concern in modern data-intensive systems. As organizations increasingly rely on real-time data streams for decision-making, ensuring the quality of streaming data has become a fundamental challenge. This chapter reviews the foundational concepts, existing frameworks, and relevant datasets that form the basis of this research.
+
+% ================================================
+% 1.2 Streaming Data Processing
+% ================================================
+\section{Streaming Data Processing}
+
+Streaming data processing refers to the continuous ingestion, processing, and analysis of data as it arrives, rather than in predefined batches. Key technologies in this space include Apache Kafka \citep{kafkaintro2024} for distributed event streaming, and Apache Flink \citep{flinkdocs2024} for stateful stream processing with exactly-once semantics.
+
+Apache Kafka serves as the backbone of modern streaming architectures, providing durable, fault-tolerant message queuing with horizontal scalability. Kafka topics partition data across brokers, enabling parallel processing and consumer group-based load balancing. The retention mechanism allows replay of historical events, which is essential for backfilling baselines and reprocessing.
+
+Apache Flink provides unified batch and stream processing with sophisticated windowing semantics, event-time processing, and stateful operators. Flink's KeyedState and RocksDB backend enable efficient state management for stateful stream operators, which is essential for computing rolling baselines per context group in real time.
+
+The distinction between batch and streaming DQ is fundamental. In batch processing, all records are available before validation, enabling complete statistical analysis. In streaming, records arrive incrementally, requiring online algorithms that update statistics incrementally and validate records with minimal latency.
+
+% ================================================
+% 1.3 Data Quality Frameworks
+% ================================================
+\section{Data Quality Frameworks and Tools}
+
+Several data quality frameworks exist in both batch and streaming modes.
+
+\subsection{Great Expectations}
+
+Great Expectations \citep{great_expectations} is the most widely adopted open-source DQ framework. It enables data validation by defining ``expectations'' --- declarative assertions about data. Great Expectations supports column-level expectations (e.g., \texttt{expect\_column\_values\_to\_be\_between}), dataset-level expectations (row count, uniqueness), and custom expectations. While powerful, it operates in batch mode and uses fixed thresholds (p5/p95 percentiles from a reference dataset) that cannot adapt to contextual variations.
+
+The fixed threshold approach creates a fundamental problem: a p95 threshold computed from all data conflates distinct populations. For the NYC Taxi dataset, the fixed p95 fare threshold of $\$61.8$ (January 2024) flags nearly 100\% of special ratecode trips as violations, even though they represent legitimate high-fare journeys.
+
+\subsection{AWS Deequ}
+
+AWS Deequ \citep{s察ter2018automating} is a library built on Apache Spark for large-scale DQ verification. Deequ computes constraints on data frames and generates data quality reports. Like Great Expectations, it operates in batch mode and lacks native streaming support. Deequ's constraint suggestion feature can recommend constraints based on data statistics, but these remain fixed once set.
+
+\subsection{Soda Core}
+
+Soda Core \citep{sodacore2024} is an open-source DQ framework that uses SQL-based checks (``Soda Checks'') to validate data quality. It supports both batch and streaming modes through integration with data platforms. However, like other tools, it relies on fixed threshold configuration and lacks formal context modeling.
+
+\subsection{Stream DaQ}
+
+Stream DaQ \citep{papastergios2025stream} (2025, arXiv:2506.06147) represents the closest prior work. It provides streaming-first data quality monitoring with dynamic constraint adaptation. Stream DaQ monitors data quality metrics in real time and can adjust thresholds based on recent data distributions. However, Stream DaQ lacks a formal mathematical context model, does not integrate ML-based anomaly detection, and does not monitor its own output for drift.
+
+The key differentiator of CA-DQStream is the formal context model with mathematical definitions, the ML layer with 3-method ensemble, and the self-monitoring capability through quality meta-streams.
+
+% ================================================
+% 1.4 DAMA-DMBOK Data Quality Dimensions
+% ================================================
+\section{DAMA-DMBOK Data Quality Dimensions}
+
+The Data Management Association (DAMA) and the Data Management Body of Knowledge (DMBOK) define six core data quality dimensions that guide DQ assessment \citep{dama2017dmbok}:
+
+\begin{enumerate}
+    \item \textbf{Completeness:} The degree to which data is not missing. Measured by the proportion of NULL or blank values in required fields.
+    \item \textbf{Validity:} Data conforms to defined syntax and semantic rules. For example, fare amounts must be non-negative.
+    \item \textbf{Accuracy:} The degree to which data reflects the real-world phenomenon it describes. Detected through outlier analysis and cross-validation.
+    \item \textbf{Consistency:} Freedom from contradiction within or across datasets. Cross-feature rules detect inconsistencies (e.g., payment type $=2$ (cash) with non-zero tip).
+    \item \textbf{Timeliness:} Data is current enough for its intended use. Measured by event-time vs. processing-time lag.
+    \item \textbf{Uniqueness:} No duplicate records exist. Detected through key-based deduplication.
+\end{enumerate}
+
+CA-DQStream addresses all six dimensions through its layered architecture, as detailed in Chapter 3.
+
+% ================================================
+% 1.5 NYC Yellow Taxi Dataset
+% ================================================
+\section{NYC Yellow Taxi Dataset}
+
+The NYC Yellow Taxi dataset, published by the NYC Taxi and Limousine Commission (TLC), is one of the most comprehensive publicly available transportation datasets. Each record represents a single taxi trip with attributes including pickup/dropoff times, locations, fare breakdown, passenger count, and ratecode.
+
+\subsection{Dataset Schema}
+
+The dataset contains 19 raw columns plus 4 derived features computed during preprocessing. Key columns include:
+
+\begin{itemize}
+    \item \textbf{VendorID:} Integer identifier for the TPEP provider (1=CMT, 2=VTS, 6=Unknown).
+    \item \textbf{tpep\_pickup\_datetime / tpep\_dropoff\_datetime:} Pickup and dropoff timestamps.
+    \item \textbf{passenger\_count:} Number of passengers (NULL indicates a completeness violation).
+    \item \textbf{trip\_distance:} Trip distance in miles (must be $> 0$).
+    \item \textbf{RatecodeID:} Rate category (1=Standard, 2=JFK, 3=Newark, 4=Negotiated, 5=Group, 6=Shared, 99=Unknown). This is the key context dimension for CA-DQStream.
+    \item \textbf{PULocationID / DOLocationID:} Taxi zone identifiers for pickup and dropoff.
+    \item \textbf{payment\_type:} 1=Card, 2=Cash, 3=No charge, 4=Dispute, 5=Unknown, 6=Voided.
+    \item \textbf{fare\_amount, total\_amount:} Dollar values for fare and total charges.
+    \item \textbf{tip\_amount:} Tip amount (only non-zero for card payments, payment\_type$=1$).
+\end{itemize}
+
+Derived features include \texttt{duration\_min} (dropoff minus pickup in minutes), \texttt{speed\_mph} (trip distance divided by duration in hours, clipped at 100 mph), and time slot bins derived from pickup hour.
+
+\subsection{Data Volume and Temporal Coverage}
+
+CA-DQStream uses NYC Taxi data from January 2024 through February 2026:
+
+\begin{itemize}
+    \item \textbf{Training (Baseline):} January 2024, 2,964,624 records.
+    \item \textbf{Primary Test:} July 2024, 3,076,903 records.
+    \item \textbf{Temporal Validation:} February 2024 through December 2024 (3M+ records/month).
+    \item \textbf{Drift Analysis:} January 2025 through February 2026.
+\end{itemize}
+
+The dataset provides a realistic testbed for streaming DQ evaluation, with seasonal volume variations (2--3$\times$ between peak and off-peak months), vendor-specific data quality patterns, and gradual drift in data completeness over time.
+
+% ================================================
+% 1.6 Data Exploration: NYC Taxi Dataset
+% ================================================
+\section{Data Exploration: NYC Taxi Dataset}
+
+Before formal analysis, we explore the NYC Taxi dataset to understand its statistical properties, volume patterns, and data quality characteristics. This exploration motivates the CA-DQStream design decisions.
+
+\subsection{Dataset Statistics and Distributions}
+
+The NYC Yellow Taxi dataset (January 2024, 2,964,624 records) exhibits distinct statistical properties that inform the context model design:
+
+\begin{longtable}{|m{4cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|}
+\hline
+\textbf{Feature} & \textbf{Mean} & \textbf{Std Dev} & \textbf{Min} & \textbf{Max} \\ \hline
+fare\_amount & \$17.26 & \$14.62 & -\$200.00 & \$5,000.00 \\ \hline
+trip\_distance (mi) & 3.18 & 3.81 & 0.00 & 300.00 \\ \hline
+total\_amount & \$22.74 & \$18.92 & -\$150.00 & \$5,500.00 \\ \hline
+passenger\_count & 1.37 & 0.61 & 0.00 & 9.00 \\ \hline
+duration\_min & 16.44 & 11.82 & 0.00 & 1,440.00 \\ \hline
+speed\_mph & 12.64 & 8.23 & 0.00 & 100.00 \\ \hline
+tip\_amount & \$3.28 & \$3.41 & \$0.00 & \$450.00 \\ \hline
+\end{longtable}
+
+The distributions are highly right-skewed: 75\% of fares are below \$22, but the maximum reaches \$5,000 (special ratecode negotiated trips). Speed is clipped at 100 mph by the Hard Rules, but unclipped mean is 12.64 mph, reflecting urban driving conditions.
+
+The fare distribution follows a bimodal pattern: the first mode around \$8--\$12 (short in-borough trips) and a second mode around \$50--\$60 (airport trips). Special ratecode trips shift the distribution rightward, creating the bimodality that a global fixed threshold cannot separate.
+
+\subsection{Volume Patterns by Time and Ratecode}
+
+Trip volume varies significantly by time of day and day of week:
+
+\begin{longtable}{|m{3cm}|m{3cm}|m{3cm}|m{3cm}|m{3cm}|}
+\hline
+\textbf{Time Slot} & \textbf{Record Count} & \textbf{Avg Fare (\$)} & \textbf{Avg Distance (mi)} & \textbf{Special Ratecode (\%)} \\ \hline
+Night (0--4h) & 230,555 & \$16.42 & 2.94 & 15.5\% \\ \hline
+Morning (5--10h) & 660,647 & \$16.88 & 3.12 & 10.9\% \\ \hline
+Afternoon (11--16h) & 1,103,177 & \$17.54 & 3.27 & 8.5\% \\ \hline
+Evening (17--23h) & 970,245 & \$17.38 & 3.19 & 8.5\% \\ \hline
+\textbf{Overall} & \textbf{2,964,624} & \textbf{\$17.26} & \textbf{3.18} & \textbf{9.6\%} \\ \hline
+\end{longtable}
+
+Afternoon has the highest volume (37.2\% of daily trips) and the highest average fare (\$17.54), reflecting longer business and airport trips during business hours. Night has the highest proportion of special ratecode trips (15.5\%), including JFK and Newark airport runs.
+
+The RatecodeID distribution reveals that 90.4\% of trips are Standard (RatecodeID=1), while special ratecodes (JFK, Newark, Negotiated, Group, Shared) account for only 9.6\% but have disproportionately high average fares:
+
+\begin{longtable}{|m{3cm}|m{3cm}|m{3cm}|m{3cm}|m{3cm}|}
+\hline
+\textbf{RatecodeID} & \textbf{Description} & \textbf{Count} & \textbf{Share (\%)} & \textbf{Avg Fare (\$)} \\ \hline
+1 & Standard & 2,680,861 & 90.4\% & \$15.42 \\ \hline
+2 & JFK & 118,584 & 4.0\% & \$52.18 \\ \hline
+3 & Newark & 8,894 & 0.3\% & \$68.44 \\ \hline
+4 & Negotiated & 81,772 & 2.8\% & \$48.92 \\ \hline
+5 & Group & 4,218 & 0.1\% & \$38.64 \\ \hline
+6 & Shared & 1,021 & 0.03\% & \$28.44 \\ \hline
+99 & Unknown & 69,274 & 2.3\% & \$21.38 \\ \hline
+\end{longtable}
+
+JFK trips (RatecodeID=2) average \$52.18 vs. \$15.42 for Standard trips --- a 3.4$\times$ difference. Negotiated rate (RatecodeID=4) averages \$48.92 with a maximum of \$5,000. These wide variations across ratecode types are the core motivation for context-aware thresholds.
+
+\subsection{Data Quality Observations}
+
+Initial data quality exploration on January 2024 reveals:
+
+\begin{longtable}{|m{4cm}|m{3cm}|m{4cm}|}
+\hline
+\textbf{Quality Indicator} & \textbf{Value} & \textbf{Significance} \\ \hline
+NULL passenger\_count & 268,432 (9.1\%) & Dominant completeness issue (Layer 1) \\ \hline
+NULL RatecodeID & 268,432 (9.1\%) & Same records as above \\ \hline
+Negative fare\_amount & 53,218 (1.8\%) & Data entry or voided transactions (Layer 2) \\ \hline
+Zero trip\_distance & 44,112 (1.5\%) & Tolls-only or canceled trips (Layer 2) \\ \hline
+Fare = 0 & 29,847 (1.0\%) & Included or comped trips (Layer 2) \\ \hline
+Speed $>$ 100 mph & 1,892 (0.06\%) & GPS or meter errors (Layer 2) \\ \hline
+Payment mismatch (cash + tip) & 8,234 (0.3\%) & Cross-feature inconsistency (Layer 2/3) \\ \hline
+\end{longtable}
+
+The most striking finding is that 9.1\% of records have NULL passenger\_count and RatecodeID simultaneously --- the same records are affected by both fields, suggesting an upstream data capture issue during a specific time period. These records cannot be context-classified and must be rejected at Layer 1.
+
+Negative fares (1.8\%) and zero distances (1.5\%) are surprisingly common, representing voided trips, toll charges, or data entry errors. These deterministic violations are caught by Layer 2 Hard Rules without requiring context.
+
+The data quality summary motivates the CA-DQStream layered approach: Layer 1 handles the dominant completeness issue (9.1\%), Layer 2 handles universal validity rules (3.4\% combined), Layer 3 handles context-dependent accuracy issues (~8--10\% depending on threshold), and Layer 4 handles multivariate anomalies (~2--3\%).
+
+\begin{figure}[H]
+\centering
+\subfloat[Monthly trip volume (Jan 2024 -- Dec 2024)]{
+\label{fig:exp_monthly_volume}
+\includegraphics[width=0.48\textwidth]{figs/1_Monthly_Record_Volume.png}
+}
+\subfloat[Ratecode distribution (Jan 2024)]{
+\label{fig:exp_ratecode_dist}
+}
+\caption{Exploratory analysis of the NYC Taxi dataset: (left) monthly volume showing seasonal patterns with peak in July 2024 (3,076,903 records) and trough in February 2024 (2,412,876 records). (right) Ratecode distribution showing Standard trips dominating at 90.4\% while special ratecodes (JFK, Newark, Negotiated) have disproportionately high average fares.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\subfloat[Fare distribution by ratecode type]{
+\label{fig:exp_fare_dist}
+\begin{tabular}{|m{3cm}|m{3cm}|m{3cm}|}
+\hline
+\textbf{Ratecode Type} & \textbf{Median Fare (\$)} & \textbf{P95 Fare (\$)} \\ \hline
+Standard (ID=1) & \$11.50 & \$28.50 \\ \hline
+Special (ID$\neq$1) & \$32.50 & \$87.50 \\ \hline
+\end{tabular}
+}
+\subfloat[Fare vs. distance scatter by context]{
+\label{fig:exp_scatter}
+}
+\caption{(Left) Statistical summary of fare distributions by ratecode type. Special ratecode trips have 2.8$\times$ higher median fare and 3.1$\times$ higher P95 than standard trips, confirming the need for context-aware thresholds. (Right) Scatter plot showing fare vs. distance with standard and special ratecode trips clearly separated in feature space.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\subfloat[Time slot distribution (day vs night)]{
+\label{fig:exp_timeslot}
+}
+\subfloat[NULL rate trend over 26 months]{
+\label{fig:exp_null_trend}
+}
+\caption{(Left) Trip volume and average fare by time slot. Night has the highest proportion of special ratecode trips (15.5\%) while afternoon has the highest absolute volume. (Right) NULL rate trend showing gradual increase from 4.3\% (Jan 2024) to 5.9\% (Feb 2026), evidence of concept drift that requires ADWIN-based monitoring.}
+\end{figure}
+
+% ================================================
+% 1.7 Related Works
+% ================================================
+\section{Related Works}
+
+\subsection{Context in Data Quality}
+
+Prior work on context-aware DQ includes systematic literature reviews \citep{contextdq2022} that identify context as a critical but under-defined concept in DQ management. The review notes that while practitioners intuitively use context (e.g., ``fare is high \emph{for a standard trip}''), formal mathematical models are scarce.
+
+CA-DQStream addresses this gap by providing the first formal context model for streaming DQ with mathematical definitions for context elements, context groups, baseline computation, and hierarchical fallback.
+
+\subsection{Drift Detection}
+
+Concept drift detection is well-studied in machine learning \citep{lu2018learning}. ADWIN (Adaptive Windowing) \citep{bifet2007learning, adwin2025} is a state-of-the-art drift detection algorithm that maintains two windows and detects drift when their statistical properties differ significantly. CA-DQStream applies ADWIN to quality meta-streams (aggregated metrics) rather than raw data, enabling self-monitoring of the DQ system itself.
+
+\subsection{ML-Based Anomaly Detection}
+
+Isolation Forest \citep{liu2008isolation} is a production-proven anomaly detection algorithm that isolates anomalies by random partitioning. It is used at Uber and Grab for real-time anomaly detection. The Local Outlier Factor (LOF) \citep{breunig2000lof} measures local density deviation, detecting anomalies relative to their local neighborhood. One-Class SVM \citep{scholkopf2001oc} learns a smooth decision boundary around normal data.
+
+CA-DQStream's ML layer compares all three methods on the NYC Taxi dataset and selects the best performer (or best ensemble) based on ablation study results.
+
+% ================================================
+% 1.8 Chapter Summary
+% ================================================
+\section{Chapter Summary}
+
+This chapter reviewed the foundational concepts and related works for this thesis. Streaming data processing with Kafka and Flink provides the infrastructure for real-time DQ monitoring. Existing DQ frameworks (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) provide baseline capabilities but lack formal context modeling, ML integration, and self-monitoring. The DAMA-DMBOK framework defines six core DQ dimensions, all addressed by CA-DQStream. The NYC Yellow Taxi dataset provides a comprehensive, publicly available dataset for evaluation. Data exploration reveals bimodal fare distributions, time-varying volume patterns, and a 9.1\% NULL rate that necessitates the layered validation approach. The next chapter formalizes the research problem and states the research questions.

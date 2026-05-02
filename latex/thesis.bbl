@@ -1,0 +1,94 @@
+\begin{thebibliography}{14}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[{Apache Kafka Project}(2024)]{kafkaintro2024}
+{Apache Kafka Project}.
+\newblock Apache kafka documentation - introduction.
+\newblock \url{https://kafka.apache.org/intro}, 2024.
+\newblock Available at: \url{https://kafka.apache.org/intro}.
+
+\bibitem[{Apache Software Foundation}(2024)]{flinkdocs2024}
+{Apache Software Foundation}.
+\newblock Apache flink documentation.
+\newblock \url{https://flink.apache.org/}, 2024.
+\newblock Available at: \url{https://flink.apache.org/}.
+
+\bibitem[Bifet and Gavalda(2007)]{bifet2007learning}
+Albert Bifet and Ricard Gavalda.
+\newblock Learning from time-changing data with adaptive windowing.
+\newblock pages 443--448, 2007.
+
+\bibitem[Bifet et~al.(2025)Bifet, Gavalda, et~al.]{adwin2025}
+Albert Bifet, Ricard Gavalda, et~al.
+\newblock Adwin-u: Adaptive windowing algorithm with univariate drift
+  detection.
+\newblock \emph{Knowledge and Information Systems}, 2025.
+
+\bibitem[Breunig et~al.(2000)Breunig, Kriegel, Ng, and Sander]{breunig2000lof}
+Markus~M Breunig, Hans-Peter Kriegel, Raymond~T Ng, and J\"org Sander.
+\newblock Lof: identifying density-based local outliers.
+\newblock pages 93--104, 2000.
+
+\bibitem[{Context in Data Quality Management: A Systematic Literature
+  Review}(2022)]{contextdq2022}
+{Context in Data Quality Management: A Systematic Literature Review}.
+\newblock Context in data quality management: A systematic literature review.
+\newblock 2022.
+\newblock arXiv:2204.10655.
+
+\bibitem[{Data Management Association}(2017)]{dama2017dmbok}
+{Data Management Association}.
+\newblock Dama-dmbok: Data management body of knowledge (2nd edition).
+\newblock 2017.
+
+\bibitem[{Great Expectations Contributors}(2024)]{great_expectations}
+{Great Expectations Contributors}.
+\newblock Great expectations.
+\newblock 2024.
+\newblock URL \url{https://greatexpectations.io}.
+\newblock GitHub: https://github.com/great-expectations/great\_expectations.
+
+\bibitem[Liu et~al.(2008)Liu, Ting, and Zhou]{liu2008isolation}
+Fei~Tony Liu, Kai~Ming Ting, and Zhi-Hua Zhou.
+\newblock Isolation forest.
+\newblock pages 413--422, 2008.
+
+\bibitem[Lu et~al.(2018)Lu, Liu, Dong, Pei, Guruler, and
+  Savachkin]{lu2018learning}
+Jie Lu, Anjin Liu, Fan Dong, Fan Pei, Yuchi Guruler, and Alexander Savachkin.
+\newblock Learning under concept drift: A review.
+\newblock \emph{IEEE Transactions on Knowledge and Data Engineering},
+  31\penalty0 (12):\penalty0 2346--2363, 2018.
+
+\bibitem[Papastergios and Gounaris(2025)]{papastergios2025stream}
+Georgios Papastergios and Apostolos Gounaris.
+\newblock Stream daq: Stream-first data quality monitoring.
+\newblock 2025.
+\newblock arXiv:2506.06147.
+
+\bibitem[Schelter et~al.(2018)Schelter, Grafe, Kirchhoff, Schiller, and
+  Schenk]{s察ter2018automating}
+Sebastian Schelter, Dustin Grafe, Kai Kirchhoff, Johannes Schiller, and Thomas
+  Schenk.
+\newblock Automating large-scale data quality verification.
+\newblock 11\penalty0 (12):\penalty0 1786--1799, 2018.
+
+\bibitem[Sch\"olkopf et~al.(2001)Sch\"olkopf, Platt, Shawe-Taylor, Smola, and
+  Williamson]{scholkopf2001oc}
+Bernhard Sch\"olkopf, John~C Platt, John Shawe-Taylor, Alex~J Smola, and
+  Robert~C Williamson.
+\newblock Estimating the support of a high-dimensional distribution.
+\newblock \emph{Neural Computation}, 13\penalty0 (7):\penalty0 1443--1471,
+  2001.
+
+\bibitem[{Soda Foundation}(2024)]{sodacore2024}
+{Soda Foundation}.
+\newblock Soda core: Open-source data quality testing, 2024.
+\newblock URL \url{https://docs.soda.io/soda-core/}.
+\newblock Accessed: 2024-08-01.
+
+\end{thebibliography}
