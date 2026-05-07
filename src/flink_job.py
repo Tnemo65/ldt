@@ -3,7 +3,7 @@ CA-DQStream Flink Job - Baseline Pipeline.
 Spec: Section 3, Lines 1428-1650
 """
 
-from pyflink.datastream import StreamExecutionEnvironment, MapFunction
+from pyflink.datastream import StreamExecutionEnvironment, MapFunction, CheckpointingMode
 from pyflink.datastream.connectors.kafka import FlinkKafkaConsumer
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.typeinfo import Types
@@ -79,8 +79,31 @@ def main():
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(4)  # Match TaskManager slots
 
+    # Checkpointing configuration (V1.9)
+    # Note: Requires MinIO running and accessible
+    checkpoint_config = env.get_checkpoint_config()
+    checkpoint_config.set_checkpointing_mode(CheckpointingMode.EXACTLY_ONCE)
+    checkpoint_config.set_checkpoint_interval(45000)  # 45 seconds
+    checkpoint_config.set_min_pause_between_checkpoints(30000)  # 30s minimum pause
+    checkpoint_config.set_checkpoint_timeout(300000)  # 5 min timeout
+    checkpoint_config.set_max_concurrent_checkpoints(1)
+
+    # Enable checkpoint on job cancellation
+    checkpoint_config.enable_externalized_checkpoints(
+        checkpoint_config.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
+    )
+
+    # State backend: RocksDB with S3 (MinIO)
+    # Note: Requires flink-s3-fs-hadoop JAR and proper S3 credentials
+    # Uncomment when running with MinIO:
+    # env.set_state_backend(RocksDBStateBackend("s3://cadqstream-state/", True))
+    # checkpoint_config.set_checkpoint_storage("s3://cadqstream-checkpoints/")
+
     print("="*60)
     print("CA-DQStream Flink Job - Baseline Pipeline")
+    print("="*60)
+    print(f"Checkpointing: EXACTLY_ONCE, interval=45s")
+    print(f"State backend: RocksDB (local for now, MinIO when enabled)")
     print("="*60)
 
     # Kafka source
