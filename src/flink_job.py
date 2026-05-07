@@ -13,6 +13,7 @@ import json
 from src.operators.key_generator import generate_trip_id
 from src.operators.deduplicator import DeduplicatorFunction
 from src.operators.watermark_assigner import create_watermark_strategy
+from src.operators.schema_validator import SchemaValidator
 
 def create_kafka_source(env, topic: str):
     """Create Kafka source with Avro deserialization."""
@@ -76,15 +77,28 @@ def main():
     stream = stream.map(AddTripIdFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
 
     # Layer 1: Deduplication (keyed by trip_id)
-    stream = (
+    deduplicated_stream = (
         stream
         .key_by(lambda x: x['trip_id'], key_type=Types.STRING())
         .map(DeduplicatorFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
         .filter(lambda x: x is not None)  # Remove duplicates (None values)
     )
 
+    # Layer 1: Schema validation - split into valid/violations
+    validator = SchemaValidator()
+
+    # Valid records (pass filter)
+    valid_stream = deduplicated_stream.filter(validator)
+
+    # Violations (fail filter) - need to invert the filter
+    violation_stream = deduplicated_stream.filter(lambda x: not validator.filter(x))
+
     # Debug output
-    stream.print()
+    print("\n[Valid records]")
+    valid_stream.print()
+
+    print("\n[Schema violations]")
+    violation_stream.print()
 
     # Execute
     print("\nStarting Flink job...")
