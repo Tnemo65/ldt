@@ -1,8 +1,12 @@
 temp/
 data/*.parquet
 thesis_repos/
-docs/
 output/
 .cursor/
 repo/
 figure/
+data/
+
+# Allow specific Phase 0 docs (required by plan)
+!docs/eda_findings.md
+!docs/figures/
