@@ -29,9 +29,13 @@ class FeatureVectorizer:
         15. zone_distance (PU-DO Manhattan distance)
         """
 
-        # Parse timestamps
-        pickup = datetime.fromisoformat(record['tpep_pickup_datetime'])
-        dropoff = datetime.fromisoformat(record['tpep_dropoff_datetime'])
+        # Parse timestamps (handle both string and datetime objects)
+        pickup = record['tpep_pickup_datetime']
+        if isinstance(pickup, str):
+            pickup = datetime.fromisoformat(pickup)
+        dropoff = record['tpep_dropoff_datetime']
+        if isinstance(dropoff, str):
+            dropoff = datetime.fromisoformat(dropoff)
 
         # Derived features
         duration_sec = (dropoff - pickup).total_seconds()
