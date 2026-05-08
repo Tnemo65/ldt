@@ -79,5 +79,5 @@ flink-*.log
 thesis/
 
 models/
-kaggle_benchmark_model/
+# kaggle_benchmark_model/
 data/
