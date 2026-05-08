@@ -74,3 +74,11 @@ figure/
 checkpoints/
 savepoints/
 flink-*.log
+
+.claude/
+thesis/
+
+models/
+kaggle_benchmark_FINAL/
+docs/
+data/
