@@ -6,16 +6,20 @@ Spec: Lines 1491-1510 (withIdleness 30s)
 from pyflink.common import WatermarkStrategy, Duration
 from pyflink.common.watermark_strategy import TimestampAssigner
 from datetime import datetime
-import json
 
 class TaxiTripTimestampAssigner(TimestampAssigner):
     """Extract pickup_datetime as event timestamp."""
 
     def extract_timestamp(self, value, record_timestamp):
-        """Extract timestamp from record."""
+        """Extract timestamp from record.
+
+        Args:
+            value: Record dict (already parsed from JSON)
+            record_timestamp: Fallback timestamp
+        """
         try:
-            record = json.loads(value)
-            pickup_dt = datetime.fromisoformat(record['tpep_pickup_datetime'])
+            # value is already a dict from ParseJsonFunction
+            pickup_dt = datetime.fromisoformat(value['tpep_pickup_datetime'])
             return int(pickup_dt.timestamp() * 1000)  # milliseconds
         except:
             return record_timestamp
