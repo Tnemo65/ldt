@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Train iForestASD (HalfSpaceTrees) on clean baseline.
-Spec: Lines 3414-3465 (Cold start training on Jan 2024)
+Train OneClassSVM on clean baseline as alternative to HalfSpaceTrees.
+OneClassSVM learns the boundary of normal behavior.
 
 Usage:
-  python src/ml/train_iforest.py
-  python src/ml/train_iforest.py --data data/clean/jan_2024_clean_baseline.parquet
+  python src/ml/train_ocsvm.py
+  python src/ml/train_ocsvm.py --data data/clean/jan_2024_clean_baseline.parquet
 """
 
 import argparse
@@ -14,7 +14,7 @@ from pathlib import Path
 import pickle
 import numpy as np
 import pandas as pd
-from river.anomaly import HalfSpaceTrees
+from river.anomaly import OneClassSVM
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -22,16 +22,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.features.vectorizer import FeatureVectorizer
 
 
-def train_iforest(
+def train_ocsvm(
     data_path: str,
     output_dir: str = 'models',
     scaler_path: str = 'models/scaler.pkl',
-    n_trees: int = 200,
-    height: int = 10,
-    window_size: int = 512,
-    model_name: str = 'iforest_model.pkl'
+    model_name: str = 'ocsvm_model.pkl',
+    nu: float = 0.1
 ):
-    """Train iForestASD on clean baseline (Jan 2024 ONLY).
+    """Train OneClassSVM on clean baseline (Jan 2024 ONLY).
 
     CRITICAL: Train ONLY on clean baseline to learn normal behavior.
     Do NOT include anomalies in training data.
@@ -40,16 +38,14 @@ def train_iforest(
         data_path: Path to clean baseline parquet file
         output_dir: Directory to save trained model
         scaler_path: Path to fitted StandardScaler
-        n_trees: Number of trees (default: 200, prototype-validated)
-        height: Tree height (default: 10, prototype-validated)
-        window_size: Window size (default: 512, prototype-validated)
-        model_name: Output model filename (default: iforest_model.pkl)
+        model_name: Output model filename (default: ocsvm_model.pkl)
+        nu: Upper bound on fraction of outliers (default: 0.1)
 
     Returns:
         Trained model instance
     """
     print("="*60)
-    print("iForestASD Training (River HalfSpaceTrees)")
+    print("OneClassSVM Training (River)")
     print("="*60)
 
     # 1. Load data
@@ -58,7 +54,7 @@ def train_iforest(
     print(f"   ✓ Loaded {len(df):,} records")
 
     # 2. Vectorize features
-    print(f"\n2. Extracting 21D enhanced feature vectors (with ratio features)...")
+    print(f"\n2. Extracting 15D feature vectors...")
     vectorizer = FeatureVectorizer()
 
     X = []
@@ -87,20 +83,13 @@ def train_iforest(
     X_scaled = scaler.transform(X)
     print(f"   ✓ Features scaled (mean≈0, std≈1)")
 
-    # 5. Train iForestASD (River HalfSpaceTrees)
-    print(f"\n5. Training iForestASD (HalfSpaceTrees)...")
+    # 5. Train OneClassSVM
+    print(f"\n5. Training OneClassSVM...")
     print(f"   Config:")
-    print(f"   - n_trees: {n_trees}")
-    print(f"   - height: {height}")
-    print(f"   - window_size: {window_size}")
-    print(f"   - seed: 42")
+    print(f"   - Algorithm: One-Class SVM")
+    print(f"   - nu (outlier fraction): {nu}")
 
-    model = HalfSpaceTrees(
-        n_trees=n_trees,
-        height=height,
-        window_size=window_size,
-        seed=42
-    )
+    model = OneClassSVM(nu=nu)
 
     # Stream learning (one record at a time)
     for i, features in enumerate(X_scaled):
@@ -144,14 +133,15 @@ def train_iforest(
     print(f"✅ Training Complete!")
     print(f"   Model: {model_file}")
     print(f"   Records: {len(X):,}")
-    print(f"   Features: 21D (15D base + 6D ratio)")
+    print(f"   Features: 15D")
+    print(f"   Algorithm: OneClassSVM (nu={nu})")
     print(f"{'='*60}")
 
     return model
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Train iForestASD on clean baseline')
+    parser = argparse.ArgumentParser(description='Train OneClassSVM on clean baseline')
     parser.add_argument(
         '--data',
         type=str,
@@ -171,28 +161,16 @@ def main():
         help='Path to fitted StandardScaler (default: models/scaler.pkl)'
     )
     parser.add_argument(
-        '--n-trees',
-        type=int,
-        default=200,
-        help='Number of trees (default: 200, prototype-validated)'
-    )
-    parser.add_argument(
-        '--height',
-        type=int,
-        default=10,
-        help='Tree height (default: 10, prototype-validated)'
-    )
-    parser.add_argument(
-        '--window-size',
-        type=int,
-        default=512,
-        help='Window size (default: 512, prototype-validated)'
-    )
-    parser.add_argument(
         '--model-name',
         type=str,
-        default='iforest_model.pkl',
-        help='Output model filename (default: iforest_model.pkl)'
+        default='ocsvm_model.pkl',
+        help='Output model filename (default: ocsvm_model.pkl)'
+    )
+    parser.add_argument(
+        '--nu',
+        type=float,
+        default=0.1,
+        help='Upper bound on fraction of outliers (default: 0.1)'
     )
 
     args = parser.parse_args()
@@ -211,14 +189,12 @@ def main():
 
     # Train
     try:
-        train_iforest(
+        train_ocsvm(
             data_path=str(data_path),
             output_dir=args.output,
             scaler_path=str(scaler_path),
-            n_trees=args.n_trees,
-            height=args.height,
-            window_size=args.window_size,
-            model_name=args.model_name
+            model_name=args.model_name,
+            nu=args.nu
         )
         return 0
     except Exception as e:
