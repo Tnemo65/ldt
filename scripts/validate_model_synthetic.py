@@ -85,7 +85,8 @@ def validate_on_synthetic(
     labels_path: str,
     thresholds_path: str,
     neighborhood_path: str,
-    scaler_path: str
+    scaler_path: str,
+    subset: int = None
 ):
     """Validate model on synthetic anomalies.
 
@@ -100,6 +101,7 @@ def validate_on_synthetic(
         thresholds_path: Path to context thresholds JSON
         neighborhood_path: Path to neighborhood mapping JSON
         scaler_path: Path to fitted StandardScaler
+        subset: Optional number of records to validate on (for quick testing)
 
     Returns:
         True if PASS, False if FAIL
@@ -135,6 +137,12 @@ def validate_on_synthetic(
     df = pd.read_parquet(data_path)
     print(f"   - Labels: {labels_path}")
     labels_df = pd.read_csv(labels_path)
+
+    # Subset if requested
+    if subset is not None:
+        print(f"   - Using subset: {subset:,} records")
+        df = df.iloc[:subset]
+        labels_df = labels_df.iloc[:subset]
 
     print(f"   ✓ Data: {len(df):,} records")
     print(f"   ✓ Labels: {len(labels_df):,} anomalies")
@@ -286,6 +294,12 @@ def main():
         default='models/scaler.pkl',
         help='Path to fitted StandardScaler'
     )
+    parser.add_argument(
+        '--subset',
+        type=int,
+        default=None,
+        help='Validate on subset of records (for quick testing)'
+    )
 
     args = parser.parse_args()
 
@@ -310,7 +324,8 @@ def main():
             labels_path=args.labels,
             thresholds_path=args.thresholds,
             neighborhood_path=args.neighborhood,
-            scaler_path=args.scaler
+            scaler_path=args.scaler,
+            subset=args.subset
         )
 
         return 0 if passed else 1

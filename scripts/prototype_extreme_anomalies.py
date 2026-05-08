@@ -1,18 +1,22 @@
 #!/usr/bin/env python3
 """
-Inject 50K EXTREME Contextual Synthetic Anomalies.
+Prototype Extreme Synthetic Anomalies
+Generate contextual impossibilities instead of simple multipliers.
 
-UPDATED: Changed from conservative (3x multipliers) to extreme contextual
-impossibilities (10-30x fare_per_mile, 150-300 mph speed, etc.)
-
-Prototype validation: 92.2% Recall, 5.0% FPR (vs 81.5%/63.6% with conservative)
+Key improvements:
+1. Impossible combinations (not just extreme values)
+2. Space-time violations
+3. Business logic violations
+4. Target: <15% overlap with clean data
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import matplotlib.pyplot as plt
+import sys
 from datetime import timedelta
+
+sys.path.insert(0, '.')
 
 
 class ExtremeSyntheticGenerator:
@@ -35,24 +39,27 @@ class ExtremeSyntheticGenerator:
         Extreme meter tampering: Short distance + normal time + HUGE fare.
 
         Strategy: fare_per_mile = 10-30x normal ($2.50 → $25-75/mile)
-        Prototype validation: 95.8% detection rate
         """
         # Keep short distance and reasonable time
         record['trip_distance'] = np.random.uniform(1.0, 3.0)  # 1-3 miles
         duration_minutes = np.random.uniform(5, 15)  # 5-15 minutes
 
         # Calculate duration
-        pickup_time = pd.to_datetime(record['tpep_pickup_datetime'])
+        pickup_time = record['tpep_pickup_datetime']
         record['tpep_dropoff_datetime'] = pickup_time + timedelta(minutes=duration_minutes)
 
-        # EXTREME fare: 10-30x normal fare_per_mile
+        # EXTREME fare: charge for 15-30 mile trip!
         normal_fare_per_mile = 2.50
-        extreme_multiplier = np.random.uniform(10, 30)
+        extreme_multiplier = np.random.uniform(10, 30)  # 10-30x
         record['fare_amount'] = record['trip_distance'] * normal_fare_per_mile * extreme_multiplier
 
         # Total = fare + extras
         extras = np.random.uniform(5, 10)
         record['total_amount'] = record['fare_amount'] + extras
+
+        # Ratio features (for detection):
+        # fare_per_mile = $25-75 (vs normal $2.50)
+        # implied_speed = 12-36 mph (normal, not suspicious)
 
         return record
 
@@ -61,14 +68,13 @@ class ExtremeSyntheticGenerator:
         GPS spoofing: Huge distance + impossible short time.
 
         Strategy: implied_speed = 150-300 mph (physically impossible in NYC)
-        Prototype validation: 98.2% detection rate
         """
         # HUGE distance
         record['trip_distance'] = np.random.uniform(50, 100)  # 50-100 miles
 
         # VERY short time
         duration_minutes = np.random.uniform(10, 20)  # 10-20 minutes
-        pickup_time = pd.to_datetime(record['tpep_pickup_datetime'])
+        pickup_time = record['tpep_pickup_datetime']
         record['tpep_dropoff_datetime'] = pickup_time + timedelta(minutes=duration_minutes)
 
         # Fare: reasonable per mile (not suspicious on its own)
@@ -78,6 +84,10 @@ class ExtremeSyntheticGenerator:
         extras = np.random.uniform(5, 15)
         record['total_amount'] = record['fare_amount'] + extras
 
+        # Ratio features (for detection):
+        # implied_speed = 150-300 mph (IMPOSSIBLE!)
+        # fare_per_mile = $2-3.5 (normal)
+
         return record
 
     def passenger_fraud_impossible(self, record):
@@ -85,13 +95,12 @@ class ExtremeSyntheticGenerator:
         Passenger fraud: IMPOSSIBLE passenger count.
 
         Strategy: passengers = 15-30 (NYC taxi max = 5-6 realistically)
-        Prototype validation: 87.6% detection rate
         """
         # Normal distance and time
         record['trip_distance'] = np.random.uniform(3, 10)
         duration_minutes = np.random.uniform(15, 40)
 
-        pickup_time = pd.to_datetime(record['tpep_pickup_datetime'])
+        pickup_time = record['tpep_pickup_datetime']
         record['tpep_dropoff_datetime'] = pickup_time + timedelta(minutes=duration_minutes)
 
         # IMPOSSIBLE passenger count
@@ -104,6 +113,9 @@ class ExtremeSyntheticGenerator:
         extras = np.random.uniform(3, 8)
         record['total_amount'] = record['fare_amount'] + extras
 
+        # Ratio features (for detection):
+        # passenger_count = 15-30 (IMPOSSIBLE - taxi max ~6)
+
         return record
 
     def time_manipulation_extreme(self, record):
@@ -111,14 +123,13 @@ class ExtremeSyntheticGenerator:
         Time manipulation: Long distance + ZERO duration.
 
         Strategy: duration < 1 minute for 10+ mile trip
-        Prototype validation: 93.4% detection rate
         """
         # Long distance
         record['trip_distance'] = np.random.uniform(10, 30)
 
         # ZERO duration (or <1 min)
         duration_seconds = np.random.uniform(1, 30)  # 1-30 seconds!
-        pickup_time = pd.to_datetime(record['tpep_pickup_datetime'])
+        pickup_time = record['tpep_pickup_datetime']
         record['tpep_dropoff_datetime'] = pickup_time + timedelta(seconds=duration_seconds)
 
         # Normal fare per mile
@@ -128,6 +139,10 @@ class ExtremeSyntheticGenerator:
         extras = np.random.uniform(3, 8)
         record['total_amount'] = record['fare_amount'] + extras
 
+        # Ratio features (for detection):
+        # implied_speed = INFINITE mph
+        # duration = near-zero
+
         return record
 
     def combined_impossibility(self, record):
@@ -135,7 +150,6 @@ class ExtremeSyntheticGenerator:
         Combined: Multiple violations at once.
 
         Strategy: Airport pickup + short time + huge fare + many passengers
-        Prototype validation: 91.2% detection rate
         """
         # Airport pickup
         record['PULocationID'] = np.random.choice(list(self.AIRPORT_ZONES))
@@ -145,7 +159,7 @@ class ExtremeSyntheticGenerator:
 
         # Short time
         duration_minutes = np.random.uniform(5, 10)
-        pickup_time = pd.to_datetime(record['tpep_pickup_datetime'])
+        pickup_time = record['tpep_pickup_datetime']
         record['tpep_dropoff_datetime'] = pickup_time + timedelta(minutes=duration_minutes)
 
         # HUGE fare (10-20x normal)
@@ -157,15 +171,20 @@ class ExtremeSyntheticGenerator:
         extras = np.random.uniform(10, 20)
         record['total_amount'] = record['fare_amount'] + extras
 
+        # Multiple impossibilities:
+        # - fare_per_mile = $30-150 (EXTREME)
+        # - passenger_count = 10-20 (IMPOSSIBLE)
+        # - Airport + short trip + huge fare (SUSPICIOUS)
+
         return record
 
-    def generate(self, clean_df, n_anomalies=50000):
+    def generate(self, clean_df, n_anomalies=5000):
         """
         Generate extreme synthetic anomalies.
 
         Args:
             clean_df: Clean records to use as templates
-            n_anomalies: Number of anomalies to generate (default: 50K)
+            n_anomalies: Number of anomalies to generate
 
         Returns:
             DataFrame with anomalies, labels DataFrame
@@ -219,37 +238,16 @@ class ExtremeSyntheticGenerator:
         return df_anomalies, df_labels
 
 
-def generate_synthetic_distribution_figure(labels):
-    """Generate Phase 0 Figure 4: Synthetic Anomaly Distribution."""
-    plt.figure(figsize=(10, 6))
-    scenario_counts = labels[labels['is_anomaly'] == 1]['scenario'].value_counts()
-    scenario_counts.plot(kind='bar', color='coral', edgecolor='black')
-    plt.title('Phase 0: EXTREME Contextual Synthetic Anomalies (5 Scenarios)',
-              fontsize=14, fontweight='bold')
-    plt.xlabel('Fraud Scenario')
-    plt.ylabel('Count')
-    plt.xticks(rotation=45, ha='right')
-    plt.axhline(y=10000, color='red', linestyle='--', label='Target (10K each)')
-    plt.legend()
-    plt.grid(True, axis='y', alpha=0.3)
-    plt.tight_layout()
-    
-    Path('docs/figures').mkdir(parents=True, exist_ok=True)
-    plt.savefig('docs/figures/phase0_synthetic_distribution.png', dpi=300, bbox_inches='tight')
-    plt.close()
-    print("✅ Saved: docs/figures/phase0_synthetic_distribution.png")
-
-
 def main():
-    # Load clean baseline
-    input_path = Path('data/clean/jan_2024_clean_baseline.parquet')
-    print(f"Loading clean baseline: {input_path}")
-    df_clean = pd.read_parquet(input_path)
+    # Load clean data
+    clean_path = 'data/clean/prototype_layer2_clean.parquet'
+    print(f"Loading clean data: {clean_path}")
+    df_clean = pd.read_parquet(clean_path)
     print(f"✓ Loaded {len(df_clean):,} clean records")
 
     # Generate anomalies
     generator = ExtremeSyntheticGenerator()
-    df_anomalies, df_labels = generator.generate(df_clean, n_anomalies=50000)
+    df_anomalies, df_labels = generator.generate(df_clean, n_anomalies=5000)
 
     # Combine clean + anomalies
     print(f"\n3. Combining clean + anomalies...")
@@ -257,7 +255,7 @@ def main():
     # Add labels for clean data
     df_clean_labels = pd.DataFrame({
         'is_anomaly': [0] * len(df_clean),
-        'scenario': ['normal'] * len(df_clean)
+        'scenario': ['clean'] * len(df_clean)
     })
 
     # Combine
@@ -265,8 +263,8 @@ def main():
     df_all_labels = pd.concat([df_clean_labels, df_labels], ignore_index=True)
 
     # Save
-    output_data = Path('data/clean/jan_2024_with_50k_anomalies.parquet')
-    output_labels = Path('data/clean/anomaly_labels.csv')
+    output_data = 'data/clean/prototype_with_extreme_anomalies.parquet'
+    output_labels = 'data/clean/prototype_anomaly_labels.csv'
 
     df_combined.to_parquet(output_data, index=False)
     df_all_labels.to_csv(output_labels, index=False)
@@ -277,11 +275,6 @@ def main():
     print(f"\nDataset composition:")
     print(f"  Clean: {len(df_clean):,} ({len(df_clean)/len(df_combined)*100:.1f}%)")
     print(f"  Anomalies: {len(df_anomalies):,} ({len(df_anomalies)/len(df_combined)*100:.1f}%)")
-    contamination = len(df_anomalies) / len(df_combined)
-    print(f"  Contamination: {contamination*100:.2f}% (within iForest tolerance)")
-
-    # Generate Figure 4
-    generate_synthetic_distribution_figure(df_all_labels)
 
     return df_combined, df_all_labels
 
