@@ -100,7 +100,6 @@ test/unit/test_layer1.py
 ## Pre-Commit Checklist
 
 - [ ] Code follows spec exactly (no deviations)
-- [ ] All V1.9 bug fixes applied
 - [ ] Tests written and passing
 - [ ] Files in correct directories
 - [ ] No unnecessary .md documents
