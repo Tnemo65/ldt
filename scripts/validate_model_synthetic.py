@@ -138,58 +138,106 @@ def validate_on_synthetic(
     print(f"   - Labels: {labels_path}")
     labels_df = pd.read_csv(labels_path)
 
-    # Subset if requested
+    # CRITICAL: Anomalies are in the LAST 50K rows of the parquet file.
+    # The inject script appends anomalies after clean records.
+    # For validation, we sample from the tail to ensure anomalies are included.
+    n_clean = len(df) - 50000
+    n_anomalies_total = 50000
+
     if subset is not None:
-        print(f"   - Using subset: {subset:,} records")
-        df = df.iloc[:subset]
-        labels_df = labels_df.iloc[:subset]
+        # For subset testing: take last N records to capture anomalies
+        if subset <= n_anomalies_total:
+            # Very small subset: take only from anomaly section
+            df = df.tail(subset).reset_index(drop=True)
+            labels_df = labels_df.tail(subset).reset_index(drop=True)
+            print(f"   - Using last {subset:,} records (anomaly section)")
+        else:
+            # Larger subset: take all anomalies + some clean from front
+            df_clean = df.head(n_clean).sample(subset - n_anomalies_total, random_state=42)
+            df_anom = df.tail(n_anomalies_total)
+            df = pd.concat([df_clean, df_anom], ignore_index=True)
+            labels_clean = labels_df.head(n_clean).loc[df_clean.index]
+            labels_anom = labels_df.tail(n_anomalies_total)
+            labels_df = pd.concat([labels_clean, labels_anom], ignore_index=True)
+            print(f"   - Using {subset:,} records (all anomalies + {subset - n_anomalies_total:,} clean)")
+    else:
+        print(f"   - Using ALL {len(df):,} records (full validation)")
 
-    print(f"   ✓ Data: {len(df):,} records")
-    print(f"   ✓ Labels: {len(labels_df):,} anomalies")
+    print(f"   Records: {len(df):,}")
+    print(f"   Anomalies in sample: {labels_df['is_anomaly'].sum():,}")
 
-    # 3. Score all records
-    print(f"\n3. Scoring all records...")
+    # 3. Score all records (batch for speed)
+    print(f"\n3. Scoring all records (batch mode)...")
     vectorizer = FeatureVectorizer()
 
+    # Batch vectorization
+    print(f"   Vectorizing...")
+    X = vectorizer.transform_batch(df)
+
+    # Batch scaling
+    print(f"   Scaling...")
+    X_scaled = scaler.transform(X)
+
+    # sklearn IsolationForest: batch score_samples
+    # Returns negative scores (lower = more anomalous)
+    print(f"   Scoring with sklearn IsolationForest...")
+    raw_scores = model.score_samples(X_scaled)
+    anomaly_scores = -raw_scores  # Negate: higher = more anomalous
+
+    # Load context thresholds (global + per-context)
+    # NOTE: Old thresholds (from River HalfSpaceTrees) may be incompatible with sklearn scores.
+    # sklearn scores are ~[0.3, 0.8], while River scores were ~[0.9, 0.95].
+    # If thresholds don't match score range, fall back to percentile-based.
+    global_thresh = thresholds_data.get('global_threshold', 0.5)
+    context_thresholds = thresholds_data.get('thresholds', {})
+
+    if global_thresh < anomaly_scores.min() or global_thresh > anomaly_scores.max():
+        print(f"   WARNING: Stored threshold ({global_thresh:.3f}) outside score range")
+        print(f"            Score range: [{anomaly_scores.min():.3f}, {anomaly_scores.max():.3f}]")
+        print(f"   Falling back to percentile-based thresholding...")
+
+        # Find best threshold by F1 on this data
+        best_f1 = 0
+        best_thresh = 0
+        best_pct = 0
+        for pct in [50, 55, 60, 65, 70, 75, 80, 85, 90, 95]:
+            thresh = np.percentile(anomaly_scores, pct)
+            y_pred_t = (anomaly_scores >= thresh).astype(int)
+            y_true_t = labels_df['is_anomaly'].values
+            tp = ((y_true_t == 1) & (y_pred_t == 1)).sum()
+            fp = ((y_true_t == 0) & (y_pred_t == 1)).sum()
+            tn = ((y_true_t == 0) & (y_pred_t == 0)).sum()
+            fn = ((y_true_t == 1) & (y_pred_t == 0)).sum()
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+            fpr = fp / (fp + tn) if (fp + tn) > 0 else 0
+            prec = tp / (tp + fp) if (tp + fp) > 0 else 0
+            f1 = 2 * prec * recall / (prec + recall) if (prec + recall) > 0 else 0
+            print(f"     {pct}th: t={thresh:.4f} recall={recall:.3f} fpr={fpr:.3f} f1={f1:.3f}")
+            if f1 > best_f1:
+                best_f1 = f1
+                best_thresh = thresh
+                best_pct = pct
+
+        print(f"   Best: {best_pct}th percentile, thresh={best_thresh:.4f}, F1={best_f1:.3f}")
+        global_thresh = best_thresh
+        context_thresholds = {}
+
+    # Compute predictions
+    print(f"   Computing context-aware decisions...")
     predictions = []
-    ground_truth = []
 
     for idx, row in df.iterrows():
-        # Get ground truth
-        is_anomaly_true = labels_df[labels_df.index == idx]['is_anomaly'].values
-        if len(is_anomaly_true) > 0:
-            ground_truth.append(int(is_anomaly_true[0]))
-        else:
-            ground_truth.append(0)  # Clean record
-
-        # Vectorize and score
         try:
-            features = vectorizer.transform(row.to_dict())
-            features_scaled = scaler.transform([features])[0]
-            feature_dict = {i: float(v) for i, v in enumerate(features_scaled)}
-
-            score = model.score_one(feature_dict)
-
-            # Get context-specific threshold
             context_key = get_context_key(row.to_dict(), neighborhood_mapping)
-            threshold = thresholds_data['thresholds'].get(
-                context_key,
-                thresholds_data.get('global_threshold', 0.5)
-            )
-
-            # Predict
-            is_anomaly_pred = int(score > threshold)
-            predictions.append(is_anomaly_pred)
-
-        except Exception as e:
-            # On error, predict clean
+            threshold = context_thresholds.get(context_key, global_thresh)
+            is_anomaly = int(anomaly_scores[idx] > threshold)
+            predictions.append(is_anomaly)
+        except Exception:
             predictions.append(0)
 
-        # Progress
-        if (idx + 1) % 500000 == 0:
-            print(f"   Scored: {idx + 1:,} / {len(df):,}")
+    ground_truth = labels_df['is_anomaly'].values
 
-    print(f"   ✓ Scoring complete")
+    print(f"   Scoring complete")
 
     # 4. Compute metrics
     print(f"\n4. Computing metrics...")

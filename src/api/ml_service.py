@@ -271,11 +271,10 @@ async def inference(request: InferenceRequest):
         features = np.array([request.features])
         features_scaled = scaler.transform(features)[0]
 
-        # Convert to dict for River model
-        feature_dict = {idx: float(val) for idx, val in enumerate(features_scaled)}
-
-        # Score
-        anomaly_score = model.score_one(feature_dict)
+        # sklearn IsolationForest: score_samples returns negative scores (lower = more anomalous)
+        # Negate so higher = more anomalous (River-like semantics)
+        raw_score = model.score_samples(features_scaled.reshape(1, -1))[0]
+        anomaly_score = -raw_score
 
         # Threshold (simplified - in production, use context-aware)
         threshold = 0.50

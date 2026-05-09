@@ -3,9 +3,7 @@
 Compare multiple anomaly detection models on synthetic data.
 
 Tests all available models and compares their performance:
-- iForest v1 (100 trees, height 8)
-- iForest v2 (200 trees, height 10)
-- iForest v3 (300 trees, height 12)
+- sklearn IsolationForest (new, trained on full 2.4M data)
 - GaussianScorer (if available)
 
 Usage:
@@ -30,20 +28,34 @@ def load_model(model_path: str):
         return pickle.load(f)
 
 
+def is_river_model(model):
+    """Detect if model is River HalfSpaceTrees (vs sklearn IsolationForest)."""
+    return hasattr(model, 'score_one')
+
+
 def score_records(model, X_scaled, model_name: str):
-    """Score records and return anomaly scores."""
+    """Score records and return anomaly scores.
+
+    Handles both River HalfSpaceTrees (score_one dict) and
+    sklearn IsolationForest (score_samples array).
+    """
     print(f"   Scoring with {model_name}...")
-    scores = []
 
-    for i, features in enumerate(X_scaled):
-        feature_dict = {idx: float(val) for idx, val in enumerate(features)}
-        score = model.score_one(feature_dict)
-        scores.append(score)
-
-        if (i + 1) % 5000 == 0:
-            print(f"      {i+1:,} / {len(X_scaled):,}")
-
-    return np.array(scores)
+    if is_river_model(model):
+        # River HalfSpaceTrees: batch via score_many if available, else loop
+        scores = []
+        for i, features in enumerate(X_scaled):
+            feature_dict = {idx: float(val) for idx, val in enumerate(features)}
+            score = model.score_one(feature_dict)
+            scores.append(score)
+            if (i + 1) % 5000 == 0:
+                print(f"      {i+1:,} / {len(X_scaled):,}")
+        return np.array(scores)
+    else:
+        # sklearn IsolationForest: batch score_samples
+        # Returns negative scores (lower = more anomalous)
+        raw_scores = model.score_samples(X_scaled)
+        return -raw_scores  # Negate so higher = more anomalous
 
 
 def compute_metrics(y_true, y_pred, threshold):
@@ -112,22 +124,11 @@ def main():
     print(f"   Anomalies: {labels['is_anomaly'].sum():,}")
     print(f"   Clean: {(~labels['is_anomaly']).sum():,}")
 
-    # 2. Vectorize
-    print("\n2. Vectorizing features...")
+    # 2. Batch vectorize
+    print("\n2. Batch vectorizing features...")
     vectorizer = FeatureVectorizer()
-
-    X = []
-    for idx, row in df.iterrows():
-        try:
-            X.append(vectorizer.transform(row.to_dict()))
-        except:
-            pass
-
-        if (idx + 1) % 5000 == 0:
-            print(f"   {idx+1:,} / {len(df):,}")
-
-    X = np.array(X)
-    print(f"   ✓ Vectorized: {X.shape}")
+    X = vectorizer.transform_batch(df)
+    print(f"   Vectorized: {X.shape}")
 
     # 3. Scale
     print("\n3. Scaling features...")
@@ -140,9 +141,7 @@ def main():
     models = {}
 
     model_files = [
-        ('iForest v1 (100t/h8)', 'models/iforest_model.pkl'),
-        ('iForest v2 (200t/h10)', 'models/iforest_model_v2.pkl'),
-        ('iForest v3 (300t/h12)', 'models/iforest_model_v3.pkl'),
+        ('sklearn IsolationForest (full)', 'models/iforest_model.pkl'),
         ('GaussianScorer', 'models/gaussian_model.pkl'),
     ]
 

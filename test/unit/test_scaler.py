@@ -19,16 +19,16 @@ def test_scaler_fitted():
 
     assert hasattr(scaler, 'mean_'), "Scaler not fitted (no mean_)"
     assert hasattr(scaler, 'scale_'), "Scaler not fitted (no scale_)"
-    assert len(scaler.mean_) == 15, "Scaler not 15D"
+    assert len(scaler.mean_) == 21, "Scaler not 21D"
 
 def test_scaler_transform():
-    """Scaler must transform 15D vectors."""
+    """Scaler must transform 21D vectors."""
     with open('models/scaler.pkl', 'rb') as f:
         scaler = pickle.load(f)
 
-    X = np.random.random((10, 15))
+    X = np.random.random((10, 21))
     X_scaled = scaler.transform(X)
 
-    assert X_scaled.shape == (10, 15)
+    assert X_scaled.shape == (10, 21)
     # Verify transform produces finite values (no NaN/Inf)
     assert np.isfinite(X_scaled).all(), "Scaled features contain NaN or Inf"

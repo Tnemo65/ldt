@@ -138,7 +138,7 @@ class IFScoringOperator(MapFunction):
                 raise RuntimeError("Model not found in Broadcast State - run model loader first")
 
             self.model = pickle.loads(model_bytes)
-            print(f"[IFScoringOperator] Model loaded: {self.model.n_trees} trees")
+            print(f"[IFScoringOperator] Model loaded: {self.model.n_estimators} trees")
 
             # Load scaler
             scaler_bytes = broadcast_state.get("scaler")
@@ -188,21 +188,20 @@ class IFScoringOperator(MapFunction):
             # Scale
             features_scaled = self.scaler.transform([features])[0]
 
-            # Convert to dict for River model
-            feature_dict = {idx: float(val) for idx, val in enumerate(features_scaled)}
+            # sklearn IsolationForest: score_samples returns negative anomaly scores
+            # Lower (more negative) = more anomalous
+            # We negate to make higher = more anomalous (same semantics as before)
+            raw_score = self.model.score_samples(features_scaled.reshape(1, -1))[0]
+            anomaly_score = -raw_score  # Now higher = more anomalous (River-like semantics)
 
-            # Score with iForestASD
-            anomaly_score = self.model.score_one(feature_dict)
-
-            # Get context-aware threshold
+            # Get context-aware threshold (using negated threshold for comparison)
             context_key = get_context_key(value, self.neighborhood_mapping)
-            threshold = self.thresholds.get('thresholds', {}).get(
+            threshold_val = self.thresholds.get('thresholds', {}).get(
                 context_key,
                 self.thresholds.get('global_threshold', 0.5)
             )
-
-            # Determine if anomaly
-            is_anomaly = anomaly_score > threshold
+            # Compare negated score with negated threshold: score > threshold
+            is_anomaly = anomaly_score > threshold_val
 
             # Return enriched record
             return {

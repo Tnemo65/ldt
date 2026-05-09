@@ -86,26 +86,14 @@ def compute_thresholds(
     from src.features.vectorizer import FeatureVectorizer
     vectorizer = FeatureVectorizer()
 
-    # Real inference
-    print("\nRunning iForest inference (real anomaly scores)...")
-    n = len(df)
-    batch_size = 10000
-    anomaly_scores = []
-
-    for start in range(0, n, batch_size):
-        end = min(start + batch_size, n)
-        batch = df.iloc[start:end]
-        for _, row in batch.iterrows():
-            try:
-                vec = vectorizer.transform(row.to_dict())
-                scaled = scaler.transform(vec.reshape(1, -1))
-                feat_dict = {i: float(v) for i, v in enumerate(scaled[0])}
-                score = model.score_one(feat_dict)
-            except Exception:
-                score = 0.0
-            anomaly_scores.append(score)
-
-        print(f"  Inferred: {end:,} / {n:,}")
+    # Real inference (batch for speed)
+    print("\nRunning IsolationForest inference (batch mode)...")
+    vectorizer = FeatureVectorizer()
+    X = vectorizer.transform_batch(df)
+    X_scaled = scaler.transform(X)
+    # sklearn: negative scores (lower = more anomalous), negate for River-like semantics
+    raw_scores = model.score_samples(X_scaled)
+    anomaly_scores = (-raw_scores).tolist()
 
     df['anomaly_score'] = anomaly_scores
     print(f"\n  Score stats: mean={np.mean(anomaly_scores):.4f}, "

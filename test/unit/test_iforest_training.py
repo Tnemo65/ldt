@@ -1,5 +1,5 @@
-"""iForest training tests.
-Spec: Lines 3414-3465 (HalfSpaceTrees on clean baseline)
+"""iForest training tests - sklearn IsolationForest.
+Tests both sklearn IsolationForest and legacy River HalfSpaceTrees.
 """
 
 import pytest
@@ -25,41 +25,30 @@ def test_scaler_exists():
     scaler_path = Path('models/scaler.pkl')
     assert scaler_path.exists(), f"Scaler not found: {scaler_path}"
 
-    # Load and verify it's a scaler
     with open(scaler_path, 'rb') as f:
         scaler = pickle.load(f)
 
-    # Check it has expected attributes
     assert hasattr(scaler, 'transform'), "Scaler should have transform method"
     assert hasattr(scaler, 'mean_'), "Scaler should be fitted (has mean_)"
 
 
 def test_iforest_model_can_be_trained():
-    """iForest model should be trainable with River."""
-    from river.anomaly import HalfSpaceTrees
+    """sklearn IsolationForest should be trainable."""
+    from sklearn.ensemble import IsolationForest
 
-    # Create model with spec params
-    model = HalfSpaceTrees(
-        n_trees=100,
-        height=8,
-        window_size=256,
-        seed=42
+    model = IsolationForest(
+        n_estimators=100,
+        max_samples=256,
+        contamination=0.001,
+        random_state=42
     )
 
-    # Train on small sample
-    sample_data = [
-        {0: 1.5, 1: 2.3, 2: 0.8, 3: 4.1, 4: 3.2, 5: 1.1, 6: 2.7,
-         7: 0.5, 8: 3.8, 9: 1.9, 10: 2.1, 11: 0.9, 12: 1.6, 13: 3.3, 14: 2.4}
-        for _ in range(100)
-    ]
+    sample_data = np.random.randn(100, 21)
+    model.fit(sample_data)
 
-    for features in sample_data:
-        model.learn_one(features)
-
-    # Should be able to score
-    score = model.score_one(sample_data[0])
-    assert isinstance(score, (int, float)), "Score should be numeric"
-    assert score >= 0, "Score should be non-negative"
+    scores = model.score_samples(sample_data[:5])
+    assert len(scores) == 5, "Should return 5 scores"
+    assert scores.dtype == np.float64, "Scores should be float64"
 
 
 @pytest.mark.slow
@@ -67,17 +56,16 @@ def test_trained_model_exists():
     """After training, model file should exist."""
     model_path = Path('models/iforest_model.pkl')
 
-    # This test will initially fail until training is run
     if not model_path.exists():
         pytest.skip("Model not yet trained - run training script first")
 
-    # Load and verify
     with open(model_path, 'rb') as f:
         model = pickle.load(f)
 
-    # Check it's a HalfSpaceTrees model
-    assert hasattr(model, 'score_one'), "Model should have score_one method"
-    assert hasattr(model, 'learn_one'), "Model should have learn_one method"
+    # sklearn IsolationForest has score_samples, River has score_one
+    has_sklearn_api = hasattr(model, 'score_samples')
+    has_river_api = hasattr(model, 'score_one')
+    assert has_sklearn_api or has_river_api, "Model should have scoring method"
 
 
 @pytest.mark.slow
@@ -91,9 +79,13 @@ def test_model_can_score():
     with open(model_path, 'rb') as f:
         model = pickle.load(f)
 
-    # Test scoring
-    test_features = {i: float(i) for i in range(15)}  # 15D features
-    score = model.score_one(test_features)
+    test_features = np.random.randn(1, 21)
 
-    assert isinstance(score, float), "Score should be float"
-    assert score >= 0, "Anomaly score should be non-negative"
+    if hasattr(model, 'score_samples'):
+        score = model.score_samples(test_features)
+        assert isinstance(score[0], (np.floating, float))
+    elif hasattr(model, 'score_one'):
+        feat_dict = {i: float(v) for i, v in enumerate(test_features[0])}
+        score = model.score_one(feat_dict)
+        assert isinstance(score, (int, float))
+

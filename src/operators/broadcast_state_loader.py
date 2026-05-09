@@ -131,9 +131,9 @@ class BroadcastStateLoaderFunction(BroadcastProcessFunction):
 
 
 def load_initial_model_to_broadcast_state(
-    model_path: str = 'models/iforest_model_v2.pkl',
+    model_path: str = 'models/iforest_model.pkl',
     scaler_path: str = 'models/scaler.pkl',
-    thresholds_path: str = 'models/context_thresholds_v2.json',
+    thresholds_path: str = 'models/context_thresholds.json',
     output_path: str = 'models/initial_model_update.json'
 ):
     """Create initial model update message for Kafka.

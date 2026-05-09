@@ -51,24 +51,11 @@ def train_gaussian(
     df = pd.read_parquet(data_path)
     print(f"   ✓ Loaded {len(df):,} records")
 
-    # 2. Vectorize features
-    print(f"\n2. Extracting 15D feature vectors...")
+    # 2. Batch vectorize features
+    print(f"\n2. Extracting 21D feature vectors...")
     vectorizer = FeatureVectorizer()
-
-    X = []
-    for idx, row in df.iterrows():
-        try:
-            features = vectorizer.transform(row.to_dict())
-            X.append(features)
-        except Exception as e:
-            if idx % 100000 == 0:
-                print(f"   Warning: Failed to vectorize record {idx}: {e}")
-
-        if (idx + 1) % 500000 == 0:
-            print(f"   Vectorized: {idx + 1:,} / {len(df):,}")
-
-    X = np.array(X)
-    print(f"   ✓ Extracted {X.shape[0]:,} feature vectors (shape: {X.shape})")
+    X = vectorizer.transform_batch(df)
+    print(f"   Extracted {X.shape[0]:,} x {X.shape[1]}D feature vectors")
 
     # 3. Load fitted scaler
     print(f"\n3. Loading fitted StandardScaler from: {scaler_path}")
@@ -117,21 +104,19 @@ def train_gaussian(
     print(f"\n7. Quick validation...")
     test_sample = X_scaled[:10]
     scores = []
-
     for features in test_sample:
         feature_dict = {idx: float(val) for idx, val in enumerate(features)}
         score = model.score_one(feature_dict)
         scores.append(score)
-
     print(f"   Sample scores: {[f'{s:.3f}' for s in scores]}")
     print(f"   Mean score: {np.mean(scores):.3f}")
     print(f"   Std score: {np.std(scores):.3f}")
 
     print(f"\n{'='*60}")
-    print(f"✅ Training Complete!")
+    print(f"Training Complete!")
     print(f"   Model: {model_file}")
-    print(f"   Records: {len(X):,}")
-    print(f"   Features: 15D")
+    print(f"   Records: {X.shape[0]:,}")
+    print(f"   Features: 21D")
     print(f"   Algorithm: GaussianScorer (Multivariate Gaussian)")
     print(f"{'='*60}")
 

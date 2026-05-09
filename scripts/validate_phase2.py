@@ -25,36 +25,45 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 def check_model_trained():
-    """Verify iForestASD model v2 exists and has correct config."""
+    """Verify IsolationForest model exists."""
     print("\n1. Checking model training...")
 
-    model_path = Path('models/iforest_model_v2.pkl')
+    model_path = Path('models/iforest_model.pkl')
 
     if not model_path.exists():
-        print("  ❌ Model v2 not found")
+        print("  ❌ Model not found: models/iforest_model.pkl")
         return False
 
     try:
         with open(model_path, 'rb') as f:
             model = pickle.load(f)
 
-        # Check config
-        expected_config = {'n_trees': 200, 'height': 10, 'window_size': 512}
-        actual_config = {
-            'n_trees': model.n_trees,
-            'height': model.height,
-            'window_size': model.window_size
-        }
-
-        if actual_config != expected_config:
-            print(f"  ⚠ Config mismatch:")
-            print(f"    Expected: {expected_config}")
-            print(f"    Actual: {actual_config}")
+        if hasattr(model, 'estimators_'):
+            # sklearn IsolationForest: estimators_ is a list of fitted trees
+            n_trees = len(model.estimators_)
+            print(f"  ✅ sklearn IsolationForest loaded")
+            print(f"     Trees: {n_trees}")
+            print(f"     Max samples: {model.max_samples_}")
+            print(f"     File: {model_path} ({model_path.stat().st_size / 1e6:.1f} MB)")
+            return True
+        elif hasattr(model, 'n_trees'):
+            expected_config = {'n_trees': 200, 'height': 10, 'window_size': 512}
+            actual_config = {
+                'n_trees': model.n_trees,
+                'height': model.height,
+                'window_size': model.window_size
+            }
+            if actual_config != expected_config:
+                print(f"  ⚠ Config mismatch:")
+                print(f"    Expected: {expected_config}")
+                print(f"    Actual: {actual_config}")
+                return False
+            print(f"  ✅ River HalfSpaceTrees loaded (legacy)")
+            print(f"     {model_path} ({model_path.stat().st_size / 1e6:.1f} MB)")
+            return True
+        else:
+            print(f"  ⚠ Unknown model type")
             return False
-
-        print(f"  ✅ Model v2 trained with correct config")
-        print(f"     {model_path} ({model_path.stat().st_size / 1e6:.1f} MB)")
-        return True
 
     except Exception as e:
         print(f"  ❌ Error loading model: {e}")

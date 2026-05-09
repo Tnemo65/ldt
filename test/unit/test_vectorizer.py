@@ -1,13 +1,13 @@
 """Feature vectorizer tests.
-Spec: Lines 1446-1464 (15D vector)
+Tests 21D enhanced vectorizer with ratio features.
 """
 
 import pytest
 import numpy as np
 from src.features.vectorizer import FeatureVectorizer
 
-def test_vectorizer_15d_output():
-    """Vectorizer must produce 15D output."""
+def test_vectorizer_21d_output():
+    """Vectorizer must produce 21D output."""
     vectorizer = FeatureVectorizer()
 
     record = {
@@ -19,10 +19,11 @@ def test_vectorizer_15d_output():
         'DOLocationID': 230,
         'tpep_pickup_datetime': '2024-01-15T10:30:00',
         'tpep_dropoff_datetime': '2024-01-15T10:45:00',
+        'total_amount': 20.0,
     }
 
     features = vectorizer.transform(record)
-    assert len(features) == 15, f"Expected 15D, got {len(features)}D"
+    assert len(features) == 21, f"Expected 21D, got {len(features)}D"
 
 def test_vectorizer_no_null():
     """Vectorizer must not produce NULL/NaN."""

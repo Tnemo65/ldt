@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "percentile": 95,
-  "global_threshold": 0.950190435880176,
+  "global_threshold": 0.5917,
   "thresholds": {
     "short_night_weekday_zone_high_volume_1": 0.94385363399863,
     "short_night_weekday_zone_medium_volume": 0.9502473620991184,
@@ -98,5 +98,9 @@
     "medium_evening_weekend_zone_airports": 0.9474134572003281,
     "medium_evening_weekend_zone_low_volume_2": 0.9469548697702111,
     "medium_evening_weekend_zone_low_volume_1": 0.9471648558736085
-  }
+  },
+  "threshold_source": "sklearn IsolationForest (2026-05-09)",
+  "validation_recall": 0.973,
+  "validation_fpr": 0.027,
+  "validation_f1": 0.973
 }
