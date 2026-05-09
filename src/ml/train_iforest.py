@@ -15,6 +15,10 @@ import pickle
 import numpy as np
 import pandas as pd
 from river.anomaly import HalfSpaceTrees
+import io
+import locale
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -29,7 +33,8 @@ def train_iforest(
     n_trees: int = 200,
     height: int = 10,
     window_size: int = 512,
-    model_name: str = 'iforest_model.pkl'
+    model_name: str = 'iforest_model.pkl',
+    sample_size: int = None,
 ):
     """Train iForestASD on clean baseline (Jan 2024 ONLY).
 
@@ -55,7 +60,11 @@ def train_iforest(
     # 1. Load data
     print(f"\n1. Loading data from: {data_path}")
     df = pd.read_parquet(data_path)
-    print(f"   ✓ Loaded {len(df):,} records")
+    print(f"   Loaded {len(df):,} records")
+
+    if sample_size and sample_size < len(df):
+        df = df.sample(sample_size, random_state=42).reset_index(drop=True)
+        print(f"   Sampled: {len(df):,} records")
 
     # 2. Vectorize features
     print(f"\n2. Extracting 21D enhanced feature vectors (with ratio features)...")
@@ -74,18 +83,18 @@ def train_iforest(
             print(f"   Vectorized: {idx + 1:,} / {len(df):,}")
 
     X = np.array(X)
-    print(f"   ✓ Extracted {X.shape[0]:,} feature vectors (shape: {X.shape})")
+    print(f"   Extracted {X.shape[0]:,} feature vectors (shape: {X.shape})")
 
     # 3. Load fitted scaler
     print(f"\n3. Loading fitted StandardScaler from: {scaler_path}")
     with open(scaler_path, 'rb') as f:
         scaler = pickle.load(f)
-    print("   ✓ Scaler loaded")
+    print("   Scaler loaded")
 
     # 4. Scale features
     print(f"\n4. Scaling features...")
     X_scaled = scaler.transform(X)
-    print(f"   ✓ Features scaled (mean≈0, std≈1)")
+    print(f"   Features scaled (mean=0, std=1)")
 
     # 5. Train iForestASD (River HalfSpaceTrees)
     print(f"\n5. Training iForestASD (HalfSpaceTrees)...")
@@ -112,7 +121,7 @@ def train_iforest(
         if (i + 1) % 100000 == 0:
             print(f"   Trained: {i + 1:,} / {len(X):,} ({(i+1)/len(X)*100:.1f}%)")
 
-    print(f"   ✓ Training complete: {len(X):,} records")
+    print(f"   Training complete: {len(X):,} records")
 
     # 6. Save model
     output_path = Path(output_dir)
@@ -124,7 +133,7 @@ def train_iforest(
     with open(model_file, 'wb') as f:
         pickle.dump(model, f)
 
-    print(f"   ✓ Model saved ({model_file.stat().st_size / 1e6:.1f} MB)")
+    print(f"   Model saved ({model_file.stat().st_size / 1e6:.1f} MB)")
 
     # 7. Quick validation
     print(f"\n7. Quick validation...")
@@ -141,7 +150,7 @@ def train_iforest(
     print(f"   Std score: {np.std(scores):.3f}")
 
     print(f"\n{'='*60}")
-    print(f"✅ Training Complete!")
+    print(f"Training Complete!")
     print(f"   Model: {model_file}")
     print(f"   Records: {len(X):,}")
     print(f"   Features: 21D (15D base + 6D ratio)")
@@ -157,6 +166,12 @@ def main():
         type=str,
         default='data/clean/jan_2024_clean_baseline.parquet',
         help='Path to clean baseline parquet file'
+    )
+    parser.add_argument(
+        '--sample',
+        type=int,
+        default=None,
+        help='Sample N records for faster training (default: all)'
     )
     parser.add_argument(
         '--output',
@@ -197,19 +212,17 @@ def main():
 
     args = parser.parse_args()
 
-    # Validate inputs
     data_path = Path(args.data)
     if not data_path.exists():
-        print(f"❌ Error: Data file not found: {data_path}")
+        print(f"Error: Data file not found: {data_path}")
         return 1
 
     scaler_path = Path(args.scaler)
     if not scaler_path.exists():
-        print(f"❌ Error: Scaler not found: {scaler_path}")
+        print(f"Error: Scaler not found: {scaler_path}")
         print("   Hint: Run Phase 0 tasks to fit StandardScaler")
         return 1
 
-    # Train
     try:
         train_iforest(
             data_path=str(data_path),
@@ -218,11 +231,12 @@ def main():
             n_trees=args.n_trees,
             height=args.height,
             window_size=args.window_size,
-            model_name=args.model_name
+            model_name=args.model_name,
+            sample_size=args.sample,
         )
         return 0
     except Exception as e:
-        print(f"\n❌ Training failed: {e}")
+        print(f"\nTraining failed: {e}")
         import traceback
         traceback.print_exc()
         return 1
