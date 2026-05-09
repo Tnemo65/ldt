@@ -13,28 +13,116 @@ Expected:
 
 NOTE: Jan 2024 baseline is pre-cleaned, so expect low violation rate (~0.16%).
 The 13.49% rate applies to RAW production data.
-
-Prototype: scripts/prototype_layer{1,2}_{schema,rules}.py
 """
 
 import pandas as pd
 import numpy as np
 from pathlib import Path
-import sys
+from datetime import datetime
 
-sys.path.insert(0, '.')
 
-# Import validators from prototype scripts
-from scripts.prototype_layer1_schema import SchemaValidator
-from scripts.prototype_layer2_rules import RuleBasedValidator
+class SchemaValidator:
+    """Layer 1: Schema validation - reject records with missing/invalid required fields."""
+
+    REQUIRED_FIELDS = [
+        'tpep_pickup_datetime', 'tpep_dropoff_datetime',
+        'trip_distance', 'fare_amount', 'PULocationID', 'DOLocationID',
+        'passenger_count',
+    ]
+
+    def __init__(self):
+        self.stats = {f: 0 for f in ['null', 'zone', 'passenger', 'total']}
+        self.total = 0
+
+    def validate(self, record: dict):
+        """Returns (is_valid, reason)."""
+        self.total += 1
+
+        # Null check
+        for field in self.REQUIRED_FIELDS:
+            val = record.get(field)
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                self.stats['null'] += 1
+                return False, f"null:{field}"
+
+        # Zone validation
+        pu = record.get('PULocationID', 0)
+        do = record.get('DOLocationID', 0)
+        if not (1 <= pu <= 265) or not (1 <= do <= 265):
+            self.stats['zone'] += 1
+            return False, f"invalid_zone:pu={pu},do={do}"
+
+        # Passenger count
+        pax = record.get('passenger_count', 0)
+        if not (1 <= pax <= 6):
+            self.stats['passenger'] += 1
+            return False, f"invalid_passenger:{pax}"
+
+        return True, "ok"
+
+    def print_stats(self):
+        for k, v in self.stats.items():
+            if v > 0:
+                print(f"  {k}: {v:,} rejected")
+
+
+class RuleBasedValidator:
+    """Layer 2: Rule-based canary - reject physical impossibilities."""
+
+    def __init__(self):
+        self.stats = {k: 0 for k in ['negative_fare', 'zero_dist', 'zero_dur', 'speed', 'total']}
+        self.total = 0
+
+    def validate(self, record: dict):
+        """Returns (is_valid, reason)."""
+        self.total += 1
+
+        # Negative fare
+        fare = record.get('fare_amount', 0)
+        if fare <= 0:
+            self.stats['negative_fare'] += 1
+            return False, f"non_positive_fare:{fare}"
+
+        # Zero distance
+        dist = record.get('trip_distance', 0)
+        if dist <= 0:
+            self.stats['zero_dist'] += 1
+            return False, f"non_positive_distance:{dist}"
+
+        # Duration calculation
+        try:
+            pickup = pd.to_datetime(record['tpep_pickup_datetime'])
+            dropoff = pd.to_datetime(record['tpep_dropoff_datetime'])
+            dur_sec = (dropoff - pickup).total_seconds()
+        except Exception:
+            self.stats['zero_dur'] += 1
+            return False, "datetime_parse_error"
+
+        if dur_sec <= 0:
+            self.stats['zero_dur'] += 1
+            return False, f"non_positive_duration:{dur_sec}"
+
+        # Speed check (physically impossible > 100 mph in NYC)
+        dur_hr = dur_sec / 3600
+        speed = dist / dur_hr if dur_hr > 0 else 0
+        if speed > 100 or speed <= 0:
+            self.stats['speed'] += 1
+            return False, f"impossible_speed:{speed:.1f}_mph"
+
+        return True, "ok"
+
+    def print_stats(self):
+        for k, v in self.stats.items():
+            if v > 0:
+                print(f"  {k}: {v:,} rejected")
 
 
 def validate_filter_rates(input_path: str = 'data/raw/yellow_tripdata_2024-01.parquet'):
     """Measure actual filter rates on Jan 2024 data."""
 
-    print("="*60)
+    print("=" * 60)
     print("VALIDATING SEQUENTIAL FUNNEL FILTER RATES")
-    print("="*60)
+    print("=" * 60)
 
     # Load raw data
     print(f"\n1. Loading raw data: {input_path}")
@@ -53,7 +141,7 @@ def validate_filter_rates(input_path: str = 'data/raw/yellow_tripdata_2024-01.pa
             layer1_clean.append(row.to_dict())
 
         if (idx + 1) % 100000 == 0:
-            print(f"   Processed: {idx+1:,} / {len(df):,}")
+            print(f"   Processed: {idx + 1:,} / {len(df):,}")
 
     schema_validator.print_stats()
     layer1_count = len(layer1_clean)
@@ -76,7 +164,7 @@ def validate_filter_rates(input_path: str = 'data/raw/yellow_tripdata_2024-01.pa
             layer2_clean.append(row.to_dict())
 
         if (idx + 1) % 100000 == 0:
-            print(f"   Processed: {idx+1:,} / {len(df_layer1):,}")
+            print(f"   Processed: {idx + 1:,} / {len(df_layer1):,}")
 
     rule_validator.print_stats()
     layer2_count = len(layer2_clean)
@@ -90,20 +178,20 @@ def validate_filter_rates(input_path: str = 'data/raw/yellow_tripdata_2024-01.pa
     # Combined Results
     combined_block_rate = (initial_count - layer2_count) / initial_count * 100
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("SEQUENTIAL FUNNEL SUMMARY")
-    print("="*60)
+    print("=" * 60)
     print(f"\nInitial (Raw):        {initial_count:,}")
     print(f"After Layer 1:        {layer1_count:,} (-{layer1_block_rate:.2f}%)")
     print(f"After Layer 2:        {layer2_count:,} (-{layer2_block_rate:.2f}%)")
-    print(f"Final Clean:          {layer2_count:,}")
-    print(f"\nCombined Block Rate:  {combined_block_rate:.2f}%")
+    print(f"Final Clean:           {layer2_count:,}")
+    print(f"\nCombined Block Rate:   {combined_block_rate:.2f}%")
     print(f"Clean Data for ML:    {100 - combined_block_rate:.2f}%")
 
     # Validation against expected rates
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("VALIDATION vs EXPECTED RATES")
-    print("="*60)
+    print("=" * 60)
 
     print(f"\nNOTE: Expected rates apply to RAW production data.")
     print(f"Jan 2024 baseline is pre-cleaned, so low violation rate is expected.")
@@ -123,15 +211,15 @@ def validate_filter_rates(input_path: str = 'data/raw/yellow_tripdata_2024-01.pa
     print(f"  Combined: {combined_block_rate:.2f}%")
 
     if combined_block_rate < 1.0:
-        print(f"\n✅ Low violation rate expected - baseline is pre-cleaned")
+        print(f"\n  Low violation rate expected - baseline is pre-cleaned")
     else:
-        print(f"\n⚠️  Higher than expected violation rate")
+        print(f"\n  Higher than expected violation rate")
 
     # Save ultra-clean data for ML training
     output_path = Path('data/clean/jan_2024_clean_baseline.parquet')
     df_clean = pd.DataFrame(layer2_clean)
     df_clean.to_parquet(output_path, index=False)
-    print(f"\n✓ Saved ultra-clean data: {output_path}")
+    print(f"\n  Saved ultra-clean data: {output_path}")
     print(f"  Records: {len(df_clean):,}")
     print(f"  Ready for iForestASD training (Task 2.1)")
 

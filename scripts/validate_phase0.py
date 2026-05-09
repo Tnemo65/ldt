@@ -100,12 +100,12 @@ def validate_phase0():
         with open(scaler_path, 'rb') as f:
             scaler = pickle.load(f)
 
-        if hasattr(scaler, 'mean_') and len(scaler.mean_) == 15:
+        if hasattr(scaler, 'mean_') and len(scaler.mean_) == 21:
             print(f"   Feature dim: {len(scaler.mean_)}D")
             print("   ✅ PASS")
             passed.append("StandardScaler")
         else:
-            print("   ❌ FAIL: Not fitted or wrong dimension")
+            print(f"   ❌ FAIL: Not fitted or wrong dimension (expected 21D, got {len(scaler.mean_)}D)")
             failed.append("StandardScaler")
     else:
         print("   ❌ FAIL: File not found")
