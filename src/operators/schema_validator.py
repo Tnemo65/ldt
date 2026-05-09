@@ -3,10 +3,15 @@ Schema validation for NYC Taxi records.
 Spec: Lines 1570-1590 (Required fields, zone validation)
 """
 
-from pyflink.datastream import FilterFunction
+try:
+    from pyflink.datastream import FilterFunction
+    _HAS_PYFLINK = True
+except ImportError:
+    FilterFunction = object
+    _HAS_PYFLINK = False
 
 
-class SchemaValidator(FilterFunction):
+class SchemaValidator(FilterFunction if _HAS_PYFLINK else object):
     """Validate records against Avro schema constraints.
 
     V1.9 Spec:
@@ -16,7 +21,6 @@ class SchemaValidator(FilterFunction):
     """
 
     def __init__(self):
-        # Required fields per Avro schema
         self.required_fields = [
             'trip_distance',
             'fare_amount',
@@ -26,32 +30,20 @@ class SchemaValidator(FilterFunction):
         ]
 
     def filter(self, value):
-        """Validate record against schema constraints.
-
-        Args:
-            value: Record dict to validate
-
-        Returns:
-            True if valid (pass through), False if invalid (filter out)
-        """
+        """Validate record against schema constraints."""
         if value is None:
             return False
 
-        # Check required fields exist and are not null
         for field in self.required_fields:
             if field not in value or value[field] is None:
                 return False
 
-        # Validate zone IDs (1-263 per NYC TLC)
         try:
             pu_zone = int(value['PULocationID'])
             do_zone = int(value['DOLocationID'])
-
-            if not (1 <= pu_zone <= 263):
-                return False
-            if not (1 <= do_zone <= 263):
+            if not (1 <= pu_zone <= 263) or not (1 <= do_zone <= 263):
                 return False
         except (ValueError, TypeError):
             return False
 
-        return True  # Valid record
+        return True
