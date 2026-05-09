@@ -39,7 +39,7 @@ The scientific contributions (Chapter 3) are implemented in a four-stage process
 
 \begin{figure}[H]
 \centering
-\fbox{\includegraphics[width=0.98\textwidth]{figs/system-architecture.png}}
+\fbox{\includegraphics[width=0.98\textwidth]{figs/system_architecture.png}}
 \caption{CA-DQStream System Architecture. The framework consists of five layers: (1) Data Source Layer with NYC TLC Parquet files ingested via Kafka Producer; (2) Kafka Layer with six topics for raw data, violations, anomaly scores, meta-stream, and model updates; (3) Processing Layer with Flink implementing a four-stage Rendezvous pipeline: Schema Validation, then parallel Business Rules and Isolation Forest branches converging at MetaAggregator, feeding the Intelligent Evolution Controller (ADWIN) for self-monitoring; (4) Data Storage Layer with PostgreSQL for cleaned data, dirty data, and alerts; (5) Monitoring Layer with Prometheus and Grafana for real-time observability.}
 \label{fig:system_architecture}
 \end{figure}
@@ -99,7 +99,7 @@ This removes \textbf{2.58\%} of raw data (79,223 records flagged as physical imp
 Remove statistical outliers using Interquartile Range (IQR) method:
 
 \begin{equation}
-\text{outlier} \iff x < Q_1 - 3 \times \text{IQR} \quad \text{OR} \quad x > Q_3 + 3 \times \text{IQR}
+x \in \text{outlier} \iff x < Q_1 - 3 \times \mathrm{IQR} \quad \text{or} \quad x > Q_3 + 3 \times \mathrm{IQR}
 \end{equation}
 
 Applied to: fare\_amount, trip\_distance, trip\_duration.
@@ -346,8 +346,6 @@ Scale: Approximately 104,815 records out of 3M (3.4\%) are rejected at Business 
 \textbf{Design rationale:}
 
 \begin{longtable}{|m{2.5cm}|m{3.5cm}|m{4cm}|m{3.5cm}|}
-\caption{Business rules design rationale for Layer 2a (Canary).}
-\label{tab:business_rules_design}\\
 \hline
 \textbf{Rule} & \textbf{Anomaly Type} & \textbf{Example} & \textbf{Source} \\ \hline
 fare $\geq$ 0 & Negative fare & fare = -\$15.00 & Data entry error, voided trip \\ \hline
@@ -356,6 +354,8 @@ dropoff $>$ pickup & Impossible timestamp & dropoff = 10:00, pickup = 10:30 & Sy
 speed $<$ 100 mph & GPS/meter error & speed = 150 mph & GPS malfunction \\ \hline
 fare $\leq$ 500 & Unreasonably high fare & fare = \$50,000 & Meter tampering, data error \\ \hline
 cash $\to$ tip=0 & Payment inconsistency & payment\_type=2, tip=\$5.00 & Data entry error \\ \hline
+\caption{Business rules design rationale for Layer 2a (Canary).}
+\label{tab:business_rules_design}
 \end{longtable}
 
 \subsection{Layer 2b: Complex Branch (ML-Based)}
@@ -380,8 +380,6 @@ The Hybrid K-Means iForestASD model (Chapter 3.5) detects these by learning the 
 The full context-aware feature vector (\textbf{21 features}) is computed for each trip:
 
 \begin{longtable}{|M{0.8cm}|m{3.5cm}|m{3.5cm}|m{5cm}|}
-\caption{21-dimensional enhanced feature vector for Hybrid K-Means iForestASD.}
-\label{tab:feature_vector}\\
 \hline
 \textbf{\#} & \textbf{Feature} & \textbf{Type} & \textbf{Formula} \\ \hline
 \multicolumn{4}{|c|}{\textbf{BASE FEATURES (15D)}} \\ \hline
@@ -393,20 +391,22 @@ The full context-aware feature vector (\textbf{21 features}) is computed for eac
 6 & fare\_per\_mile & Computed & fare\_amount / trip\_distance (if dist $>$ 0) \\ \hline
 7 & total\_amount & Raw & --- \\ \hline
 8 & passenger\_count & Raw & --- \\ \hline
-9 & hour\_sin & Temporal & $\sin(2\pi \cdot hour / 24)$ \\ \hline
-10 & hour\_cos & Temporal & $\cos(2\pi \cdot hour / 24)$ \\ \hline
-11 & dow\_sin & Temporal & $\sin(2\pi \cdot dow / 7)$ \\ \hline
-12 & dow\_cos & Temporal & $\cos(2\pi \cdot dow / 7)$ \\ \hline
-13 & pickup\_grid\_x & Spatial & $\lfloor PULocationID / 10 \rfloor$ \\ \hline
-14 & pickup\_grid\_y & Spatial & PULocationID mod 10 \\ \hline
+9 & hour\_sin & Temporal & $\sin(2\pi h / 24)$ \\ \hline
+10 & hour\_cos & Temporal & $\cos(2\pi h / 24)$ \\ \hline
+11 & dow\_sin & Temporal & $\sin(2\pi \cdot \text{dow} / 7)$ \\ \hline
+12 & dow\_cos & Temporal & $\cos(2\pi \cdot \text{dow} / 7)$ \\ \hline
+13 & pickup\_grid\_x & Spatial & $\lfloor \text{PULocationID} / 10 \rfloor$ \\ \hline
+14 & pickup\_grid\_y & Spatial & $\text{PULocationID} \bmod 10$ \\ \hline
 15 & trip\_distance\_log & Transformed & $\log(1 + trip\_distance)$ \\ \hline
 \multicolumn{4}{|c|}{\textbf{RATIO FEATURES (6D) -- VARIANCE REDUCTION 10--100$\times$}} \\ \hline
-16 & fare\_per\_mile\_ratio & Normalized & fare\_per\_mile / baseline\_fpm\_context \\ \hline
-17 & implied\_speed\_ratio & Normalized & speed\_mph / baseline\_speed\_context \\ \hline
-18 & fare\_per\_minute\_ratio & Normalized & fare\_per\_minute / baseline\_fpmm\_context \\ \hline
-19 & tip\_ratio\_normalized & Normalized & (tip / fare) / baseline\_tip\_ratio\_context \\ \hline
-20 & passenger\_density\_ratio & Normalized & (passengers / distance) / baseline\_density \\ \hline
-21 & distance\_log\_ratio & Transformed & log(1 + dist) / baseline\_log\_dist\_context \\ \hline
+16 & fare\_per\_mile\_ratio & Normalized & $\text{fare\_per\_mile} / \mu_{\text{fpm}}^{\text{ctx}}$ \\ \hline
+17 & implied\_speed\_ratio & Normalized & $\text{speed\_mph} / \mu_{\text{speed}}^{\text{ctx}}$ \\ \hline
+18 & fare\_per\_minute\_ratio & Normalized & $\text{fare\_per\_minute} / \mu_{\text{fpmm}}^{\text{ctx}}$ \\ \hline
+19 & tip\_ratio\_normalized & Normalized & $(\text{tip} / \text{fare}) / \mu_{\text{tip}}^{\text{ctx}}$ \\ \hline
+20 & passenger\_density\_ratio & Normalized & $(\text{passengers} / d) / \mu_{\text{density}}$ \\ \hline
+21 & distance\_log\_ratio & Transformed & $\log(1+d) / \mu_{\log d}^{\text{ctx}}$ \\ \hline
+\caption{21-dimensional enhanced feature vector for Hybrid K-Means iForestASD.}
+\label{tab:feature_vector}
 \end{longtable}
 
 \textbf{Rationale for Ratio Features (Features 16--21):}
@@ -581,8 +581,6 @@ The \textbf{Intelligent Evolution Controller (IEC)} is the self-monitoring compo
 \textbf{ADWIN Parameters:}
 
 \begin{longtable}{|m{2.5cm}|M{2cm}|m{2.5cm}|m{5.5cm}|}
-\caption{ADWIN parameters for IEC drift detection.}
-\label{tab:adwin_params}\\
 \hline
 \textbf{Metric} & \textbf{$\delta$} & \textbf{Aggregation} & \textbf{Self-Adaptation Action} \\ \hline
 null\_rate & 0.002 & 1-minute & Recalculate schema validation thresholds \\ \hline
@@ -591,6 +589,8 @@ anomaly\_rate & 0.001 & 1-minute & Retrain Hybrid K-Means iForestASD, broadcast 
 volume & 0.005 & 5-minute & Alert operators \\ \hline
 $\Delta$\_score & 0.001 & 5-minute & Retrain both BR and IF models \\ \hline
 ML\_score\_mean & 0.001 & 5-minute & Trigger model broadcast update \\ \hline
+\caption{ADWIN parameters for IEC drift detection.}
+\label{tab:adwin_params}
 \end{longtable}
 
 A lower $\delta$ (e.g., 0.001) provides higher sensitivity but more false positives. $\delta=0.002$ is recommended for most metrics.
@@ -692,8 +692,6 @@ CA-DQStream implements the Rendezvous pattern on Apache Flink \citep{flinkdocs20
 Flink operators implement the pipeline stages:
 
 \begin{longtable}{|m{4cm}|m{3.5cm}|m{5.5cm}|}
-\caption{Flink operators implementing the CA-DQStream pipeline.}
-\label{tab:flink_operators}\\
 \hline
 \textbf{Operator} & \textbf{Type} & \textbf{Function} \\ \hline
 SchemaOperator & Stateless filter & NULL checks, range validation \\ \hline
@@ -702,6 +700,8 @@ FeatureVectorizerOperator & Stateless map & 15D context-aware feature extraction
 IsolationForestOperator & Stateful (Broadcast) & ML anomaly scoring (Complex branch) \\ \hline
 MetaAggregatorOperator & Stateful (Keyed + Window) & 1-min aggregation by neighborhood \\ \hline
 IECOperator & Stateful (Keyed) & ADWIN-U drift detection \\ \hline
+\caption{Flink operators implementing the CA-DQStream pipeline.}
+\label{tab:flink_operators}
 \end{longtable}
 
 \subsection{Apache Kafka Topics}
@@ -709,8 +709,6 @@ IECOperator & Stateful (Keyed) & ADWIN-U drift detection \\ \hline
 Apache Kafka serves as the distributed event streaming backbone. The CA-DQStream pipeline uses 7 topics with 12 partitions each for parallel processing:
 
 \begin{longtable}{|m{4cm}|m{9cm}|}
-\caption{Apache Kafka topics in the CA-DQStream pipeline.}
-\label{tab:kafka_topics}\\
 \hline
 \textbf{Topic} & \textbf{Purpose} \\ \hline
 taxi-nyc-raw & Raw NYC TLC records ingested from Parquet files \\ \hline
@@ -720,6 +718,8 @@ dq-if-anomalies & Anomalies detected by Hybrid K-Means iForestASD (Complex branc
 dq-anomaly-scores & Raw anomaly scores for all records \\ \hline
 dq-meta-stream & Aggregated quality metrics (6 metrics) for IEC monitoring \\ \hline
 if-model-updates & Serialized model bytes for Broadcast State updates \\ \hline
+\caption{Apache Kafka topics in the CA-DQStream pipeline.}
+\label{tab:kafka_topics}
 \end{longtable}
 
 Kafka retention: 7 days for raw data topics, infinite retention with log compaction for \texttt{if-model-updates} (latest model always available for recovery).
@@ -731,8 +731,6 @@ PostgreSQL serves as the persistent data storage layer. The MetaAggregator (Rend
 The database schema consists of seven core tables:
 
 \begin{longtable}{|m{4cm}|m{9.5cm}|}
-\caption{PostgreSQL database schema for CA-DQStream.}
-\label{tab:postgres_schema}\\
 \hline
 \textbf{Table} & \textbf{Description} \\ \hline
 taxi\_clean & Clean records passing all stages, with IF scores and context features \\ \hline
@@ -742,6 +740,8 @@ if\_anomalies & Isolation Forest detections with anomaly score, priority, and co
 quality\_metrics & Aggregated DQ metrics per 1-minute window with IEC drift flags \\ \hline
 baseline\_stats & Rolling baseline statistics for Hybrid K-Means iForestASD retraining \\ \hline
 ml\_experiment\_results & Model ablation study results (Precision/Recall/F1/FPR) \\ \hline
+\caption{PostgreSQL database schema for CA-DQStream.}
+\label{tab:postgres_schema}
 \end{longtable}
 
 Key indexes: \texttt{idx\_clean\_pickup} on pickup\_datetime for time-range queries, \texttt{idx\_quality\_metrics\_drift} on drift\_detected for alert history.
@@ -755,13 +755,13 @@ CA-DQStream integrates Prometheus for metrics collection and Grafana for visuali
 Prometheus scrapes metrics from three sources:
 
 \begin{longtable}{|m{3.5cm}|m{3cm}|m{6.5cm}|}
-\caption{Prometheus metrics collection sources.}
-\label{tab:prometheus_metrics}\\
 \hline
 \textbf{Source} & \textbf{Job Name} & \textbf{Metrics} \\ \hline
 Flink TaskManagers & flink & records\_processed, processing\_latency, numRecordsOut, consumer\_lag, if\_model\_version \\ \hline
 PostgreSQL & postgres & pg\_statements\_total, pg\_connections, pg\_write\_latency \\ \hline
 Kafka & kafka & kafka\_consumer\_lag\_sum, kafka\_messages\_in\_per\_sec \\ \hline
+\caption{Prometheus metrics collection sources.}
+\label{tab:prometheus_metrics}
 \end{longtable}
 
 The \texttt{if\_model\_version} metric tracks which Hybrid K-Means iForestASD model version is currently deployed (incremented on each Broadcast State update). This enables correlating drift events with model version changes.

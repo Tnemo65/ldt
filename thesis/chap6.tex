@@ -70,8 +70,8 @@ Basic Isolation Forest lacks context awareness---it cannot distinguish "globally
 
 \textbf{Impact:}
 \begin{itemize}
-    \item \textbf{F1=0.87:} Outperforms baselines by 8.8--28.8\%
-    \item \textbf{8.8\% F1 improvement over basic IF:} Proves value of K-Means for context awareness
+    \item \textbf{F1=0.91, FPR=3.8\%:} Meets all production targets (FPR $<$ 5\%, Recall $\geq$ 75\%)
+    \item \textbf{Incremental validation:} Ratio features contribute +58.9\% F1 improvement, K-Means +1.1\%, 4D thresholds +1.1\%
     \item \textbf{79.7\% unique detection:} Multivariate anomalies not caught by business rules
     \item \textbf{METER fast adaptation:} Shift centroids without full retraining (6\% of drift)
 \end{itemize}
@@ -88,12 +88,12 @@ All six research hypotheses were supported by experimental evidence:
 \begin{longtable}{|m{6.5cm}|m{3cm}|m{4cm}|}
 \hline
 \textbf{Hypothesis} & \textbf{Status} & \textbf{Evidence} \\ \hline
-\textbf{H1:} Multi-layer architecture detects $\geq$ 90\% more violations than schema-only & ✓ SUPPORTED & 52\% improvement (473K vs 311K), exceeding 90\% when including ML uniqueness \\ \hline
-\textbf{H2:} Hybrid K-Means iForestASD achieves F1 $\geq$ 0.85 & ✓ SUPPORTED & F1=0.87, outperforming baselines by 8.8--28.8\% \\ \hline
-\textbf{H3:} IEC detects drift within 48h, restores FPR within 7 days using lightweight strategies in 90\% of cases & ✓ SUPPORTED & Detection in 21h (avg), recovery in 5.2 days, 93\% lightweight \\ \hline
-\textbf{H4:} Rendezvous achieves $\geq$ 2$\times$ latency reduction and $\geq$ 1.5$\times$ throughput improvement & ✓ SUPPORTED & 2.9$\times$ latency (843ms $\to$ 294ms), 2.2$\times$ throughput (8.2K $\to$ 18.5K events/sec) \\ \hline
-\textbf{H5:} 4D context-aware thresholds reduce FPR by $\geq$ 5$\times$ while maintaining Recall $\geq$ 0.85 & ✓ SUPPORTED & 9.2$\times$ FPR reduction (38.7\% $\to$ 4.2\%), Recall=0.86 \\ \hline
-\textbf{H6:} CA-DQStream maintains accuracy over 26 months with IEC recalibration & ✓ SUPPORTED & FPR drift 4.2\% $\to$ 4.9\% (16.7\% increase) vs 4.2\% $\to$ 11.2\% (166.7\%) without IEC \\ \hline
+\textbf{H1:} Multi-layer architecture detects $\geq$ 90\% more violations than schema-only & \checkmark SUPPORTED & 52\% improvement (473K vs 311K), exceeding 90\% when including ML uniqueness \\ \hline
+\textbf{H2:} Hybrid K-Means iForestASD achieves F1 $\geq$ 0.85 & \checkmark SUPPORTED & F1=0.91, FPR=3.8\% (below 5\% target), meeting all production requirements \\ \hline
+\textbf{H3:} IEC detects drift within 48h, restores FPR within 7 days using lightweight strategies in 90\% of cases & \checkmark SUPPORTED & Detection in 21h (avg), recovery in 5.2 days, 93\% lightweight \\ \hline
+\textbf{H4:} Rendezvous achieves $\geq$ 2$\times$ latency reduction and $\geq$ 1.5$\times$ throughput improvement & \checkmark SUPPORTED & 2.9$\times$ latency (843ms $\to$ 294ms), 2.2$\times$ throughput (8.2K $\to$ 18.5K events/sec) \\ \hline
+\textbf{H5:} 4D context-aware thresholds reduce FPR by $\geq$ 5$\times$ while maintaining Recall $\geq$ 0.85 & \checkmark SUPPORTED & 9.2$\times$ FPR reduction (38.7\% $\to$ 4.2\%), Recall=0.86 \\ \hline
+\textbf{H6:} CA-DQStream maintains accuracy over 26 months with IEC recalibration & \checkmark SUPPORTED & FPR drift 4.2\% $\to$ 4.9\% (16.7\% increase) vs 4.2\% $\to$ 11.2\% (166.7\%) without IEC \\ \hline
 \end{longtable}
 
 Statistical significance: All primary metrics validated with $p < 0.001$ (t-test or chi-square test, $n=3.08$M for single-month validation, $n=72$M for temporal validation).

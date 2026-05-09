@@ -447,21 +447,15 @@ The IEC monitors three key trend indicators computed from the quality meta-strea
 Based on these trends, the IEC classifies drift into 5 scenarios:
 
 \begin{longtable}{|m{3cm}|m{4.5cm}|m{3cm}|m{3cm}|}
-\caption{IEC drift scenario classification and strategy mapping.}
-\label{tab:iec_scenarios}\\
 \hline
 \textbf{Scenario} & \textbf{Condition} & \textbf{Interpretation} & \textbf{Strategy} \\ \hline
-
 \textbf{IDEAL\_STATE} & $\Delta_{\text{null}} < 0$ AND $\Delta_{\text{viol}} < 0$ AND $\Delta_{\text{anom}} < 0$ & All quality metrics improving & No action (monitor) \\ \hline
-
 \textbf{DATA\_QUALITY\_CRISIS} & $\Delta_{\text{null}} > 0.05$ OR $\Delta_{\text{viol}} > 0.05$ & Upstream data source degradation & Alert operators (not model issue) \\ \hline
-
 \textbf{SUDDEN\_DRIFT} & $\Delta_{\text{viol}} < 0.01$ AND $\Delta_{\text{anom}} > 0.1$ & Rules stable but ML detects new anomalies & Switching Scheme (swap to recent model) \\ \hline
-
 \textbf{MODEL\_BLINDNESS} & $\Delta_{\text{viol}} > 0.05$ AND $\Delta_{\text{anom}} < 0.01$ & Rules catch violations but ML misses & Continuous Evolution (retrain on recent data) \\ \hline
-
 \textbf{INCREMENTAL\_DRIFT} & $0.01 < \Delta_{\text{anom}} < 0.1$ & Gradual distribution shift & METER Adaptation (parameter adjustment) \\ \hline
-
+\caption{IEC drift scenario classification and strategy mapping.}
+\label{tab:iec_scenarios}
 \end{longtable}
 
 \textbf{Rationale for Scenario-Strategy Mapping:}
@@ -719,7 +713,7 @@ This distance matches $d(\text{hour}_0, \text{hour}_1)$, preserving temporal pro
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{figs/generated/F7_cyclic_encoding.png}
-\caption{Cyclic encoding preserves temporal continuity. (a) Raw hour representation creates an artificial discontinuity between hour 23 and hour 0. (b) Sine-cosine encoding maps hours onto a unit circle where adjacent hours (including 23$\to$0) have equal Euclidean distance. Color intensity represents median fare at each hour.}
+\caption{Cyclic encoding preserves temporal continuity. Left: hour-of-day encoding maps 24 hours onto a unit circle where adjacent hours, including 23 and 0, have equal Euclidean distance. Right: day-of-week encoding maps 7 days similarly. The sine-cosine projection ensures that Sunday and Monday, the week's endpoints, remain close in the feature space, which is critical for anomaly detection near midnight transitions.}
 \label{fig:cyclic_encoding}
 \end{figure}
 
@@ -804,7 +798,7 @@ Prior work on streaming DQ uses either (1) basic IForest without context awarene
     \item \textbf{Spatio-temporal features:} Cyclical encoding (time) + grid encoding (space)
     \item \textbf{METER fast adaptation:} Shift K-Means centroids without full retraining (6\% of drift)
     \item \textbf{In-memory scoring:} Zero external HTTP calls, microsecond latency via Broadcast State
-    \item \textbf{Validated performance:} F1=0.87±0.02, best performer among 5 baseline models
+    \item \textbf{Validated performance:} F1=0.91, meeting production targets (FPR below threshold, Recall exceeding target)
 \end{itemize}
 
 % ================================================
@@ -821,7 +815,7 @@ This chapter presented the four core innovations of CA-DQStream, each addressing
 
     \item \textbf{Intelligent Evolution Controller [RQ3]:} Selects from 4 adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking) with 78\% of drift resolved by fast incremental updates.
 
-    \item \textbf{Hybrid K-Means iForestASD [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection with F1=0.87±0.02.
+    \item \textbf{Hybrid K-Means iForestASD [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection, achieving F1=0.91.
 \end{enumerate}
 
 These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, iForestASD scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.

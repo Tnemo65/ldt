@@ -114,7 +114,7 @@ The Data Management Association (DAMA) and the Data Management Body of Knowledge
     \item \textbf{Completeness:} The degree to which data is not missing. Measured by the proportion of NULL or blank values in required fields.
     \item \textbf{Validity:} Data conforms to defined syntax and semantic rules. For example, fare amounts must be non-negative.
     \item \textbf{Accuracy:} The degree to which data reflects the real-world phenomenon it describes. Detected through outlier analysis and cross-validation.
-    \item \textbf{Consistency:} Freedom from contradiction within or across datasets. Cross-feature rules detect inconsistencies (e.g., payment type $=2$ (cash) with non-zero tip).
+    \item \textbf{Consistency:} Freedom from contradiction within or across datasets. Cross-feature consistency rules detect values that contradict each other (e.g., cash payments should have zero tip).
     \item \textbf{Timeliness:} Data is current enough for its intended use. Measured by event-time vs. processing-time lag.
     \item \textbf{Uniqueness:} No duplicate records exist. Detected through key-based deduplication.
 \end{enumerate}
