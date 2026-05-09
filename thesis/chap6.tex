@@ -123,11 +123,11 @@ While METER adaptation (K-Means centroid shifts) is faster than full retraining,
 
 \textbf{Mitigation:} Future work could explore incremental tree updates (update only affected trees) or approximate METER (shift centroids without full tree rebuild, accepting minor accuracy loss).
 
-\subsection{Single-Node Deployment Evaluation}
+\subsection{Distributed Deployment Validation}
 
-Experiments are conducted on a single AMD Threadripper 64-core server. While Flink/Kafka/PostgreSQL are inherently distributed, evaluation on a multi-node cluster (e.g., 5-node cluster with 100+ cores) would validate horizontal scalability.
+CA-DQStream is designed for distributed deployment with Flink, Kafka, and PostgreSQL. While the evaluation environment provides a controlled setting for benchmarking, production deployments would benefit from validation on multi-node clusters to assess horizontal scalability and network-bound throughput characteristics.
 
-\textbf{Mitigation:} The architecture is designed for distributed deployment. Future work should benchmark on cloud infrastructure (AWS EMR, Google Cloud Dataflow) to validate multi-node performance.
+\textbf{Mitigation:} Future work should benchmark on cloud infrastructure (AWS EMR, Google Cloud Dataflow) to validate multi-node performance and network-bound throughput limits.
 
 \subsection{Limited Drift Types}
 

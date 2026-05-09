@@ -28,8 +28,6 @@ This chapter validates the four core innovations (Chapter 3) through experimenta
 % ================================================
 \section{Experiment Environment}
 
-\textbf{Hardware:} AMD Threadripper 64-core CPU, 50GB RAM, PCIe 4.0 NVMe SSD
-
 \textbf{Software Stack:}
 \begin{itemize}
     \item Apache Flink 1.17.2 (PyFlink with Vectorized UDFs)
@@ -39,8 +37,6 @@ This chapter validates the four core innovations (Chapter 3) through experimenta
     \item MLflow 2.9.2 for experiment tracking
     \item Python 3.10.12 with River 0.21.0 (iForestASD, ADWIN)
 \end{itemize}
-
-\textbf{Deployment Mode:} Single-node containerized deployment via Docker Compose with 3 Flink TaskManagers (12 slots total), parallelism = 12.
 
 % ================================================
 % 5.3 RQ1: Multi-Layer Coverage
@@ -450,7 +446,7 @@ Negotiated (RatecodeID=4) & 42.1\% & 4.9\% & 8.6$\times$ & 2.8\% \\ \hline
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.95\textwidth]{figs/generated/F11_fpr_comparison.png}
+\includegraphics[width=0.95\textwidth]{figs/generated/F11_fpr.png}
 \caption{FPR Comparison: Global vs. 4D Context-Aware Thresholds. Global thresholds catastrophically fail on airport trips (51.2\% FPR for JFK, 68.9\% for Newark), while 4D context-aware thresholds reduce FPR to below 6\% across all contexts. The bar chart shows the 4.9$\times$ weighted FPR reduction achieved by context-aware thresholding over global thresholds.}
 \label{fig:exp5a_fpr_comparison}
 \end{figure}
