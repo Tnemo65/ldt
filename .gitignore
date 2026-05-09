@@ -48,7 +48,6 @@ htmlcov/
 # Data & Models
 data/*.parquet
 data/raw/*.parquet
-models/*.pkl
 *.h5
 *.ckpt
 
@@ -76,8 +75,8 @@ savepoints/
 flink-*.log
 
 .claude/
-thesis/
+# thesis/
 
-models/
+# models/
 # kaggle_benchmark_model/
 data/

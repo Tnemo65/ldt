@@ -1,0 +1,306 @@
+\documentclass[a4paper, reqno, oneside]{book}
+\usepackage[left=2.5cm, right=2cm, top=2cm, bottom=2cm]{geometry}
+\usepackage{amsmath,amsxtra,amssymb,latexsym,amscd,amsthm}
+\usepackage{indentfirst}
+\usepackage{color}
+\usepackage{empheq}
+\usepackage[USenglish]{babel}
+% \usepackage[ nocaptions]{vntex}
+\usepackage{amsmath}
+\usepackage[mathscr]{eucal}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{tkz-graph}
+\usetikzlibrary {positioning}
+\usetikzlibrary {fit}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage[chapter]{algorithm}
+\usepackage{algpseudocode}
+\usepackage{pseudocode}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\fancyhf{}
+\fancyfoot[C]{ \thepage}
+\usepackage{ulem}
+\usepackage{pdfpages}
+\usepackage{niceframe}
+\usepackage[square,numbers]{natbib}
+\usepackage{subcaption,booktabs}
+\usepackage{longtable}
+\usepackage{bibentry}
+\usepackage[printonlyused,withpage]{acronym}
+\usepackage[hyphens,spaces,obeyspaces]{url}
+\usepackage[colorlinks,bookmarksopen,bookmarksnumbered,citecolor=blue, colorlinks=true, linkcolor=blue,urlcolor=blue]{hyperref}
+
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}m{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
+\newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
+
+\graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/}}
+
+\begin{document}
+% Title page
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
+\thispagestyle{empty}
+\thisfancypage{\doublebox}{}
+
+\centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
+\centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
+
+\vspace*{2cm}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.3\linewidth]{figs/dhcn.png}
+\end{figure}
+
+\centerline{\bf LE DAC THINH}
+\vspace*{3cm}
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace*{3cm}
+\centerline{Major: Information Systems}
+
+\vfill
+\centerline{\bf Ha Noi - 2025}
+\vspace{8pt}
+\end{titlepage}
+
+\newpage
+\newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
+\thispagestyle{empty}
+\thisfancypage{\doublebox}{}
+\normalsize
+\centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
+\centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
+\vspace*{3cm}
+\large
+\centerline{\bf LE DAC THINH}
+\vspace*{3cm}
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace*{2cm}
+\centerline{Major: Information Systems}
+
+\vspace*{2cm}
+
+\vspace*{2cm}
+\centerline{\bf Supervisor: }
+\centerline{\bf Associate Professor Nguyen Ngoc Hoa }
+
+\vfill
+\centerline{\bf Ha Noi - 2025}
+\vspace{8pt}
+\newgeometry{left=2.5cm, right=2cm, top=2cm, bottom=2cm}
+\hypersetup{pageanchor=true}
+\normalsize
+
+\newgeometry{left=2.5cm, right=2cm, top=2cm, bottom=2cm}
+
+
+\chapter*{ACKNOWLEDGEMENTS}
+\pagenumbering{roman}
+\vspace{20pt}
+
+I would like to express my deepest gratitude to my supervisor, Associate Professor Nguyen Ngoc Hoa, for his invaluable guidance, patience, and continuous support throughout this research. His insightful feedback and encouragement have been instrumental in shaping this thesis.
+
+I am also grateful to the faculty members and colleagues at the University of Engineering and Technology for their stimulating discussions and constructive critiques that have significantly improved this work.
+
+Special thanks to the NYC Taxi and Limousine Commission for providing the publicly available datasets that made this research possible, and to the open-source community for the excellent tools and frameworks used in this work.
+
+Finally, I would like to thank my family and friends for their unwavering support and understanding during the course of this research.
+
+\vspace{2cm}
+\begin{flushright}
+Le Dac Thinh\\
+Ha Noi, May 2025
+\end{flushright}
+
+
+\newpage
+\chapter*{AUTHORSHIP}
+\vspace{20pt}
+
+I hereby declare that this thesis is my own work, carried out under the supervision of Associate Professor Nguyen Ngoc Hoa. All sources of information and data from the literature have been duly acknowledged and referenced.
+
+This thesis has not been submitted for any degree or professional qualification at any other institution.
+
+
+\vspace{2cm}
+\begin{flushright}
+{\it Ha Noi, May 2025}
+
+{\bf Le Dac Thinh}
+\end{flushright}
+
+\newpage
+\centerline{\bf CA-DQStream: A Framework for}
+\centerline{\bf Streaming Data Quality Monitoring}
+\vspace{10pt}
+\centerline{Le Dac Thinh}
+
+\vspace{2cm}
+{\bf Abstract}
+
+\noindent Streaming data pipelines process millions of events per second, making real-time data quality (DQ) monitoring essential. Existing open-source DQ frameworks (Great Expectations, AWS Deequ, Soda Core) operate in batch mode, cannot adapt when data distributions shift over time, and cannot detect multivariate anomalies that require understanding inter-feature relationships.
+
+This thesis presents \textbf{CA-DQStream}, a framework for real-time streaming data quality monitoring built on Apache Kafka and Apache Flink. The proposed method consists of two components:
+
+\begin{enumerate}
+    \item \textbf{Four-stage processing pipeline:} (1) Schema Validation with deterministic NULL checks and Flink KeyedState deduplication; (2) Business Rules with six deterministic validity checks; (3) Isolation Forest anomaly detection for multivariate outliers that rules cannot express; and (4) ADWIN drift detection on quality meta-streams for self-monitoring.
+    \item \textbf{Monitoring and storage layer:} PostgreSQL persists cleaned data, dirty data, and alerts; Prometheus collects metrics from all pipeline components; Grafana provides real-time dashboards for operators to visualize violation rates, anomaly scores, and drift alerts.
+\end{enumerate}
+
+Together, the pipeline processes incoming records in real time while the monitoring layer provides full observability into pipeline health, data quality metrics, and drift events.
+
+\textbf{Case Study.} The framework is evaluated on the NYC Yellow Taxi dataset (3,076,903 records, July 2024), where we identify and solve specific data quality problems: completeness violations (9.1\% NULL passenger\_count/RatecodeID), validity violations (negative fares, extreme speed, impossible timestamps), multivariate anomalies (meter tampering, short-trip fraud, traffic manipulation), and concept drift (NULL rate increasing from 4.3\% to 5.9\% ). The four-stage pipeline achieves FPR below 5\% compared to 25--50\% for fixed-threshold approaches. ADWIN detects gradual drift within one monitoring window, triggering automatic threshold recalculation and Isolation Forest retraining. End-to-end throughput reaches 542,000 events/sec.
+
+\vspace{2cm}
+\noindent {\bf Keywords:} Data Quality, Streaming Data, Drift Detection, Anomaly Detection, Machine Learning, ADWIN, Isolation Forest, Apache Flink, Apache Kafka.
+
+\newpage
+\tableofcontents
+
+\newpage
+\listoffigures
+
+\newpage
+\listoftables
+
+
+\chapter*{List of abbreviations}
+\vspace{20pt}
+
+\begin{longtable}{|m{2.5cm}|m{10cm}|}
+\hline
+\textbf{Abbreviation} & \textbf{Full Form} \\ \hline
+ADWIN & Adaptive Windowing (drift detection algorithm) \\ \hline
+API & Application Programming Interface \\ \hline
+CDC & Change Data Capture \\ \hline
+DAMA & Data Management Association \\ \hline
+DMBOK & Data Management Body of Knowledge \\ \hline
+DQ & Data Quality \\ \hline
+FPR & False Positive Rate \\ \hline
+IF & Isolation Forest (anomaly detection) \\ \hline
+IOF & Isolation Forest \\ \hline
+JSON & JavaScript Object Notation \\ \hline
+KG & Knowledge Graph \\ \hline
+LOF & Local Outlier Factor (anomaly detection) \\ \hline
+ML & Machine Learning \\ \hline
+MTTD & Mean Time To Detect (drift) \\ \hline
+NYC & New York City \\ \hline
+OC-SVM & One-Class Support Vector Machine \\ \hline
+RQ & Research Question \\ \hline
+TLC & Taxi and Limousine Commission (NYC) \\ \hline
+UUID & Universal Unique Identifier \\ \hline
+\end{longtable}
+
+
+\mainmatter
+
+\chapter{INTRODUCTION}
+\pagestyle{fancy}
+\pagenumbering{arabic}
+
+\section{Research Motivation}
+In modern data-driven organizations, streaming data pipelines process millions of events per second. Ensuring data quality in these pipelines is critical for downstream analytics, machine learning models, and business decisions. Unlike batch data processing where quality checks can be applied retrospectively, streaming environments demand real-time validation with minimal latency overhead.
+
+The NYC Yellow Taxi dataset from the NYC Taxi and Limousine Commission (TLC) serves as our case study. Analyzing 3,076,903 records reveals five categories of data quality problems: (1) completeness violations (9.1\% NULL passenger\_count/RatecodeID), (2) validity violations (negative fares, zero distance, extreme speed), (3) multivariate anomalies (combinations of features that individually pass rules but are collectively suspicious), (4) uniqueness violations (duplicate records), and (5) concept drift (NULL rate increasing from 4.3\% to 5.9\% ). Existing DQ frameworks cannot solve these problems in streaming settings because they operate in batch mode, use fixed thresholds, and lack ML-based anomaly detection and self-monitoring.
+
+This motivates the CA-DQStream framework: a four-stage streaming pipeline that addresses each problem category with specific techniques, and monitors its own performance to detect when baselines become stale.
+
+\section{Gaps in Current Research}
+Despite decades of research in data quality management, three critical gaps remain:
+
+\textbf{Gap 1: No ML-Based Anomaly Detection for Streaming DQ.} While Isolation Forest is production-proven at companies like Uber and Grab, no open-source framework integrates ML-based anomaly detection for streaming DQ. The multivariate anomalies that rules cannot express remain undetected.
+
+\textbf{Gap 2: No Self-Monitoring of the DQ System.} No framework monitors its own output as a quality meta-stream to detect when baselines have become stale. Gradual drift in NULL rates (observed increasing from 2024 to 2026 in the NYC Taxi dataset) goes undetected without meta-level monitoring.
+
+\textbf{Gap 3: Batch-Oriented DQ Frameworks.} Existing frameworks (Great Expectations, AWS Deequ, Soda Core) operate in batch mode and cannot process streaming data in real time. Stream DaQ (2025) provides streaming support but only supports basic deterministic rules
+
+\section{Expected System}
+This thesis introduces \textbf{CA-DQStream} (Context-Aware Data Quality for Streaming), a framework organized into five layers:
+
+\begin{enumerate}
+    \item \textbf{Data Source Layer} --- NYC TLC Parquet files ingested via Kafka Producer.
+    \item \textbf{Kafka (Producer, Consumer) Layer} --- Streaming backbone with six topics: taxi-nyc-raw (input), dq-schema-violations, dq-hard-rule-violations, dq-anomaly-scores, dq-meta-stream, and if-model-updates.
+    \item \textbf{Processing Layer with Flink} --- A four-stage Rendezvous pipeline: Schema Validation $\rightarrow$ [Business Rules $\parallel$ Isolation Forest] $\rightarrow$ MetaAggregator $\rightarrow$ IEC (ADWIN Drift Detection).
+    \item \textbf{Data Storage Layer (PostgreSQL)} --- Persistent storage for cleaned data, dirty data, and alerts.
+    \item \textbf{Monitoring Layer (Prometheus + Grafana)} --- Real-time observability into pipeline health, violation rates, anomaly scores, and drift alerts.
+\end{enumerate}
+
+The Monitoring Layer complements the processing pipeline by providing full observability: Prometheus scrapes metrics from Flink TaskManagers, PostgreSQL, and Kafka; Grafana dashboards display DQ Overview (violation rates per layer), ML Comparison (anomaly scores by priority), System Performance (throughput, latency), and Drift Alerts (ADWIN events).
+
+\section{Objectives and Contents}
+The primary objectives of this thesis are:
+
+\begin{enumerate}
+    \item Design and implement a five-layer architecture for streaming DQ: Data Source, Kafka, Processing with Flink (Schema Validation, Business Rules, Isolation Forest Anomaly Detection, ADWIN Drift Detection), Data Storage, and Monitoring.
+    \item Develop a four-stage processing pipeline: Schema Validation, Business Rules, Isolation Forest anomaly detection, and ADWIN drift detection.
+    \item Develop a self-monitoring mechanism using ADWIN drift detection on quality meta-streams (MetaAggregator $\rightarrow$ dq-meta-stream $\rightarrow$ ADWIN).
+    \item Evaluate CA-DQStream on the NYC Taxi dataset demonstrating FPR below 5\% and effective drift detection.
+    \item Implement MLOps pipeline with Isolation Forest model training, MLflow tracking, and in-memory deployment via Flink Broadcast State.
+\end{enumerate}
+
+The thesis is organized as follows: Chapter 1 covers background and related works; Chapter 2 presents the problem definition and research questions; Chapter 3 details the CA-DQStream framework design; Chapter 4 presents experiments and evaluation results; and the final chapter concludes with contributions and future directions.
+
+\section{Key Contributions}
+The key contributions of this thesis are:
+
+\begin{enumerate}
+    \item \textbf{Five-Layer Architecture:} Data Source Layer (Kafka Producer), Kafka Layer (input + violation/meta topics), Processing Layer with Flink (Schema Validation, Business Rules, Isolation Forest, ADWIN), Data Storage Layer (PostgreSQL: cleaned/dirty/alerts), and Monitoring Layer (Prometheus + Grafana: dashboards for DQ overview, ML comparison, system performance, and drift alerts).
+
+    \item \textbf{Four-Stage Processing Pipeline:} Schema Validation (deterministic NULL checks and KeyedState deduplication with TTL), Business Rules (fare>=0, speed<100 mph, payment consistency), Isolation Forest anomaly detection (multivariate scoring on 8 features), and ADWIN drift detection (MetaAggregator $\rightarrow$ dq-meta-stream $\rightarrow$ ADWIN with 3-tier self-adaptation).
+
+    \item \textbf{Isolation Forest for Streaming DQ:} First integration of Isolation Forest ML anomaly detection into a streaming DQ framework, targeting multivariate anomalies that single-feature rules cannot express (meter tampering, short-trip fraud, traffic manipulation, payment inflation).
+
+    \item \textbf{Monitoring and Observability:} Full-stack monitoring with Prometheus metrics collection from all pipeline components (Flink, Kafka, PostgreSQL), Grafana dashboards for real-time DQ overview (violation rates per layer), ML comparison (anomaly scores by priority), system performance (throughput, latency), and drift event alerts.
+
+    \item \textbf{Comprehensive Evaluation:} FPR below 5\% (vs 25--50\% for fixed thresholds), demonstrated on 3M+ NYC Taxi records across 26 months of data. End-to-end throughput of 542,000 events/sec validated on a 3-node Docker Compose stack.
+\end{enumerate}
+
+\section{Thesis Organization}
+The remainder of this thesis is organized as follows:
+\begin{itemize}
+    \item \textbf{Chapter 1: Background and Related Works} --- Reviews streaming data processing (Kafka, Flink), MLOps, DAMA-DMBOK DQ dimensions, and related works on context-aware DQ, Rendezvous/fork-join patterns, and drift detection.
+    \item \textbf{Chapter 2: Problem Definition and Research Questions} --- Presents empirical analysis of the NYC Taxi dataset as a case study, research gaps, five research questions (RQ1-RQ5), and six hypotheses (H1-H6).
+    \item \textbf{Chapter 3: Core Innovations} --- Details the four scientific contributions: (1) 4D Context-Aware Thresholding, (2) Rendezvous Pipeline Architecture, (3) Intelligent Evolution Controller with 4 Adaptation Strategies, and (4) Hybrid K-Means iForestASD Model.
+    \item \textbf{Chapter 4: System Architecture \& Implementation} --- Describes infrastructure (Kafka, Flink, PostgreSQL, Grafana), four-layer processing pipeline, optimization techniques (PyFlink Vectorized UDFs, PgBouncer), and MLOps integration.
+    \item \textbf{Chapter 5: Experiments \& Evaluation} --- Presents 11 experiments organized by research question: RQ1 (multi-layer coverage), RQ2 (Hybrid model vs baselines), RQ3 (IEC drift adaptation), RQ4 (Rendezvous performance), RQ5 (4D thresholds vs global), plus additional validation experiments.
+    \item \textbf{Chapter 6: Conclusion \& Future Work} --- Summarizes contributions, validates hypotheses, discusses limitations, and outlines future research directions (multi-domain validation, deep learning integration, federated learning, causal drift detection).
+\end{itemize}
+
+\input chap1
+
+\input chap2
+
+\input chap3
+
+\input chap4
+
+\input chap5
+
+\input chap6
+
+% OLD INLINE CONCLUSION CHAPTER REMOVED - NOW IN chap6.tex
+% The inline chapter has been replaced with the new 6-chapter structure:
+% - chap3.tex: Core Innovations (4D Thresholds, Rendezvous, IEC, Hybrid Model)
+% - chap4.tex: System Architecture & Implementation
+% - chap5.tex: Experiments organized by RQ
+% - chap6.tex: Conclusion & Future Work
+
+% All chapter content is now in separate files. The old inline CONCLUSION content has been removed.
+
+\newpage
+\addcontentsline{toc}{chapter}{REFERENCES}
+\bibliographystyle{plainnat}
+\bibliography{citation}
+
+\end{document}
