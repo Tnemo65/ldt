@@ -13,6 +13,8 @@ services:
       # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/zookeeper-data:/var/lib/zookeeper/data
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - cadqstream-net
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -32,6 +34,8 @@ services:
     volumes:
       # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/kafka-data:/var/lib/kafka/data
+    networks:
+      - cadqstream-net
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.5.0
@@ -43,6 +47,8 @@ services:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    networks:
+      - cadqstream-net
 
   postgres:
     image: postgres:15
@@ -55,6 +61,8 @@ services:
     volumes:
       # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/postgres-data:/var/lib/postgresql/data
+    networks:
+      - cadqstream-net
 
   pgbouncer:
     image: edoburu/pgbouncer:latest
@@ -69,6 +77,8 @@ services:
       DEFAULT_POOL_SIZE: 25
       MIN_POOL_SIZE: 10
       RESERVE_POOL_SIZE: 5
+    networks:
+      - cadqstream-net
 
   minio:
     image: minio/minio:latest
@@ -82,5 +92,46 @@ services:
     volumes:
       # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/minio-data:/data
+    networks:
+      - cadqstream-net
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - cadqstream-net
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - cadqstream-net
 
 # No named volumes needed - using direct NFS mounts
+
+volumes:
+  prometheus-data:
+  grafana-data:
+
+networks:
+  cadqstream-net:
+    driver: bridge
