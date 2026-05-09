@@ -1,0 +1,2 @@
+# Flink Python UDF Configuration
+python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh

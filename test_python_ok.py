@@ -1,0 +1,2 @@
+import pyflink
+print("OK")

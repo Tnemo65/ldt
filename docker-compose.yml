@@ -1,23 +1,33 @@
-# CA-DQStream Docker Compose - NFS Volumes (Bypass RAID)
-# Uses /nfs mount points to avoid local RAID I/O bottleneck
+# CA-DQStream Docker Compose - Unified Network
+# All services on single cadqstream-net bridge network
+
+networks:
+  cadqstream-net:
+    name: cadqstream-net
+    driver: bridge
 
 services:
+  # ── Kafka Infrastructure ─────────────────────────────────────────────────
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
+    container_name: ldt-zookeeper
+    hostname: zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
       - "2181:2181"
     volumes:
-      # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/zookeeper-data:/var/lib/zookeeper/data
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/zookeeper-logs:/var/lib/zookeeper/log
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
+    container_name: ldt-kafka
+    hostname: kafka
     depends_on:
       - zookeeper
     ports:
@@ -25,33 +35,72 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_LOG_RETENTION_HOURS: 168
       KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     volumes:
-      # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/kafka-data:/var/lib/kafka/data
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.5.0
+    container_name: ldt-schema-registry
+    hostname: schema-registry
     depends_on:
       - kafka
     ports:
-      - "8081:8081"
+      - "8082:8081"
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ldt-kafka-ui
+    hostname: kafka-ui
+    depends_on:
+      - kafka
+      - schema-registry
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.6.0
+    container_name: ldt-kafka-exporter
+    hostname: kafka-exporter
+    command: --kafka.server=kafka:9092 --web.listen-address=:9308
+    ports:
+      - "9308:9308"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  # ── Database ──────────────────────────────────────────────────────────────
   postgres:
     image: postgres:15
+    container_name: ldt-postgres
+    hostname: postgres
     environment:
       POSTGRES_USER: cadqstream
       POSTGRES_PASSWORD: cadqstream123
@@ -59,17 +108,19 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/postgres-data:/var/lib/postgresql/data
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
   pgbouncer:
     image: edoburu/pgbouncer:latest
+    container_name: ldt-pgbouncer
+    hostname: pgbouncer
     depends_on:
       - postgres
     ports:
-      - "6432:6432"
+      - "6432:5432"
     environment:
       DATABASE_URL: postgres://cadqstream:cadqstream123@postgres:5432/dq_pipeline
       POOL_MODE: transaction
@@ -77,11 +128,18 @@ services:
       DEFAULT_POOL_SIZE: 25
       MIN_POOL_SIZE: 10
       RESERVE_POOL_SIZE: 5
+      LISTEN_ADDR: 0.0.0.0
+      LISTEN_PORT: 5432
+      AUTH_TYPE: md5
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
+  # ── Storage ───────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
+    container_name: ldt-minio
+    hostname: minio
     command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
@@ -90,17 +148,71 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
     volumes:
-      # ✅ NFS mount - bypass local RAID
       - /nfs/interns/dacthinh/docker-volumes/cadqstream/minio-data:/data
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
+  # ── Streaming (Flink) ────────────────────────────────────────────────────
+  flink-jobmanager:
+    image: ldt-flink:1.17.1-py
+    container_name: ldt-flink-jobmanager
+    hostname: flink-jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      JOB_MANAGER_RPC_PORT: 6123
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
+      FLINK_PROPERTIES: |
+        state.backend: filesystem
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        rest.port: 8081
+    volumes:
+      - flink-jobmanager-log:/opt/flink/log
+      - flink-jobmanager-data:/tmp
+      - ./flink_job_submit.py:/opt/flink/e2e/flink_job_submit.py:ro
+      - ./test_producer_continuous.py:/opt/flink/e2e/test_producer_continuous.py:ro
+      - ./src:/opt/flink/e2e/src:ro
+      - ./scripts:/opt/flink/e2e/scripts:ro
+      - ./models:/opt/flink/e2e/models:ro
+      - ./data:/opt/flink/e2e/data:ro
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    command: jobmanager
+
+  flink-taskmanager:
+    image: ldt-flink:1.17.1-py
+    hostname: flink-taskmanager
+    depends_on:
+      - flink-jobmanager
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      JOB_MANAGER_RPC_PORT: 6123
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
+      FLINK_PROPERTIES: |
+        state.backend: filesystem
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+    volumes:
+      - flink-taskmanager-log:/opt/flink/log
+      - flink-taskmanager-data:/tmp
+    networks:
+      - cadqstream-net
+    deploy:
+      replicas: 3
+    restart: unless-stopped
+    command: taskmanager
+
+  # ── Observability ────────────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.47.0
+    container_name: ldt-prometheus
+    hostname: prometheus
     ports:
       - "9090:9090"
     volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -109,9 +221,12 @@ services:
       - '--web.enable-lifecycle'
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:10.1.0
+    container_name: ldt-grafana
+    hostname: grafana
     ports:
       - "3000:3000"
     environment:
@@ -120,18 +235,66 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
     networks:
       - cadqstream-net
+    restart: unless-stopped
 
-# No named volumes needed - using direct NFS mounts
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: ldt-postgres-exporter
+    hostname: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: postgresql://cadqstream:cadqstream123@postgres:5432/dq_pipeline?sslmode=disable
+    ports:
+      - "9187:9187"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
 
+  node-exporter:
+    image: prom/node-exporter:v1.6.1
+    container_name: ldt-node-exporter
+    hostname: node-exporter
+    ports:
+      - "9100:9100"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  # ── ML Platform ──────────────────────────────────────────────────────────
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: ldt-mlflow
+    hostname: mlflow
+    ports:
+      - "5000:5000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - mlflow-data:/mlflow
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --default-artifact-root s3://mlflow-artifacts/
+      --workers 2
+
+# ── Named Volumes ──────────────────────────────────────────────────────────
 volumes:
   prometheus-data:
   grafana-data:
-
-networks:
-  cadqstream-net:
-    driver: bridge
+  mlflow-data:
+  flink-jobmanager-log:
+  flink-jobmanager-data:
+  flink-taskmanager-log:
+  flink-taskmanager-data:
