@@ -1,0 +1,8 @@
+FROM python:3.10-slim
+
+RUN pip install --no-cache-dir kafka-python==2.0.2
+
+WORKDIR /app
+COPY fast_producer.py /app/fast_producer.py
+
+CMD ["python3", "/app/fast_producer.py", "100000", "kafka:9092", "taxi-nyc-raw"]

@@ -139,31 +139,41 @@ class MetaAggregateFunction(AggregateFunction):
         """Add record to accumulator.
 
         Args:
-            value: Record with voting decision
+            value: Record with voting decision (may be tuple from keyed stream)
             accumulator: Current accumulator state
 
         Returns:
             Updated accumulator
         """
+        # value is a tuple (neighborhood, record) from ExtractNeighborhoodFunction
+        if isinstance(value, tuple):
+            record = value[1]
+        else:
+            record = value
+
+        if record is None:
+            return accumulator
+
         accumulator['volume'] += 1
 
         # Count nulls (simplified check)
-        if any(value.get(field) is None for field in ['fare_amount', 'trip_distance', 'passenger_count']):
+        if isinstance(record, dict) and any(record.get(field) is None for field in ['fare_amount', 'trip_distance', 'passenger_count']):
             accumulator['null_count'] += 1
 
         # Count Canary violations
-        if value.get('has_violation', False):
+        if isinstance(record, dict) and record.get('has_violation', False):
             accumulator['violation_count'] += 1
 
         # Count final anomalies
-        if value.get('final_decision') == 'ANOMALY':
+        if isinstance(record, dict) and record.get('final_decision') == 'ANOMALY':
             accumulator['anomaly_count'] += 1
 
         # Accumulate ML scores
-        anomaly_score = value.get('anomaly_score')
-        if anomaly_score is not None:
-            accumulator['score_sum'] += anomaly_score
-            accumulator['score_count'] += 1
+        if isinstance(record, dict):
+            anomaly_score = record.get('anomaly_score')
+            if anomaly_score is not None:
+                accumulator['score_sum'] += anomaly_score
+                accumulator['score_count'] += 1
 
         return accumulator
 
@@ -174,7 +184,7 @@ class MetaAggregateFunction(AggregateFunction):
             accumulator: Final accumulator state
 
         Returns:
-            Dict with 6 meta-metrics (delta_score computed later)
+            Dict with 6 meta-metrics
         """
         volume = accumulator['volume']
 
@@ -195,7 +205,7 @@ class MetaAggregateFunction(AggregateFunction):
             'violation_rate': violation_rate,
             'anomaly_rate': anomaly_rate,
             'avg_anomaly_score': avg_score,
-            'delta_score': 0.0  # Will be computed by ProcessWindowFunction
+            'delta_score': 0.0
         }
 
     def merge(self, acc1, acc2):

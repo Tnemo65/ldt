@@ -14,7 +14,14 @@ echo "Running all initialization scripts in order..."
 # Kafka init
 echo "[kafka-init] Creating topics..."
 docker compose -f docker-compose.yml up -d kafka-init
-docker wait ldt-kafka-init || true
+for i in $(seq 1 30); do
+    STATUS=$(docker inspect ldt-kafka-init --format '{{.State.Status}}' 2>/dev/null || echo "notfound")
+    if [ "$STATUS" = "exited" ]; then
+        break
+    fi
+    echo "  kafka-init status: $STATUS (waiting...)"
+    sleep 2
+done
 docker logs ldt-kafka-init | tail -10
 
 # PostgreSQL init (handled by docker-compose volume mount)
@@ -25,7 +32,14 @@ sleep 5
 # MinIO init
 echo "[minio-init] Creating buckets..."
 docker compose -f docker-compose.yml up -d minio-init
-docker wait ldt-minio-init || true
+for i in $(seq 1 30); do
+    STATUS=$(docker inspect ldt-minio-init --format '{{.State.Status}}' 2>/dev/null || echo "notfound")
+    if [ "$STATUS" = "exited" ]; then
+        break
+    fi
+    echo "  minio-init status: $STATUS (waiting...)"
+    sleep 2
+done
 docker logs ldt-minio-init | tail -10
 
 # Flink init

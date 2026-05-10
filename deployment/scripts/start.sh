@@ -49,6 +49,8 @@ docker rm -f $(docker ps -aq) 2>/dev/null || true
 log_info "Removing old networks..."
 docker network rm cadqstream-net 2>/dev/null || true
 docker network rm ldt_cadqstream-net 2>/dev/null || true
+docker network rm deployment_cadqstream-net 2>/dev/null || true
+docker network rm deployment-cadqstream-net 2>/dev/null || true
 docker network prune -f 2>/dev/null || true
 
 log_info "Pruning Docker system (images, volumes, build cache)..."
@@ -143,10 +145,7 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 3: Create Network
 # ═══════════════════════════════════════════════════════════════════════════
-log_step "STEP 3: Creating Docker network"
-docker network create --driver bridge cadqstream-net 2>/dev/null && \
-    log_ok "Network 'cadqstream-net' created" || \
-    log_ok "Network 'cadqstream-net' already exists"
+log_step "STEP 3: Docker network managed by docker-compose (auto-created on up)"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 4: Start Infrastructure Services

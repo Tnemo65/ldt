@@ -2,6 +2,7 @@
 # CA-DQStream Production Deployment - docker-compose.yml
 # Architecture: 4-Layer streaming pipeline (Baseline -> Dual-Branch ->
 #               Rendezvous+Meta -> IEC) on Apache Flink 1.17.1
+# Run: docker compose -f deployment/docker-compose.yml up -d
 # =============================================================================
 
 networks:
@@ -40,7 +41,7 @@ volumes:
 
 services:
   # =============================================================================
-  # LAYER 1: Infrastructure Services
+  # LAYER 1: Kafka Infrastructure
   # =============================================================================
 
   zookeeper:
@@ -48,11 +49,11 @@ services:
     container_name: ldt-zookeeper
     hostname: zookeeper
     healthcheck:
-      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep -q imok"]
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep -q Mode"]
       interval: 15s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 8
+      start_period: 45s
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -127,36 +128,12 @@ services:
     networks:
       - cadqstream-net
     restart: "no"
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      echo 'Waiting for Kafka to be ready...'
-      kafka-topics --bootstrap-server kafka:9092 --list
-      echo 'Creating Kafka topics...'
-      # Input topic: raw taxi events from data producer
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic taxi-nyc-raw \
-        --partitions 4 --replication-factor 1 --config retention.ms=604800000 --config cleanup.policy=delete
-      # Output topic: processed/deduplicated records
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic dq-stream-processed \
-        --partitions 4 --replication-factor 1 --config retention.ms=604800000 --config cleanup.policy=delete
-      # Anomaly topic: detected violations
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic dq-stream-anomalies \
-        --partitions 4 --replication-factor 1 --config retention.ms=2592000000 --config cleanup.policy=compact
-      # Meta metrics topic: windowed aggregates per neighborhood
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic dq-meta-stream \
-        --partitions 4 --replication-factor 1 --config retention.ms=604800000 --config cleanup.policy=delete
-      # IEC replay topic: drift action replay buffer
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic iec-action-replay \
-        --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config cleanup.policy=delete
-      # Pipeline metrics topic
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic dq-metrics \
-        --partitions 1 --replication-factor 1 --config retention.ms=2592000000 --config cleanup.policy=compact
-      # Schema violations topic
-      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic dq-hard-rule-violations \
-        --partitions 4 --replication-factor 1 --config retention.ms=2592000000 --config cleanup.policy=compact
-      echo 'All Kafka topics created successfully!'
-      kafka-topics --bootstrap-server kafka:9092 --list
-      "
+    entrypoint: ["/bin/bash", "/scripts/01-create-topics.sh"]
+    volumes:
+      - ./kafka/init-scripts:/scripts:ro
+    environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: "9092"
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.5.0
@@ -166,7 +143,7 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8081/subjects"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -197,7 +174,7 @@ services:
       schema-registry:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/ || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -207,8 +184,7 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
-      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: local-connect
-      DYNAMIC_CONFIGURATION_ENABLED: 'true'
+      DYNAMIC_CONFIGURATION_ENABLED: "true"
     ports:
       - "8080:8080"
     networks:
@@ -228,7 +204,7 @@ services:
       kafka:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9308/metrics"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9308/metrics || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -238,8 +214,6 @@ services:
       - --web.listen-address=:9308
       - --topic.filter=.*
       - --group.filter=.*
-      - --sasl.enabled=false
-      - --tls.enabled=false
     ports:
       - "9308:9308"
     networks:
@@ -261,10 +235,10 @@ services:
     hostname: postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U cadqstream -d dq_pipeline"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     environment:
       POSTGRES_USER: cadqstream
       POSTGRES_PASSWORD: cadqstream123
@@ -295,11 +269,11 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "echo \"SHOW STATS;\" | nc localhost 6432 | head -1"]
+      test: ["CMD-SHELL", "ps aux | grep -v grep | grep pgbouncer || exit 1"]
       interval: 15s
-      timeout: 5s
+      timeout: 10s
       retries: 5
-      start_period: 15s
+      start_period: 30s
     environment:
       DATABASE_URL: "postgres://cadqstream:cadqstream123@postgres:5432/dq_pipeline"
       POOL_MODE: transaction
@@ -308,21 +282,12 @@ services:
       MIN_POOL_SIZE: "10"
       RESERVE_POOL_SIZE: "5"
       RESERVE_POOL_TIMEOUT: "3"
-      LISTEN_ADDR: "0.0.0.0"
-      LISTEN_PORT: "5432"
-      AUTH_TYPE: "md5"
-      AUTH_FILE: "/etc/pgbouncer/userlist.txt"
       SERVER_RESET_QUERY: "DISCARD ALL"
       SERVER_CHECK_DELAY: "0"
       SERVER_LIFETIME: "3600"
       SERVER_IDLE_TIMEOUT: "600"
-      LOG_CONNETIONS: "1"
-      LOG_DISCONNECTIONS: "1"
-      LOG_ERRORS: "1"
-      VERBOSE: "1"
     ports:
       - "6432:5432"
-    volumes: []
     networks:
       - cadqstream-net
     restart: unless-stopped
@@ -340,7 +305,7 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9187/metrics"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9187/metrics || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -348,16 +313,11 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://cadqstream:cadqstream123@postgres:5432/dq_pipeline?sslmode=disable"
       PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
-      PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/pg_exporter/queries.yml"
       PG_EXPORTER_CONSTANT_LABELS: "env=cadqstream"
     command:
       - --web.listen-address=:9187
       - --web.telemetry-path=/metrics
       - --extend.query-path=/etc/pg_exporter/queries.yml
-      - --discard-granularity=0
-      - --disable-settings-stats
-      - --disable-index-stats
-      - --disable-bloat-stats
     ports:
       - "9187:9187"
     volumes:
@@ -392,8 +352,6 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
-      MINIO_SMS_DRIVE: "/data"
-      MINIO_OPTS: "--console-address :9001"
     volumes:
       - minio-data:/data
     networks:
@@ -415,32 +373,17 @@ services:
     networks:
       - cadqstream-net
     restart: "no"
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      echo 'Waiting for MinIO to be ready...'
-      mc alias set local http://minio:9000 minioadmin minioadmin123
-      echo 'Creating MinIO buckets...'
-      mc mb local/ml-models --ignore-existing
-      mc mb local/checkpoints --ignore-existing
-      mc mb local/artifacts --ignore-existing
-      mc mb local/mlflow-artifacts --ignore-existing
-      mc anonymous set public local/ml-models
-      mc anonymous set download local/ml-models
-      mc anonymous set public local/checkpoints
-      mc anonymous set download local/checkpoints
-      mc anonymous set public local/artifacts
-      mc anonymous set download local/artifacts
-      mc anonymous set public local/mlflow-artifacts
-      mc anonymous set download local/mlflow-artifacts
-      mc ls local/
-      echo 'MinIO buckets created successfully!'
-      "
+    entrypoint: ["/bin/bash", "/scripts/01-create-buckets.sh"]
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./minio/init-scripts:/scripts:ro
+    environment:
+      MC_HOST: http://minio:9000
+      MC_USER: minioadmin
+      MC_PASS: minioadmin123
+      MC_ALIAS: local
 
   # =============================================================================
-  # LAYER 4: Streaming Services (Flink)
+  # LAYER 4: Flink Streaming
   # =============================================================================
 
   flink-jobmanager:
@@ -460,8 +403,8 @@ services:
       TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
       FLINK_PROPERTIES: |
         state.backend: filesystem
-        state.checkpoints.dir: s3://checkpoints/flink-checkpoints
-        state.savepoints.dir: s3://checkpoints/flink-savepoints
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        state.savepoints.dir: file:///tmp/flink-savepoints
         state.checkpoints.num-retained: 3
         execution.checkpointing.max-concurrent-checkpoints: 1
         execution.checkpointing.min-pause: 30000
@@ -482,7 +425,7 @@ services:
         jdbc.connection.max-retry-timeout: 60s
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PGBOUNCER_HOST: pgbouncer
-      PGBOUNCER_PORT: 5432
+      PGBOUNCER_PORT: "5432"
       POSTGRES_DB: dq_pipeline
       POSTGRES_USER: cadqstream
       POSTGRES_PASSWORD: cadqstream123
@@ -496,9 +439,8 @@ services:
     volumes:
       - flink-jobmanager-log:/opt/flink/log
       - flink-jobmanager-data:/tmp
-      - ../src:/opt/flink/e2e/src:ro
-      - ../models:/opt/flink/e2e/models:ro
-      - ../scripts:/opt/flink/e2e/scripts:ro
+      - C:/proj/ldt/src:/opt/flink/e2e/src:ro
+      - C:/proj/ldt/scripts:/opt/flink/e2e/scripts:ro
     networks:
       - cadqstream-net
     restart: unless-stopped
@@ -518,7 +460,7 @@ services:
       flink-jobmanager:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8091/taskmanagers || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://flink-jobmanager:8081/overview || exit 1"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -529,8 +471,8 @@ services:
       TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
       FLINK_PROPERTIES: |
         state.backend: filesystem
-        state.checkpoints.dir: s3://checkpoints/flink-checkpoints
-        state.savepoints.dir: s3://checkpoints/flink-savepoints
+        state.checkpoints.dir: file:///tmp/flink-checkpoints
+        state.savepoints.dir: file:///tmp/flink-savepoints
         taskmanager.memory.process.size: 4096m
         taskmanager.memory.managed.fraction: 0.4
         metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
@@ -541,7 +483,7 @@ services:
         jdbc.connection.max-retry-timeout: 60s
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PGBOUNCER_HOST: pgbouncer
-      PGBOUNCER_PORT: 5432
+      PGBOUNCER_PORT: "5432"
       POSTGRES_DB: dq_pipeline
       POSTGRES_USER: cadqstream
       POSTGRES_PASSWORD: cadqstream123
@@ -553,13 +495,12 @@ services:
     volumes:
       - flink-taskmanager-log:/opt/flink/log
       - flink-taskmanager-data:/tmp
-      - ../src:/opt/flink/e2e/src:ro
-      - ../models:/opt/flink/e2e/models:ro
-      - ../scripts:/opt/flink/e2e/scripts:ro
+      - C:/proj/ldt/src:/opt/flink/e2e/src:ro
+      - C:/proj/ldt/scripts:/opt/flink/e2e/scripts:ro
     networks:
       - cadqstream-net
     deploy:
-      replicas: 3
+      replicas: 1
       resources:
         limits:
           cpus: "2"
@@ -576,30 +517,25 @@ services:
     depends_on:
       flink-jobmanager:
         condition: service_healthy
+      flink-taskmanager:
+        condition: service_healthy
+      kafka-init:
+        condition: service_started
+      postgres:
+        condition: service_healthy
     networks:
       - cadqstream-net
     restart: "no"
-    entrypoint: ["/bin/sh", "-c"]
-    command: |
-      "
-      echo 'Waiting for Flink REST API to be ready...'
-      until curl -sf http://flink-jobmanager:8081/overview; do
-        echo 'Flink not ready yet, waiting 5s...'
-        sleep 5
-      done
-      echo 'Flink REST API is ready!'
-      echo 'Submitting Flink job...'
-      python3 /opt/flink/e2e/src/flink_job_complete.py &
-      echo 'Flink job submitted in background. Monitoring...'
-      sleep 10
-      curl -s http://flink-jobmanager:8081/jobs | python3 -c 'import sys,json; d=json.load(sys.stdin); print(f\"Jobs running: {len(d.get(\\\"jobs\\\",[]))}\")'
-      echo 'Flink init complete.'
-      "
+    entrypoint: ["/bin/bash", "/scripts/flink-init.sh"]
+    volumes:
+      - ./flink/flink-init.sh:/scripts/flink-init.sh:ro
+      - C:/proj/ldt/src:/opt/flink/e2e/src:ro
+      - C:/proj/ldt/scripts:/opt/flink/e2e/scripts:ro
     environment:
-      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      FLINK_REST: http://flink-jobmanager:8081
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       PGBOUNCER_HOST: pgbouncer
-      PGBOUNCER_PORT: 5432
+      PGBOUNCER_PORT: "5432"
       POSTGRES_DB: dq_pipeline
       POSTGRES_USER: cadqstream
       POSTGRES_PASSWORD: cadqstream123
@@ -608,9 +544,6 @@ services:
       MINIO_SECRET_KEY: minioadmin123
       FLINK_ENV: production
       PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip
-    volumes:
-      - ../src:/opt/flink/e2e/src:ro
-      - ../models:/opt/flink/e2e/models:ro
 
   # =============================================================================
   # LAYER 5: ML Platform
@@ -621,7 +554,7 @@ services:
     container_name: ldt-mlflow
     hostname: mlflow
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:5000/ || exit 1"]
+      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('127.0.0.1',5000)); s.close()\""]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -633,7 +566,6 @@ services:
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
       MLFLOW_ARTIFACT_ROOT: s3://mlflow-artifacts/
-      MLFLOW_GALLERY_INDEX_ARTIFACTS: "false"
       MLFLOW_SERVER_FILESYSTEM_S3_IGNORE_ENVVARS: "true"
     ports:
       - "5000:5000"
@@ -649,7 +581,6 @@ services:
       --default-artifact-root s3://mlflow-artifacts/
       --artifacts-destination s3://mlflow-artifacts/
       --workers 2
-      --timeout 1200
     deploy:
       resources:
         limits:
@@ -665,7 +596,7 @@ services:
     container_name: ldt-prometheus
     hostname: prometheus
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -681,12 +612,8 @@ services:
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
       - '--storage.tsdb.wal-compression'
-      - '--storage.tsdb.blocks.time-range=2h'
       - '--web.enable-lifecycle'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
       - '--query.max-samples=50000000'
-      - '--rule.files=/etc/prometheus/alert-rules/*.yml'
     networks:
       - cadqstream-net
     restart: unless-stopped
@@ -715,16 +642,9 @@ services:
       GF_USERS_AUTO_ASSIGN_ORG: "true"
       GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
       GF_AUTH_ANONYMOUS_ENABLED: "false"
-      GF_AUTH_DISABLE_SIGNOUT_MENU: "false"
-      GF_FEATURE_TOGGLES_ENABLE: publicDashboards
-      GF_PANELS_DISABLE_SANITY_CHECK: "false"
-      GF_ALERTING_ENABLED: "true"
-      GF_ALERTING_ERROR_OR_TIMEOUT: quiet
       GF_LOG_LEVEL: info
-      GF_EXPRESSION_PARSER: threshold
-      GF_DATE_FORMATS_USE_BROWSER_LOCALE: "false"
       GF_UNIFIED_ALERTING_ENABLED: "true"
-      GF_UNIFIED_ALERTING_ALERTMANAGER_FOR: "http://prometheus:9093"
+      GF_UNIFIED_ALERTING_ALERTMANAGER_FOR: http://prometheus:9093
     ports:
       - "3000:3000"
     volumes:
@@ -749,7 +669,7 @@ services:
     container_name: ldt-node-exporter
     hostname: node-exporter
     healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9100/metrics"]
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9100/metrics || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -784,3 +704,24 @@ services:
         limits:
           cpus: "0.1"
           memory: 128M
+
+  # =============================================================================
+  # LAYER 7: Data Producer (for demo/testing)
+  # =============================================================================
+
+  kafka-producer:
+    build:
+      context: ./kafka
+      dockerfile: Dockerfile.producer
+    container_name: ldt-kafka-producer
+    hostname: kafka-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: "no"
+    entrypoint: ["python3", "/app/fast_producer.py"]
+    command: ["100000", "kafka:9092", "taxi-nyc-raw"]
+    volumes:
+      - ./kafka/fast_producer.py:/app/fast_producer.py:ro

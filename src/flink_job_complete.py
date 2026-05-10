@@ -133,6 +133,7 @@ def main():
     env.set_parallelism(4)
 
     # Checkpointing (EXACTLY_ONCE)
+    from pyflink.datastream import ExternalizedCheckpointCleanup
     checkpoint_config = env.get_checkpoint_config()
     checkpoint_config.set_checkpointing_mode(CheckpointingMode.EXACTLY_ONCE)
     checkpoint_config.set_checkpoint_interval(45000)  # 45s
@@ -140,7 +141,7 @@ def main():
     checkpoint_config.set_checkpoint_timeout(300000)  # 5 min
     checkpoint_config.set_max_concurrent_checkpoints(1)
     checkpoint_config.enable_externalized_checkpoints(
-        checkpoint_config.ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
+        ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
     )
 
     print("\n✓ Environment configured")
@@ -264,7 +265,6 @@ def main():
         .window(TumblingEventTimeWindows.of(Time.minutes(1)))
         .aggregate(
             MetaAggregateFunction(),
-            MetaWindowProcessFunction(),
             accumulator_type=Types.PICKLED_BYTE_ARRAY(),
             output_type=Types.PICKLED_BYTE_ARRAY()
         )

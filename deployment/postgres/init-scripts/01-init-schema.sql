@@ -283,7 +283,7 @@ ORDER BY event_count DESC;
 
 CREATE OR REPLACE VIEW v_layer1_quality AS
 SELECT
-    date_trunc('hour', recorded_at) AS time_bucket,
+    date_trunc('hour', detected_at) AS time_bucket,
     violation_type,
     COUNT(*) AS violation_count,
     COUNT(*) FILTER (WHERE trip_id IS NOT NULL) AS with_trip_id

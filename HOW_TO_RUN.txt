@@ -1,0 +1,8 @@
+# 1. Start all
+powershell -ExecutionPolicy Bypass -File C:\proj\ldt\deployment\scripts\start.ps1
+
+# 2. Send data
+powershell -ExecutionPolicy Bypass -File C:\proj\ldt\deployment\scripts\start-producer.ps1
+
+# 3. Check health
+powershell -ExecutionPolicy Bypass -File C:\proj\ldt\deployment\scripts\check-health.ps1

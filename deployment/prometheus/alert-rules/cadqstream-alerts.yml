@@ -259,8 +259,10 @@ groups:
           (
             sum(pg_stat_database_blks_hit{dbname="dq_pipeline"})
             /
-            nullif(sum(pg_stat_database_blks_hit{dbname="dq_pipeline"}) + sum(pg_stat_database_blks_read{dbname="dq_pipeline"}), 0)
+            (sum(pg_stat_database_blks_hit{dbname="dq_pipeline"}) + sum(pg_stat_database_blks_read{dbname="dq_pipeline"}))
           ) < 0.85
+          and
+          (sum(pg_stat_database_blks_hit{dbname="dq_pipeline"}) + sum(pg_stat_database_blks_read{dbname="dq_pipeline"})) > 0
         for: 10m
         labels:
           severity: warning

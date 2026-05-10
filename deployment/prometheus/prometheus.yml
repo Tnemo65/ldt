@@ -69,7 +69,7 @@ scrape_configs:
         target_label: instance
         replacement: 'flink-jobmanager'
 
-  # ── Flink TaskManager(s) ────────────────────────────────────────────────────
+  # ── Flink TaskManager(s) ───────────────────────────────────────────────────
   - job_name: 'flink-taskmanager'
     static_configs:
       - targets: ['flink-taskmanager:9249']
@@ -78,8 +78,6 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'flink-taskmanager'
-      - source_labels: [__hostname__]
-        target_label: taskmanager_id
 
   # ── MinIO ──────────────────────────────────────────────────────────────────
   - job_name: 'minio'
@@ -100,13 +98,3 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'mlflow'
-
-  # ── Kafka JMX (direct) ─────────────────────────────────────────────────────
-  - job_name: 'kafka-jmx'
-    static_configs:
-      - targets: ['kafka:9999']
-    metrics_path: /jmx_prometheus1390461/jmx
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'kafka-jmx'

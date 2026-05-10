@@ -16,9 +16,9 @@ taskmanager.memory.task.off-heap.enabled: true
 parallelism.default: ${FLINK_PARALLELISM_DEFAULT}
 
 # State Backend
-state.backend: ${FLINK_STATE_BACKEND}
-state.checkpoints.dir: s3://checkpoints/flink-checkpoints
-state.savepoints.dir: s3://checkpoints/flink-savepoints
+state.backend: filesystem
+state.checkpoints.dir: file:///tmp/flink-checkpoints
+state.savepoints.dir: file:///tmp/flink-savepoints
 state.checkpoints.num-retained: 3
 
 # Checkpointing
