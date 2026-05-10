@@ -1,0 +1,153 @@
+\babel@toc {USenglish}{}\relax 
+\contentsline {chapter}{\numberline {1}INTRODUCTION}{1}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Research Motivation}{1}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Gaps in Current Research}{1}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Expected System}{2}{section.1.3}%
+\contentsline {section}{\numberline {1.4}Objectives and Contents}{2}{section.1.4}%
+\contentsline {section}{\numberline {1.5}Key Contributions}{2}{section.1.5}%
+\contentsline {section}{\numberline {1.6}Thesis Organization}{3}{section.1.6}%
+\contentsline {chapter}{\numberline {2}BACKGROUND AND RELATED WORKS}{4}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Overview}{4}{section.2.1}%
+\contentsline {section}{\numberline {2.2}Streaming Data Processing}{4}{section.2.2}%
+\contentsline {subsection}{\numberline {2.2.1}Apache Kafka: Event Streaming Platform}{4}{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {2.2.2}Apache Flink: Stateful Stream Processing}{5}{subsection.2.2.2}%
+\contentsline {section}{\numberline {2.3}MLOps: Machine Learning Operations}{6}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}MLOps Maturity Levels}{7}{subsection.2.3.1}%
+\contentsline {section}{\numberline {2.4}DAMA-DMBOK Data Quality Dimensions}{7}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Related Works}{7}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}Context-Aware Data Quality}{7}{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {2.5.2}Rendezvous and Fork-Join Patterns}{8}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}Drift Detection}{8}{subsection.2.5.3}%
+\contentsline {subsection}{\numberline {2.5.4}ML-Based Anomaly Detection}{9}{subsection.2.5.4}%
+\contentsline {section}{\numberline {2.6}Chapter Summary}{9}{section.2.6}%
+\contentsline {chapter}{\numberline {3}PROBLEM DEFINITION AND RESEARCH QUESTIONS}{10}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Introduction}{10}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Case Study: NYC Yellow Taxi Dataset}{10}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Dataset Schema}{10}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Data Volume and Temporal Coverage}{10}{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.2.3}Dataset Statistics and Distributions}{11}{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {3.2.4}Volume Patterns by Time and Ratecode}{11}{subsection.3.2.4}%
+\contentsline {subsection}{\numberline {3.2.5}Data Quality Observations}{12}{subsection.3.2.5}%
+\contentsline {subsection}{\numberline {3.2.6}Schema Validation Results (Layer 1)}{14}{subsection.3.2.6}%
+\contentsline {subsection}{\numberline {3.2.7}Business Rules Results (Layer 2)}{14}{subsection.3.2.7}%
+\contentsline {subsection}{\numberline {3.2.8}Multivariate Anomalies (Layer 3)}{15}{subsection.3.2.8}%
+\contentsline {section}{\numberline {3.3}Research Gaps}{16}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Gap 1: Context Collapse in Heterogeneous Data}{16}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Gap 2: Sequential Pipelines Underutilize Heterogeneous Validation Complexity}{16}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}Gap 3: Single-Strategy Drift Adaptation Fails to Differentiate Drift Severity}{16}{subsection.3.3.3}%
+\contentsline {section}{\numberline {3.4}Research Questions}{16}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}RQ1: Multi-Layer Validation}{16}{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {3.4.2}RQ2: Hybrid K-Means iForestASD Model}{16}{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {3.4.3}RQ3: IEC Multi-Strategy Adaptation}{17}{subsection.3.4.3}%
+\contentsline {subsection}{\numberline {3.4.4}RQ4: Rendezvous Pipeline Architecture}{17}{subsection.3.4.4}%
+\contentsline {subsection}{\numberline {3.4.5}RQ5: 4D Context-Aware Thresholding}{17}{subsection.3.4.5}%
+\contentsline {section}{\numberline {3.5}Research Hypotheses}{17}{section.3.5}%
+\contentsline {section}{\numberline {3.6}Chapter Summary}{17}{section.3.6}%
+\contentsline {chapter}{\numberline {4}CORE INNOVATIONS}{1}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Overview}{1}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Innovation 1: 4D Context-Aware Thresholding [RQ5]}{1}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Problem: Global Thresholds Fail for Heterogeneous Data}{1}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}Solution: 4D Context-Aware Threshold Matrix}{2}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}Threshold Computation Algorithm}{3}{subsection.4.2.3}%
+\contentsline {subsection}{\numberline {4.2.4}Integration with Hybrid ML Model}{3}{subsection.4.2.4}%
+\contentsline {subsection}{\numberline {4.2.5}Research Contribution}{4}{subsection.4.2.5}%
+\contentsline {section}{\numberline {4.3}Innovation 2: Rendezvous Pipeline Architecture [RQ4]}{4}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Problem: Why Linear Pipelines Fail}{4}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Solution: Fork-Join Parallelism (Rendezvous Pattern)}{4}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}Design Properties and Guarantees}{5}{subsection.4.3.3}%
+\contentsline {subsection}{\numberline {4.3.4}Early Exit Optimization}{5}{subsection.4.3.4}%
+\contentsline {subsection}{\numberline {4.3.5}Research Contribution}{6}{subsection.4.3.5}%
+\contentsline {section}{\numberline {4.4}Innovation 3: Intelligent Evolution Controller (IEC) [RQ3]}{6}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}Problem: Traditional ADWIN is Single-Strategy}{6}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}Solution: Multi-Strategy Intelligent Evolution Controller}{6}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3}Drift Scenario Classification}{8}{subsection.4.4.3}%
+\contentsline {subsection}{\numberline {4.4.4}Sequential Fallback Protocol}{9}{subsection.4.4.4}%
+\contentsline {subsection}{\numberline {4.4.5}IEC 3-Tier Self-Adaptation Protocol}{9}{subsection.4.4.5}%
+\contentsline {subsection}{\numberline {4.4.6}Research Contribution}{9}{subsection.4.4.6}%
+\contentsline {section}{\numberline {4.5}Innovation 4: Hybrid K-Means iForestASD Model [RQ2]}{10}{section.4.5}%
+\contentsline {subsection}{\numberline {4.5.1}Problem: Basic Isolation Forest Lacks Context Awareness}{10}{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {4.5.2}Solution: Hybrid K-Means + IForestASD Architecture}{10}{subsection.4.5.2}%
+\contentsline {subsection}{\numberline {4.5.3}Spatio-Temporal Feature Engineering}{12}{subsection.4.5.3}%
+\contentsline {subsection}{\numberline {4.5.4}In-Memory Deployment with Flink Broadcast State}{14}{subsection.4.5.4}%
+\contentsline {subsection}{\numberline {4.5.5}Research Contribution}{14}{subsection.4.5.5}%
+\contentsline {section}{\numberline {4.6}Chapter Summary}{14}{section.4.6}%
+\contentsline {chapter}{\numberline {5}SYSTEM ARCHITECTURE \& IMPLEMENTATION}{15}{chapter.5}%
+\contentsline {section}{\numberline {5.1}System Overview}{15}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Infrastructure Layers}{15}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Processing Pipeline Overview}{15}{subsection.5.1.2}%
+\contentsline {subsection}{\numberline {5.1.3}Cold-Start Model Training (Offline Phase)}{16}{subsection.5.1.3}%
+\contentsline {section}{\numberline {5.2}Four-Layer Processing Pipeline}{18}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Dataset-Specific Challenges: Why NYC Taxi Requires Context-Aware DQ}{18}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}Layer 1: Schema Filter \& Deduplication}{19}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}Layer 2a: Canary Branch (Rule-Based)}{20}{subsection.5.2.3}%
+\contentsline {subsection}{\numberline {5.2.4}Layer 2b: Complex Branch (ML-Based)}{21}{subsection.5.2.4}%
+\contentsline {subsubsection}{State Size Optimization}{23}{subsubsection*.18}%
+\contentsline {subsection}{\numberline {5.2.5}Layer 3: MetaAggregator (Rendezvous Point)}{24}{subsection.5.2.5}%
+\contentsline {subsection}{\numberline {5.2.6}Layer 4: Intelligent Evolution Controller (IEC)}{24}{subsection.5.2.6}%
+\contentsline {subsection}{\numberline {5.2.7}IEC Action Execution Layer}{25}{subsection.5.2.7}%
+\contentsline {subsubsection}{FastAPI ML Service}{25}{subsubsection*.19}%
+\contentsline {subsubsection}{Action Replay Worker}{26}{subsubsection*.20}%
+\contentsline {section}{\numberline {5.3}Infrastructure}{26}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Apache Flink Runtime}{26}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}Apache Kafka Topics}{27}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3}PostgreSQL Data Storage}{27}{subsection.5.3.3}%
+\contentsline {subsection}{\numberline {5.3.4}Prometheus \& Grafana Monitoring}{28}{subsection.5.3.4}%
+\contentsline {section}{\numberline {5.4}Optimization Techniques}{28}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}Hardware Architecture (AMD Threadripper 64-core, 50GB RAM)}{28}{subsection.5.4.1}%
+\contentsline {subsection}{\numberline {5.4.2}Breaking Python GIL with PyFlink Vectorized UDFs}{29}{subsection.5.4.2}%
+\contentsline {subsubsection}{IPC Overhead Analysis and Mini-Batching}{30}{subsubsection*.21}%
+\contentsline {subsection}{\numberline {5.4.3}Database Connection Pooling with PgBouncer}{30}{subsection.5.4.3}%
+\contentsline {section}{\numberline {5.5}MLOps Integration}{31}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}MLflow Experiment Tracking}{31}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}Model Registry \& Lifecycle Management}{31}{subsection.5.5.2}%
+\contentsline {subsection}{\numberline {5.5.3}CI/CD Pipeline}{32}{subsection.5.5.3}%
+\contentsline {section}{\numberline {5.6}Chapter Summary}{32}{section.5.6}%
+\contentsline {chapter}{\numberline {6}EXPERIMENTS \& EVALUATION}{33}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Overview}{33}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Experiment Environment}{33}{section.6.2}%
+\contentsline {section}{\numberline {6.3}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{34}{section.6.3}%
+\contentsline {subsection}{\numberline {6.3.1}Experiment 1: Four-Stage Layer Coverage Analysis}{34}{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {6.3.2}Experiment 6: Ablation Study}{35}{subsection.6.3.2}%
+\contentsline {section}{\numberline {6.4}RQ2: Does Hybrid K-Means iForestASD Outperform Baselines? [Exp 3, 4]}{35}{section.6.4}%
+\contentsline {subsection}{\numberline {6.4.1}Experiment 3: Isolation Forest Anomaly Detection}{36}{subsection.6.4.1}%
+\contentsline {subsection}{\numberline {6.4.2}Experiment 4: Comparison with Existing DQ Tools}{36}{subsection.6.4.2}%
+\contentsline {section}{\numberline {6.5}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 5, 6]}{38}{section.6.5}%
+\contentsline {subsection}{\numberline {6.5.1}Experiment 5: ADWIN Drift Detection Effectiveness}{38}{subsection.6.5.1}%
+\contentsline {section}{\numberline {6.6}RQ4: Does Rendezvous Architecture Improve Performance? [Exp 7, 8]}{39}{section.6.6}%
+\contentsline {subsection}{\numberline {6.6.1}Experiment 7: Rendezvous vs Linear Pipeline}{39}{subsection.6.6.1}%
+\contentsline {subsection}{\numberline {6.6.2}Experiment 8: End-to-End Throughput Benchmark}{40}{subsection.6.6.2}%
+\contentsline {section}{\numberline {6.7}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{41}{section.6.7}%
+\contentsline {subsection}{\numberline {6.7.1}Experiment 9: Context-Aware vs Global Thresholds}{41}{subsection.6.7.1}%
+\contentsline {subsection}{\numberline {6.7.2}Experiment 10: Temporal Validation}{42}{subsection.6.7.2}%
+\contentsline {section}{\numberline {6.8}Additional Validation Experiments [Exp 11, 12, 13, 14]}{43}{section.6.8}%
+\contentsline {subsection}{\numberline {6.8.1}Experiment 2: Business Rules Effectiveness}{43}{subsection.6.8.1}%
+\contentsline {subsection}{\numberline {6.8.2}Experiment 11: Fixed-Rule Baseline Comparison}{43}{subsection.6.8.2}%
+\contentsline {subsection}{\numberline {6.8.3}Experiment 12: PostgreSQL Write Performance}{44}{subsection.6.8.3}%
+\contentsline {subsection}{\numberline {6.8.4}Experiment 13: Grafana Dashboard Usability}{44}{subsection.6.8.4}%
+\contentsline {section}{\numberline {6.9}Chapter Summary}{44}{section.6.9}%
+\contentsline {chapter}{\numberline {7}CONCLUSION \& FUTURE WORK}{45}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Summary of Contributions}{45}{section.7.1}%
+\contentsline {subsection}{\numberline {7.1.1}Contribution 1: 4D Context-Aware Thresholding Framework [RQ5]}{45}{subsection.7.1.1}%
+\contentsline {subsection}{\numberline {7.1.2}Contribution 2: Rendezvous Pipeline Architecture [RQ4]}{45}{subsection.7.1.2}%
+\contentsline {subsection}{\numberline {7.1.3}Contribution 3: Intelligent Evolution Controller (IEC) [RQ3]}{46}{subsection.7.1.3}%
+\contentsline {subsection}{\numberline {7.1.4}Contribution 4: Hybrid K-Means iForestASD Model [RQ2]}{46}{subsection.7.1.4}%
+\contentsline {section}{\numberline {7.2}Validation of Research Hypotheses}{46}{section.7.2}%
+\contentsline {section}{\numberline {7.3}Limitations}{47}{section.7.3}%
+\contentsline {subsection}{\numberline {7.3.1}Domain Specificity}{47}{subsection.7.3.1}%
+\contentsline {subsection}{\numberline {7.3.2}Feature Engineering Dependency}{47}{subsection.7.3.2}%
+\contentsline {subsection}{\numberline {7.3.3}Computational Cost of METER Adaptation}{47}{subsection.7.3.3}%
+\contentsline {subsection}{\numberline {7.3.4}Distributed Deployment Validation}{47}{subsection.7.3.4}%
+\contentsline {subsection}{\numberline {7.3.5}Limited Drift Types}{48}{subsection.7.3.5}%
+\contentsline {section}{\numberline {7.4}Future Work}{48}{section.7.4}%
+\contentsline {subsection}{\numberline {7.4.1}Multi-Domain Validation}{48}{subsection.7.4.1}%
+\contentsline {subsection}{\numberline {7.4.2}Deep Learning Integration}{48}{subsection.7.4.2}%
+\contentsline {subsection}{\numberline {7.4.3}Federated Learning for Multi-Tenant DQ}{48}{subsection.7.4.3}%
+\contentsline {subsection}{\numberline {7.4.4}Anomaly Explanation via Intrinsic Structure}{49}{subsection.7.4.4}%
+\contentsline {subsection}{\numberline {7.4.5}Active Learning for Anomaly Labeling}{49}{subsection.7.4.5}%
+\contentsline {subsection}{\numberline {7.4.6}Real-Time Dashboard with Drill-Down}{49}{subsection.7.4.6}%
+\contentsline {section}{\numberline {7.5}Broader Impact}{49}{section.7.5}%
+\contentsline {subsection}{\numberline {7.5.1}Production ML Systems}{50}{subsection.7.5.1}%
+\contentsline {subsection}{\numberline {7.5.2}Data Quality as Code}{50}{subsection.7.5.2}%
+\contentsline {subsection}{\numberline {7.5.3}Regulatory Compliance}{50}{subsection.7.5.3}%
+\contentsline {subsection}{\numberline {7.5.4}Open Source Contribution}{50}{subsection.7.5.4}%
+\contentsline {section}{\numberline {7.6}Closing Remarks}{50}{section.7.6}%

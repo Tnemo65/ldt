@@ -1,7 +1,4 @@
-\newpage
 \chapter{PROBLEM DEFINITION AND RESEARCH QUESTIONS}
-\pagestyle{fancy}
-\pagenumbering{arabic}
 
 % ================================================
 % 3.1 Introduction
@@ -264,45 +261,44 @@ When concept drift occurs in production DQ systems, existing frameworks apply a 
 
 This thesis addresses five research questions:
 
-\subsection{RQ1: Isolation Forest Anomaly Detection}
-\textit{``Can Isolation Forest detect multivariate anomalies that business rules miss?''}
+\subsection{RQ1: Multi-Layer Validation}
+\textit{``Does a multi-layer architecture (Schema + Rules + ML + Drift) improve data quality coverage compared to single-layer validation?''}
 
 \begin{itemize}
-    \item \textbf{RQ1a:} What is the Precision/Recall of Isolation Forest anomalies (records not flagged by Layers 1--2)?
-    \item \textbf{RQ1b:} What types of anomalies does Isolation Forest detect that rules miss?
-    \item \textbf{RQ1c:} Does Isolation Forest retraining via partial\_fit() maintain ML performance over time?
+    \item \textbf{RQ1a:} How many violations does each processing layer catch, and what is the additive coverage of the multi-layer architecture?
+    \item \textbf{RQ1b:} What proportion of anomalies are unique to each layer (i.e., caught by only one layer)?
+    \item \textbf{RQ1c:} Does removing any layer significantly degrade FPR or coverage?
 \end{itemize}
 
-\subsection{RQ2: ADWIN Drift Detection}
-\textit{``Does ADWIN-based drift detection on quality meta-streams detect degradation promptly?''}
+\subsection{RQ2: Hybrid K-Means iForestASD Model}
+\textit{``Does the Context-Aware iForestASD (21D ratio features + per-cluster thresholds) outperform simpler baseline approaches and established streaming algorithms on multivariate taxi trip anomalies?''}
 
 \begin{itemize}
-    \item \textbf{RQ2a:} What is the Mean Time To Detect (MTTD) for gradual NULL rate increases?
-    \item \textbf{RQ2b:} What is the false positive rate of the drift detector?
-    \item \textbf{RQ2c:} Does self-adaptation (threshold recalculation) improve FPR after drift?
-    \item \textbf{RQ2d:} What is the appropriate sensitivity parameter $\delta$ for each quality metric?
+    \item \textbf{RQ2a:} What is the incremental value of ratio features over raw features?
+    \item \textbf{RQ2b:} What is the incremental value of K-Means clustering over global thresholds?
+    \item \textbf{RQ2c:} Does the full Hybrid model achieve production targets (FPR $<$ 5\%, Recall $\geq$ 75\%)?
 \end{itemize}
 
-\subsection{RQ3: Business Rules Effectiveness}
-\textit{``Do deterministic business rules effectively detect validity violations?''}
+\subsection{RQ3: IEC Multi-Strategy Adaptation}
+\textit{``Does the Intelligent Evolution Controller's multi-strategy adaptation (Continuous Evolution, Switching, METER, Spatial Tracking) maintain model accuracy when data distributions drift over time?''}
 
 \begin{itemize}
-    \item \textbf{RQ3a:} What is the coverage of each business rule on the NYC Taxi dataset?
-    \item \textbf{RQ3b:} What is the false positive rate of business rules?
-    \item \textbf{RQ3c:} How do business rules compare to Great Expectations and Stream DaQ?
+    \item \textbf{RQ3a:} How quickly does ADWIN detect drift events on quality meta-streams?
+    \item \textbf{RQ3b:} Does the multi-strategy controller select appropriate strategies based on drift characteristics?
+    \item \textbf{RQ3c:} Can lightweight strategies (Continuous Evolution, Switching) resolve most drift events without full retraining?
 \end{itemize}
 
-\subsection{RQ4: Schema Validation Effectiveness}
-\textit{``Does schema validation effectively detect completeness violations?''}
+\subsection{RQ4: Rendezvous Pipeline Architecture}
+\textit{``Does the Rendezvous (fork-join) pipeline architecture reduce latency and increase throughput compared to traditional linear (sequential) pipelines?''}
 
 \begin{itemize}
-    \item \textbf{RQ4a:} What is the NULL rate trend over 26 months?
-    \item \textbf{RQ4b:} Does deduplication via Flink KeyedState effectively remove duplicates?
-    \item \textbf{RQ4c:} Does Flink State-based dedup handle high-volume streams?
+    \item \textbf{RQ4a:} Does the Rendezvous architecture achieve lower average latency through early exit optimization compared to linear pipelines?
+    \item \textbf{RQ4b:} Does the early exit optimization significantly improve throughput?
+    \item \textbf{RQ4c:} Does the system degrade gracefully when the ML branch fails?
 \end{itemize}
 
-\subsection{RQ5: Context-Aware Thresholding Effectiveness}
-\textit{``Does 4D context-aware thresholding reduce FPR compared to global thresholds?''}
+\subsection{RQ5: 4D Context-Aware Thresholding}
+\textit{``Does the 4D context-aware threshold matrix (trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood) reduce false positive rate compared to global thresholds?''}
 
 \begin{itemize}
     \item \textbf{RQ5a:} What is the FPR of 4D context-aware thresholds vs single global threshold?
@@ -319,12 +315,12 @@ This thesis addresses five research questions:
 Based on the case study analysis, we state the following hypotheses:
 
 \begin{enumerate}
-    \item \textbf{H1:} Isolation Forest detects at least 1\% of total violations not caught by Layers 1--2.
+    \item \textbf{H1:} The combined four-stage pipeline detects at least 50\% more violations than single-layer schema validation alone.
     \item \textbf{H2:} The combined four-stage pipeline achieves FPR below 5\% on the NYC Taxi dataset.
-    \item \textbf{H3:} ADWIN detects gradual NULL rate drift within one monitoring window.
-    \item \textbf{H4:} Self-adaptation (threshold recalculation) reduces FPR to pre-drift levels within two windows.
-    \item \textbf{H5:} Flink KeyedState deduplication achieves dedup rate > 99\% on duplicate records.
-    \item \textbf{H6:} 4D context-aware thresholds achieve FPR below 5\% compared to 25--50\% for global thresholds (5--10$\times$ improvement).
+    \item \textbf{H3:} The IEC detects drift within one monitoring window and selects appropriate adaptation strategies based on drift characteristics.
+    \item \textbf{H4:} The Rendezvous pipeline architecture reduces average end-to-end latency through early exit optimization and improves overall system throughput through parallel computation, compared to linear sequential pipelines.
+    \item \textbf{H5:} Flink KeyedState deduplication processes high-volume streams ( $>$ 15,000 events/sec) with state footprint under 500MB for 7-day TTL windows.
+    \item \textbf{H6:} 4D context-aware thresholds achieve FPR below 5\% compared to 25--50\% for global thresholds (at least 5$\times$ improvement).
 \end{enumerate}
 
 % ================================================
@@ -332,4 +328,4 @@ Based on the case study analysis, we state the following hypotheses:
 % ================================================
 \section{Chapter Summary}
 
-This chapter formalized the research problem based on the NYC Taxi dataset case study. The case study identified five categories of data quality problems: completeness (9.1\% NULL rate), validity ($\sim$3.4\% hard rule violations), multivariate anomalies ($\sim$2.9\% via Isolation Forest), uniqueness (duplicate records), and concept drift (NULL rate increasing over 26 months). Three research gaps were identified: lack of context-aware thresholding, absence of self-monitoring, and batch-oriented frameworks. Five research questions and six hypotheses guide the evaluation in Chapter 4, with RQ5 and H6 addressing the core contribution of 4D context-aware thresholding. The next chapter details the CA-DQStream framework design.
+This chapter formalized the research problem based on the NYC Taxi dataset case study. The case study identified five categories of data quality problems: completeness (9.1\% NULL rate), validity ($\sim$3.4\% hard rule violations), multivariate anomalies ($\sim$2.9\% via Isolation Forest), uniqueness (duplicate records), and concept drift (NULL rate increasing over 26 months). Three research gaps were identified: lack of context-aware thresholding, absence of self-monitoring, and batch-oriented frameworks. Five research questions and six hypotheses guide the evaluation in Chapter 5, with RQ5 and H6 addressing the core contribution of 4D context-aware thresholding. The next chapter details the CA-DQStream framework design.

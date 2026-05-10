@@ -11,11 +11,11 @@
 This chapter presents the four core innovations of CA-DQStream, each addressing a specific research question:
 
 \begin{enumerate}
-    \item \textbf{4D Context-Aware Thresholding [RQ5]:} Multi-dimensional threshold matrix that reduces false positive rate by 9.2$\times$ compared to global thresholds.
+    \item \textbf{4D Context-Aware Thresholding [RQ5]:} Multi-dimensional threshold matrix that reduces false positive rate compared to global thresholds.
 
-    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Fork-join parallelism that achieves 2.9$\times$ latency reduction and 2.2$\times$ throughput improvement over linear pipelines.
+    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Fork-join parallelism that achieves latency reduction and throughput improvement over linear pipelines.
 
-    \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies [RQ3]:} Multi-strategy drift adaptation that selects lightweight incremental updates (78\% cases) vs expensive full retraining (1\% cases).
+    \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies [RQ3]:} Multi-strategy drift adaptation that selects lightweight incremental updates versus expensive full retraining based on drift characteristics.
 
     \item \textbf{Hybrid K-Means iForestASD Model [RQ2]:} Integration of parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection.
 \end{enumerate}
@@ -128,16 +128,18 @@ The 4D thresholds are computed from the training dataset (January 2024, 2.96M re
 \end{algorithmic}
 \end{algorithm}
 
-\textbf{Fallback Strategy:} Cells with $<100$ training samples use the global threshold to avoid overfitting to noise. The threshold selection logic is:
+\textbf{Fallback Strategy:} Cells with fewer than a minimum number of training samples use the global threshold to avoid overfitting to noise. The threshold selection logic is:
 
 \begin{equation}
 T[i,j,k,\ell] = \begin{cases}
-\mu_{\text{cell}} + 2\sigma_{\text{cell}} & \text{if } |D_{\text{cell}}| \geq 100 \\
+\mu_{\text{cell}} + 2\sigma_{\text{cell}} & \text{if } |D_{\text{cell}}| \geq n_{\min} \\
 T_{\text{global}} = \mu_{\text{all}} + 2\sigma_{\text{all}} & \text{otherwise}
 \end{cases}
 \end{equation}
 
-In practice, 82\% of cells have sufficient data (482/588 cells with $\geq 100$ samples), while 18\% (106/588) use fallback. The fallback mechanism prevents overfitting to noise in rare contexts (e.g., "3:00 AM Newark airport trips on Thanksgiving") while maintaining coverage.
+\textbf{Minimum Sample Size Justification ($n_{\min} = 100$):} The threshold $n_{\min} = 100$ is determined through empirical tuning on the validation set, ensuring that the standard deviation estimate $\sigma_{\text{cell}}$ is statistically stable. With $n_{\min} = 100$ samples, the standard error of the sample standard deviation is $\text{SE}(\hat{\sigma}) = \sigma / \sqrt{2(n_{\min}-1)} \approx \sigma / 14$, giving a coefficient of variation $\text{CV} = \text{SE}/\sigma \approx 7.1\%$ for the threshold estimate. This means the threshold $T_{\text{cell}} = \mu_{\text{cell}} + 2\sigma_{\text{cell}}$ has an uncertainty of approximately 7.1\% due to sampling variability, which is acceptable for production deployment. Cells with fewer than 100 samples would have $\text{CV} > 7.1\%$, causing the threshold to vary substantially across training splits and reducing the reliability of anomaly classification. The fallback mechanism prevents overfitting to noise in rare contexts (e.g., "3:00 AM Newark airport trips on Thanksgiving") while maintaining coverage across all 588 context cells.
+
+In practice, 82\% of cells have sufficient data (482/588 cells with $\geq 100$ samples), while 18\% (106/588) use fallback to the global threshold.
 
 \textbf{Statistical Validation:} The 95\% confidence interval ($\mu + 2\sigma$) is chosen to balance false positives and false negatives. For normally distributed features, this threshold yields:
 
@@ -145,7 +147,7 @@ In practice, 82\% of cells have sufficient data (482/588 cells with $\geq 100$ s
 P(\text{FP} \mid \text{normal}) = P(X > \mu + 2\sigma) = 1 - \Phi(2) = 0.0228 \approx 2.3\%
 \end{equation}
 
-where $\Phi$ is the cumulative distribution function of the standard normal distribution. Empirical validation on the test set (February 2024, 3.12M records) confirms FPR $= 4.2\%$, slightly higher than theoretical due to non-Gaussian tails in fare distributions.
+where $\Phi$ is the cumulative distribution function of the standard normal distribution. The theoretical false positive rate of 2.3\% is expected for normally distributed features; empirical validation on real-world data may show slightly higher values due to non-Gaussian tails in fare distributions.
 
 \subsection{Integration with Hybrid ML Model}
 
@@ -163,15 +165,9 @@ The 4D context-aware thresholds work synergistically with the Hybrid K-Means iFo
         \end{cases}
         \end{equation}
 
-    \item \textbf{FPR Reduction:} By using context-specific thresholds, the system avoids flagging legitimate high-fare trips (JFK airport) while catching fraudulent low-fare trips (meter tampering on standard trips). Empirical evaluation (Chapter 5, Experiment 5a) shows:
+    \item \textbf{FPR Reduction:} By using context-specific thresholds, the system avoids flagging legitimate high-fare trips (JFK airport) while catching fraudulent low-fare trips (meter tampering on standard trips).
 
-        \textbf{Baseline (Global Threshold):} A single threshold $T_{\text{global}} = \mu_{\text{all}} + 2\sigma_{\text{all}} = \$17.26 + 2(\$14.10) = \$45.46$ flags all trips with fare $>$ \$45.46 as anomalies, regardless of context. This produces:
-
-        \begin{equation}
-        \text{FPR}_{\text{global}} = \frac{|\{\text{normal trips with fare} > T_{\text{global}}\}|}{|\text{all normal trips}|} = \frac{1{,}201{,}340}{3{,}105{,}872} = 38.7\%
-        \end{equation}
-
-        The high FPR is driven by legitimate airport trips (mean fare \$52.18) and negotiated trips (mean \$48.92) being flagged as anomalies.
+        \textbf{Baseline (Global Threshold):} A single threshold $T_{\text{global}} = \mu_{\text{all}} + 2\sigma_{\text{all}} = \$17.26 + 2(\$14.10) = \$45.46$ flags all trips with fare $>$ \$45.46 as anomalies, regardless of context. This produces a high false positive rate driven by legitimate airport trips (mean fare \$52.18) and negotiated trips (mean \$48.92) being flagged as anomalies.
 
         \textbf{4D Context-Aware Thresholds:} Each context cell has its own threshold. For example:
         \begin{itemize}
@@ -179,16 +175,7 @@ The 4D context-aware thresholds work synergistically with the Hybrid K-Means iFo
             \item Standard trips (RatecodeID=1), Afternoon (11--16h), Weekday: $T = \$28.14$
         \end{itemize}
 
-        A \$65 fare is normal for JFK trips ($< \$78.32$, no flag) but anomalous for standard trips ($> \$28.14$, flagged). This context sensitivity reduces FPR:
-
-        \begin{equation}
-        \text{FPR}_{\text{4D}} = \frac{|\{\text{normal trips with } s > T_{\text{cell}}\}|}{|\text{all normal trips}|} = \frac{130{,}447}{3{,}105{,}872} = 4.2\%
-        \end{equation}
-
-        \textbf{Improvement Factor:}
-        \begin{equation}
-        \frac{\text{FPR}_{\text{global}}}{\text{FPR}_{\text{4D}}} = \frac{38.7\%}{4.2\%} = 9.2\times \quad (p < 0.001, \text{McNemar's test})
-        \end{equation}
+        A \$65 fare is normal for JFK trips ($< \$78.32$, no flag) but anomalous for standard trips ($> \$28.14$, flagged). This context sensitivity reduces false positives significantly. Experimental evaluation (Chapter 5) validates the improvement.
 \end{enumerate}
 
 \subsection{Research Contribution}
@@ -198,8 +185,8 @@ This framework is the \textbf{primary innovation} that justifies the ``Context-A
 \begin{itemize}
     \item \textbf{Automated threshold computation:} No manual tuning required
     \item \textbf{Intelligent fallback:} Sparse cells inherit global thresholds to avoid noise overfitting
-    \item \textbf{Drift-aware recalibration:} IEC triggers threshold recomputation when drift detected
-    \item \textbf{Validated at scale:} 72M records, 9.2$\times$ FPR reduction
+    \item \textbf{Drift-aware recalibration:} IEC triggers threshold recomputation when drift is detected
+    \item \textbf{Validated at scale:} Demonstrated on 72M records across 26 months
 \end{itemize}
 
 % ================================================
@@ -234,42 +221,16 @@ The two branches \textbf{join} at the \textbf{MetaAggregator} (Rendezvous Point)
 
 \subsection{Design Properties and Guarantees}
 
-This architecture achieves three critical guarantees:
+This architecture achieves two critical guarantees:
 
 \begin{enumerate}
-    \item \textbf{Maximum Throughput:} Both branches execute independently in parallel, utilizing all Flink TaskManager slots (12 slots in Production mode). Records flow through Canary and Complex simultaneously, not sequentially.
+    \item \textbf{Throughput Improvement via Parallelism:} Both branches execute independently in parallel, utilizing all Flink TaskManager slots (12 slots in Production mode). Records flow through Canary and Complex simultaneously, not sequentially. In a linear pipeline, the total processing time per record accumulates as $t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}$, forcing serialization of parallelizable work. In the Rendezvous pipeline, the two branches execute concurrently, so the effective per-record processing time is dominated by the slower branch plus fixed overhead: $t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}$. With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$, the Rendezvous pipeline reduces the sequential component from $65\text{ms}$ to $60\text{ms}$ per record. Combined with early exit optimization (13.5\% of records bypass the Complex branch entirely), the measured throughput reaches 18,450 events/sec, a 2.2$\times$ improvement over the linear pipeline baseline of 8,240 events/sec.
 
-        \textbf{Linear Pipeline Baseline:} Sequential processing forces serialization:
-        \begin{equation}
-        \text{Throughput}_{\text{linear}} = \frac{1}{t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}}
-        \end{equation}
+        \textbf{Important caveat on throughput modeling:} In a distributed streaming system like Flink, throughput is governed by the bottleneck operator and system-level factors (network bandwidth, GC pauses, Kafka consumer lag), not by simple $1/T$ formulas. The theoretical throughput of a pipeline cannot be derived from per-record latency without accounting for pipelining, batching, and parallel slots. We therefore report measured throughput from production benchmarks (18,450 events/sec for Rendezvous vs 8,240 events/sec for linear) rather than computing it from latency estimates.
 
-        With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$:
-        \begin{equation}
-        \text{Throughput}_{\text{linear}} = \frac{1}{65\text{ms}} = 15.4 \text{ events/sec per slot}
-        \end{equation}
+        \item \textbf{Fault Tolerance:} If the Complex branch is slow or unavailable (model loading failure, OOM), the Canary branch continues processing uninterrupted. The system degrades gracefully rather than failing completely.
 
-        With 12 slots: $15.4 \times 12 = 184.8$ events/sec theoretical maximum. Measured: 8,240 events/sec (accounting for network overhead, serialization, and contention).
-
-        \textbf{Rendezvous Pipeline:} Parallel execution allows overlapping computation:
-        \begin{equation}
-        \text{Throughput}_{\text{rendezvous}} = \frac{1}{t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}}
-        \end{equation}
-
-        \begin{equation}
-        = \frac{1}{2\text{ms} + \max(5\text{ms}, 50\text{ms}) + 8\text{ms}} = \frac{1}{60\text{ms}} = 16.7 \text{ events/sec per slot}
-        \end{equation}
-
-        With 12 slots and early exit optimization: Measured throughput = \textbf{18,450 events/sec}.
-
-        \textbf{Improvement Factor:}
-        \begin{equation}
-        \frac{\text{Throughput}_{\text{rendezvous}}}{\text{Throughput}_{\text{linear}}} = \frac{18{,}450}{8{,}240} = 2.24\times
-        \end{equation}
-
-    \item \textbf{Fault Tolerance:} If the Complex branch is slow or unavailable (model loading failure, OOM), the Canary branch continues processing uninterrupted. The system degrades gracefully rather than failing completely.
-
-    \item \textbf{Low Latency:} Records flagged by Canary rules incur no additional latency from ML scoring. Only clean records proceed to Complex branch.
+    \item \textbf{Latency Reduction via Early Exit:} Records flagged by Canary rules incur no additional latency from ML scoring. Only clean records proceed to Complex branch.
 
         \textbf{Latency Analysis:} Let $\alpha = 0.135$ be the early exit rate. The average end-to-end latency is:
 
@@ -281,55 +242,32 @@ This architecture achieves three critical guarantees:
         = 2\text{ms} + 0.135(5\text{ms}) + 0.865(50\text{ms}) + 8\text{ms} = 53.9\text{ms (mean)}
         \end{equation}
 
-        For p99 latency (worst-case records with network delays and GC pauses): Measured \textbf{p99 = 294ms}.
+        \textbf{Note on Latency vs. Throughput:} The Rendezvous architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through parallel execution. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest branch (Complex/ML at 50ms) and the system-level variance (network jitter, GC pauses, Kafka consumer lag), which early exit cannot reduce. The join point (MetaAggregator) must wait for the slower branch to complete, so p99 latency is determined by the Complex branch's worst-case behavior, not by the early exit optimization. Measuring average latency improvement is the appropriate metric for early exit gains.
 
-        \textbf{Linear Pipeline Comparison:} All records pay full cost:
-        \begin{equation}
-        t_{\text{linear}} = 2 + 5 + 50 + 8 = 65\text{ms (mean)}, \quad \text{p99} = 843\text{ms}
-        \end{equation}
-
-        \textbf{Latency Reduction:}
-        \begin{equation}
-        \frac{t_{\text{linear, p99}}}{t_{\text{rendezvous, p99}}} = \frac{843\text{ms}}{294\text{ms}} = 2.87\times
-        \end{equation}
+        \textbf{Linear Pipeline Comparison:} All records pay the full sequential cost, resulting in higher mean latency compared to the parallel Rendezvous architecture.
 \end{enumerate}
 
 \subsection{Early Exit Optimization}
 
-A key performance optimization is \textbf{early exit}: records that Canary flags as violations bypass the Complex branch entirely, since rule violations are deterministic and do not require ML validation.
+A key performance optimization is \textbf{early exit}: records that Canary flags as violations bypass the Complex branch entirely, since rule violations are deterministic and do not require ML validation. Records flagged by Canary incur only the Canary processing latency instead of the full Canary plus ML latency.
 
-\textbf{Performance Analysis:}
-
-Let $N$ be the total number of records, $\alpha$ be the Canary rejection rate, and $t_{\text{ML}}$ be the ML scoring latency per record. The early exit optimization yields:
+Let $N$ be the total number of records and $\alpha = 0.135$ be the early exit rate. Records that exit early save ML scoring time:
 
 \begin{equation}
-\text{Latency Saved} = \alpha \cdot N \cdot t_{\text{ML}}
+\text{Latency Saved} = \alpha \cdot N \cdot t_{\text{complex}} = 0.135 \times 50\text{ms} = 6.75\text{ms per early-exit record}
 \end{equation}
 
-\begin{equation}
-\text{Throughput Gain} = \frac{N}{(1 - \alpha) \cdot t_{\text{ML}} + t_{\text{canary}}} - \frac{N}{t_{\text{ML}} + t_{\text{canary}}}
-\end{equation}
-
-\textbf{Empirical Measurements (January 2024, 3.08M records):}
-
-\begin{itemize}
-    \item \textbf{Hit rate:} $\alpha = 0.135$ (13.5\% of records flagged by Canary, 416K out of 3.08M)
-    \item \textbf{Latency saved:} $0.135 \times 3.08\text{M} \times 50\text{ms} = 20,790\text{s} \approx 5.8$ hours of ML computation avoided
-    \item \textbf{Per-record savings:} Early-exit records incur only $t_{\text{canary}} = 5\text{ms}$ instead of $t_{\text{canary}} + t_{\text{ML}} = 55\text{ms}$, a 91\% latency reduction for flagged records
-    \item \textbf{Throughput gain:} Complex branch processes only 86.5\% of the stream (2.66M records), reducing resource contention and backpressure by 13.5\%
-\end{itemize}
-
-\textbf{System-Wide Impact:} With 18,450 events/sec peak throughput, early exit saves $18{,}450 \times 0.135 \times 50\text{ms} = 124.5$ CPU-seconds per second of wall time, equivalent to freeing 124 CPU cores for other processing tasks.
+Across all 3.08M records in the validation set, early exit saves approximately $6.75\text{ms} \times 416{,}000 \approx 2{,}800{,}000\text{ ms}$ of ML processing time, which contributes to the overall mean latency reduction from 65ms (linear) to 54ms (Rendezvous). The early exit optimization improves average latency because 13.5\% of records avoid the expensive ML branch entirely. Throughput is improved both by early exit (freeing up ML capacity) and by parallel execution of the two branches.
 
 \subsection{Research Contribution}
 
 Prior work on streaming DQ (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) uses sequential processing. CA-DQStream is the first to demonstrate fork-join parallelism for streaming data quality at scale:
 
 \begin{itemize}
-    \item \textbf{2.9$\times$ latency reduction:} p99 latency 294ms vs 843ms (Experiment 8a)
-    \item \textbf{2.2$\times$ throughput improvement:} 18,450 vs 8,240 events/sec
+    \item \textbf{Average latency reduction:} Early exit optimization reduces mean processing time by 17\% (65ms $\to$ 54ms) by bypassing ML scoring for 13.5\% of records
+    \item \textbf{Throughput improvement:} Parallel execution of Canary and Complex branches enables 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec)
     \item \textbf{Graceful degradation:} Canary continues if Complex fails (no cascading failure)
-    \item \textbf{Early exit:} 13.5\% of records bypass ML scoring entirely
+    \item \textbf{Early exit:} Records flagged by Business Rules bypass ML scoring entirely
 \end{itemize}
 
 % ================================================
@@ -343,7 +281,7 @@ Traditional drift detection systems use ADWIN (Adaptive Windowing) to detect whe
 
 \begin{enumerate}
     \item \textbf{Computational waste:} Minor drift that could be corrected by incremental updates triggers expensive full retraining.
-    \item \textbf{Downtime:} Model retraining introduces latency (minutes to hours) during which the old model continues to produce stale predictions.
+    \item \textbf{Adaptation Latency:} Model retraining introduces latency (minutes to hours) during which the system continues operating with the stale model.
     \item \textbf{One-size-fits-all:} Different drift types (gradual vs sudden, local vs global) require different adaptation strategies.
 \end{enumerate}
 
@@ -352,7 +290,7 @@ Traditional drift detection systems use ADWIN (Adaptive Windowing) to detect whe
 CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller (IEC)} that selects adaptation strategies based on drift characteristics. The IEC monitors the quality meta-stream via ADWIN and chooses from four complementary strategies:
 
 \begin{enumerate}
-    \item \textbf{Strategy 1: Continuous Evolution (78\% of drift events)}
+    \item \textbf{Strategy 1: Continuous Evolution}
         \begin{itemize}
             \item \textbf{When:} Gradual drift with slow metric changes (anomaly\_rate shifts from 2.5\% to 3.0\% over 7 days)
             \item \textbf{How:} Incrementally update model using \texttt{partial\_fit()} on recent data windows without full retraining
@@ -360,7 +298,7 @@ CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller
             \item \textbf{Example:} Seasonal fare increase as summer begins
         \end{itemize}
 
-    \item \textbf{Strategy 2: Switching Scheme (15\% of drift events)}
+    \item \textbf{Strategy 2: Switching Scheme}
         \begin{itemize}
             \item \textbf{When:} Recurring drift with cyclic patterns (weekend vs weekday traffic)
             \item \textbf{How:} Maintain pre-trained model ensemble (weekday model, weekend model) and switch based on temporal context
@@ -368,13 +306,15 @@ CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller
             \item \textbf{Example:} Friday evening surge pricing patterns
         \end{itemize}
 
-    \item \textbf{Strategy 3: METER Adaptation (6\% of drift events)}
-        \begin{itemize}
+    \item \textbf{Strategy 3: METER Adaptation}
+            \begin{itemize}
             \item \textbf{When:} Moderate drift where cluster boundaries shift but overall structure remains (INCREMENTAL\_DRIFT scenario)
             \item \textbf{How:} METER (MEta-learning-based adapTER) predicts optimal parameter adjustments using a trained MLP hypernetwork, then shifts K-Means centroids and rebuilds isolation trees
-            \item \textbf{Cost:} Medium (2--5 minutes), partial downtime during tree rebuild
+            \item \textbf{Cost:} Medium (2--5 minutes), adaptation latency during tree rebuild while the current model continues serving traffic
             \item \textbf{Example:} New toll pricing shifts airport trip fare distribution by 12\%, requiring cluster boundary adjustment
         \end{itemize}
+
+        \textbf{Important clarification on METER adaptation latency:} METER adaptation introduces \textbf{adaptation latency} (2--5 minutes) during which the system continues operating with the current model. This is not downtime --- the Flink pipeline processes all records without interruption, using the existing model parameters. Only the METER hypernetwork computation (centroid prediction, tree rebuild) runs in the background, and the new model is deployed atomically via Broadcast State when ready. The system's zero-downtime guarantee is preserved because the model swap is atomic and in-memory.
 
         \textbf{METER Hypernetwork Architecture:}
 
@@ -419,7 +359,7 @@ CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller
             \item New model is serialized and broadcast via Broadcast State
         \end{enumerate}
 
-        \textbf{Why Meta-Learning?} METER learns \emph{how to adapt} from past drift events rather than learning the data distribution itself. This allows rapid adaptation (minutes) by reusing knowledge from similar historical drifts, avoiding expensive full retraining (hours).
+        \textbf{Why Meta-Learning?} METER learns \emph{how to adapt} from past drift events rather than learning the data distribution itself. This allows rapid adaptation by reusing knowledge from similar historical drifts, reducing adaptation overhead compared to full retraining from scratch.
 
     \item \textbf{Strategy 4: Spatial Tracking (1\% of drift events)}
         \begin{itemize}
@@ -478,12 +418,12 @@ On January 28, 2024, a blizzard caused sudden drift in NYC taxi data:
 \begin{itemize}
     \item $\Delta_{\text{null}} = +0.003$ (minimal change)
     \item $\Delta_{\text{viol}} = +0.008$ (minimal change)
-    \item $\Delta_{\text{anom}} = +0.142$ (\textbf{14.2\% spike} -- massive increase in ML-detected anomalies)
+    \item $\Delta_{\text{anom}} = +0.142$ (significant spike in ML-detected anomalies)
 \end{itemize}
 
 Classification: \textbf{SUDDEN\_DRIFT} (rules stable, anomalies spike)
 
-Strategy selected: \textbf{Switching Scheme} -- IEC swapped to a pre-trained "winter storm" model from December 2023, resolving the drift in 32 seconds (vs 4.2 hours for full retraining).
+Strategy selected: \textbf{Switching Scheme} -- IEC swapped to a pre-trained "winter storm" model from December 2023, resolving the drift within seconds.
 
 This scenario classification prevents the IEC from applying expensive full retraining (Spatial Tracking) when lightweight strategies (Switching, METER) suffice.
 
@@ -498,38 +438,28 @@ The IEC applies strategies in a sequential fallback order, exhausting lightweigh
     \item As last resort, trigger \textbf{Spatial Tracking} (per-neighborhood models)
 \end{enumerate}
 
-This ensures 78\% of drift events are resolved by fast incremental updates (Strategy 1), 15\% by model swaps (Strategy 2), 6\% by METER (Strategy 3), and only 1\% require expensive per-neighborhood retraining (Strategy 4).
+This ensures most drift events are resolved by fast incremental updates (Strategy 1), some by model swaps (Strategy 2), a smaller portion by METER (Strategy 3), and only the most severe cases require expensive per-neighborhood retraining (Strategy 4).
 
 \textbf{Cost-Benefit Analysis:}
 
-Let $C_i$ denote the computational cost (in CPU-seconds) and $D_i$ denote the downtime (in seconds) for strategy $i$. The expected cost per drift event is:
-
-\begin{equation}
-E[\text{Cost}] = \sum_{i=1}^{4} p_i \cdot C_i = 0.78 \cdot C_1 + 0.15 \cdot C_2 + 0.06 \cdot C_3 + 0.01 \cdot C_4
-\end{equation}
-
-where $p_i$ is the probability of selecting strategy $i$.
+Let $C_i$ denote the computational cost (in CPU-seconds) and $A_i$ denote the adaptation latency (in seconds) for strategy $i$. During adaptation latency, the system continues processing with the current model; only the model parameters being updated are affected, not the entire pipeline. The expected cost per drift event depends on which strategy is selected by the IEC based on drift characteristics.
 
 \textbf{Measured Costs (January--March 2024 drift events):}
 
 \begin{center}
 \begin{tabular}{|l|c|c|c|}
 \hline
-\textbf{Strategy} & \textbf{Frequency} & \textbf{Cost (CPU-s)} & \textbf{Downtime (s)} \\
+\textbf{Strategy} & \textbf{Relative Frequency} & \textbf{Cost (CPU-s)} & \textbf{Adaptation Latency} \\
 \hline
-Continuous Evolution & 78\% & 8.2 & 0 \\
-Switching Scheme & 15\% & 0.3 & 0 \\
-METER Adaptation & 6\% & 142.5 & 12 \\
-Spatial Tracking & 1\% & 1,840.0 & 180 \\
+Continuous Evolution & High & Low & None (incremental update) \\
+Switching Scheme & Moderate & Minimal & None (model swap) \\
+METER Adaptation & Low & Medium & Brief (parameter shift) \\
+Spatial Tracking & Rare & High & Moderate (full retraining) \\
 \hline
 \end{tabular}
 \end{center}
 
-\begin{equation}
-E[\text{Cost}] = 0.78(8.2) + 0.15(0.3) + 0.06(142.5) + 0.01(1{,}840) = 6.4 + 0.05 + 8.6 + 18.4 = 33.5 \text{ CPU-s}
-\end{equation}
-
-\textbf{Comparison with Single-Strategy Baseline:} A traditional system that always applies full retraining (equivalent to Spatial Tracking for all drift events) would incur $1{,}840$ CPU-seconds per drift event. The IEC's multi-strategy approach achieves a \textbf{54.9$\times$ cost reduction} ($1{,}840 / 33.5 = 54.9$) by exhausting lightweight strategies before resorting to expensive operations.
+The IEC's multi-strategy approach reduces expected cost compared to a traditional system that always applies full retraining by exhausting lightweight strategies before resorting to expensive operations.
 
 \subsection{IEC 3-Tier Self-Adaptation Protocol}
 
@@ -554,7 +484,7 @@ Within each strategy, the IEC executes a tiered response protocol for operationa
         \begin{itemize}
             \item Flink subscribes to \texttt{if-model-updates} topic via Broadcast State
             \item All parallel IsolationForestOperator instances receive new model
-            \item Zero-downtime atomic model swap in Flink JVM memory
+            \item Zero-pipeline-interruption atomic model swap in Flink JVM memory
         \end{itemize}
 \end{enumerate}
 
@@ -574,8 +504,8 @@ Prior work on drift detection uses single-strategy adaptation (always retrain). 
 \begin{itemize}
     \item \textbf{4 complementary strategies:} Continuous Evolution, Switching, METER, Spatial Tracking
     \item \textbf{Sequential fallback:} Exhaust lightweight strategies before expensive operations
-    \item \textbf{Cost efficiency:} 78\% of drift resolved by fast incremental updates (seconds)
-    \item \textbf{Zero-downtime updates:} Broadcast State enables atomic model swap in Flink JVM
+    \item \textbf{Efficient adaptation:} Most drift resolved by fast incremental updates (seconds) rather than full retraining
+    \item \textbf{Zero-pipeline-interruption model swap:} Broadcast State delivers model updates without pausing the stream processing pipeline
 \end{itemize}
 
 % ================================================
@@ -610,7 +540,7 @@ CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundari
 
     \item \textbf{Component 2: Isolation Forest Trees (Non-Parametric)}
         \begin{itemize}
-            \item \textbf{Purpose:} Score anomalies using a \textbf{single global ensemble} of random binary trees trained on ALL 2.96M ultra-clean records (Chapter 4.1.3). Trees are NOT trained separately per cluster.
+            \item \textbf{Purpose:} Score anomalies using a \textbf{single global ensemble} of random binary trees trained on ALL 2.96M ultra-clean records. Trees are NOT trained separately per cluster.
             \item \textbf{Input:} 21D enhanced features (15D base + 6D ratio features) for each trip
             \item \textbf{Output:} Anomaly score $s \in [0, 1]$ based on path length to isolate the point
             \item \textbf{Adaptation:} Trees incrementally updated via online learning (River's HalfSpaceTrees)
@@ -652,31 +582,17 @@ The Hybrid K-Means iForestASD model uses HalfSpaceTrees (River implementation of
 \hline
 \textbf{Parameter} & \textbf{Value} & \textbf{Baseline} & \textbf{Rationale} \\
 \hline
-n\_trees & 200 & 100 & More trees → better recall (92.2\% vs 81.5\%) \\
-height & 10 & 8 & Deeper trees → better multivariate detection \\
-window\_size & 512 & 256 & Larger window → more stable scores \\
+n\_trees & 200 & 100 & More trees yield better recall and lower false positive rates \\
+height & 10 & 8 & Deeper trees enable better multivariate detection \\
+window\_size & 512 & 256 & Larger window produces more stable scores \\
 seed & 42 & 42 & Reproducibility \\
 \hline
 \end{tabular}
 \end{center}
 
-\textbf{Configuration Justification:}
+The configuration was validated via offline prototype testing on synthetic anomaly datasets to identify the optimal balance between detection accuracy and computational cost.
 
-The configuration was validated via offline prototype testing on 50K EXTREME synthetic anomalies (Chapter 4.1.3):
-
-\begin{itemize}
-    \item \textbf{Baseline config (100 trees, height=8, window=256):} Recall=81.5\%, FPR=63.6\% (unacceptable -- 2 out of 3 normal trips flagged)
-    \item \textbf{Prototype config (200 trees, height=10, window=512):} Recall=92.2\%, FPR=5.0\% (\textbf{12.7$\times$ FPR improvement})
-\end{itemize}
-
-The increase from 100 to 200 trees provides:
-\begin{itemize}
-    \item \textbf{Recall improvement:} +10.7 percentage points (81.5\% $\to$ 92.2\%)
-    \item \textbf{FPR reduction:} -58.6 percentage points (63.6\% $\to$ 5.0\%)
-    \item \textbf{Computational cost:} Training time doubles (2.5h $\to$ 5h on 2.96M records), but this is a one-time offline cost. Inference latency increases only 8\% (46ms $\to$ 50ms per record).
-\end{itemize}
-
-The trade-off is heavily favorable: doubling offline training time yields a 12.7$\times$ reduction in production false positives, making the system usable in practice.
+The increase from 100 to 200 trees provides improved recall and reduced false positive rates. The trade-off is an increase in offline training time, which is a one-time cost. Inference latency increases only marginally, making the configuration suitable for real-time streaming applications.
 
 \subsection{Spatio-Temporal Feature Engineering}
 
@@ -776,9 +692,9 @@ These 15 features give the hybrid model the contextual information needed to dis
 
 \subsection{In-Memory Deployment with Flink Broadcast State}
 
-CA-DQStream eliminates all external HTTP calls. The hybrid K-Means iForestASD model runs \textbf{directly inside the Flink JVM} via an in-memory model instance managed by Flink's Broadcast State mechanism.
+CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The hybrid K-Means iForestASD model runs \textbf{directly inside the Flink JVM} via an in-memory model instance managed by Flink's Broadcast State mechanism.
 
-\textbf{Zero-Downtime Model Update Protocol:}
+\textbf{Zero-Pipeline-Interruption Model Update Protocol:}
 \begin{enumerate}
     \item IEC detects drift via ADWIN on meta-stream
     \item IEC triggers model update in MLflow (incremental, METER, or full retrain)
@@ -796,9 +712,9 @@ Prior work on streaming DQ uses either (1) basic IForest without context awarene
 \begin{itemize}
     \item \textbf{Hybrid architecture:} K-Means (context boundaries) + iForestASD (anomaly scoring)
     \item \textbf{Spatio-temporal features:} Cyclical encoding (time) + grid encoding (space)
-    \item \textbf{METER fast adaptation:} Shift K-Means centroids without full retraining (6\% of drift)
-    \item \textbf{In-memory scoring:} Zero external HTTP calls, microsecond latency via Broadcast State
-    \item \textbf{Validated performance:} F1=0.91, meeting production targets (FPR below threshold, Recall exceeding target)
+    \item \textbf{METER fast adaptation:} Shift K-Means centroids without full retraining
+    \item \textbf{In-memory scoring:} No synchronous per-record HTTP calls, microsecond latency via Broadcast State
+    \item \textbf{Validated performance:} Meeting production targets (FPR below threshold, Recall exceeding target)
 \end{itemize}
 
 % ================================================
@@ -809,13 +725,13 @@ Prior work on streaming DQ uses either (1) basic IForest without context awarene
 This chapter presented the four core innovations of CA-DQStream, each addressing a specific research question:
 
 \begin{enumerate}
-    \item \textbf{4D Context-Aware Thresholding [RQ5]:} Reduces FPR by 9.2$\times$ (38.7\% $\to$ 4.2\%) through 588-cell threshold matrix with automated computation and intelligent fallback.
+    \item \textbf{4D Context-Aware Thresholding [RQ5]:} Reduces false positive rate through a 588-cell threshold matrix with automated computation and intelligent fallback.
 
-    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Achieves 2.9$\times$ latency reduction (843ms $\to$ 294ms) and 2.2$\times$ throughput improvement (8.2K $\to$ 18.5K events/sec) through fork-join parallelism with early exit optimization.
+    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Achieves latency reduction and throughput improvement through fork-join parallelism with early exit optimization.
 
-    \item \textbf{Intelligent Evolution Controller [RQ3]:} Selects from 4 adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking) with 78\% of drift resolved by fast incremental updates.
+    \item \textbf{Intelligent Evolution Controller [RQ3]:} Selects from 4 adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking) with most drift resolved by fast incremental updates.
 
-    \item \textbf{Hybrid K-Means iForestASD [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection, achieving F1=0.91.
+    \item \textbf{Hybrid K-Means iForestASD [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection.
 \end{enumerate}
 
 These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, iForestASD scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.

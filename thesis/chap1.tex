@@ -1,6 +1,4 @@
 \chapter{BACKGROUND AND RELATED WORKS}
-\pagestyle{fancy}
-\pagenumbering{arabic}
 
 % ================================================
 % 1.1 Overview
@@ -149,7 +147,7 @@ CA-DQStream addresses all six dimensions through its layered architecture, as de
     \item \textbf{Graceful degradation:} System continues with Canary alone if Complex fails
 \end{itemize}
 
-Experiment 8a validates a 2.9$\times$ latency reduction (p99: 294ms vs 843ms) and 2.2$\times$ throughput improvement (18K vs 8K events/sec) compared to linear pipelines.
+Experiment 7 validates latency reduction and throughput improvement through early exit optimization and parallel execution compared to linear pipelines.
 
 \textbf{Gap:} No existing DQ framework uses Rendezvous architecture for validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use sequential processing. CA-DQStream is the first to demonstrate fork-join parallelism for streaming data quality at scale.
 
@@ -193,7 +191,7 @@ The score $s \in [0, 1]$: values close to 1 indicate anomalies (short paths, eas
 CA-DQStream integrates Isolation Forest into the Flink processing pipeline to detect multivariate anomalies that business rules cannot express.
 
 % ================================================
-% 1.6 Chapter Summary
+% 1.5 Chapter Summary
 % ================================================
 \section{Chapter Summary}
 

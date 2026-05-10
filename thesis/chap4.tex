@@ -75,8 +75,8 @@ The model would learn: ``Fare = -\$15.00 appears 12,456 times in training data, 
 
 \textbf{Empirical Impact (Prototype Testing):}
 \begin{itemize}
-    \item \textbf{Model trained on raw data:} FNR=68.2\%, FPR=23.4\% (unusable -- misses 2/3 of fraud, flags 1/4 of normal trips)
-    \item \textbf{Model trained on ultra-clean data:} FNR=7.8\%, FPR=5.0\% (production-grade)
+    \item \textbf{Model trained on raw data:} High false negative rate and false positive rate (unusable for production)
+    \item \textbf{Model trained on ultra-clean data:} Significantly lower false negative rate and false positive rate (production-grade)
 \end{itemize}
 
 The 3-stage sequential funnel eliminates this catastrophic failure mode by ensuring the model trains only on \textbf{pristine data} -- records that have passed both Schema Filter and Business Rules validation.
@@ -236,7 +236,7 @@ Traditional global thresholds (e.g., ``flag if fare $>$ \$100'') produce:
     \item \textbf{False Negatives (FN)}: 40--60\% on fraud (fraudulent Standard trips at \$90 pass undetected)
 \end{itemize}
 
-\textbf{CA-DQStream Solution:} 4D Context-Aware Threshold Matrix (Chapter 3.2) assigns different thresholds to different contexts, reducing FPR from 38.7\% to 4.2\% (9.2$\times$ improvement).
+\textbf{CA-DQStream Solution:} 4D Context-Aware Threshold Matrix (Chapter 3.2) assigns different thresholds to different contexts, significantly reducing false positives compared to global thresholds.
 
 \textbf{Challenge 2: Multivariate Fraud Patterns (Undetectable by Rules)}
 
@@ -263,9 +263,9 @@ NYC Taxi fare distribution shifts over time due to:
     \item \textbf{Policy}: Congestion pricing (2024) adds \$2.50 to Manhattan trips
 \end{itemize}
 
-\textbf{Problem:} Static models trained on January 2024 degrade by March 2024 (FPR increases from 4.2\% to 12.8\% due to seasonal drift).
+\textbf{Problem:} Static models trained on January 2024 may degrade over time due to seasonal drift.
 
-\textbf{CA-DQStream Solution:} Intelligent Evolution Controller (Chapter 3.4) monitors meta-stream via ADWIN and selects from 4 adaptation strategies, resolving 78\% of drift via fast incremental updates (seconds, not hours).
+\textbf{CA-DQStream Solution:} Intelligent Evolution Controller (Chapter 3.4) monitors meta-stream via ADWIN and selects from 4 adaptation strategies, resolving most drift via fast incremental updates.
 
 \textbf{Summary: Dataset Challenges $\to$ CA-DQStream Architecture}
 
@@ -274,11 +274,11 @@ NYC Taxi fare distribution shifts over time due to:
 \hline
 \textbf{Challenge} & \textbf{Traditional DQ Failure} & \textbf{CA-DQStream Solution} \\
 \hline
-Extreme heterogeneity (3.4$\times$ variance) & Global thresholds: FPR=38.7\% & 4D Context-Aware Thresholds: FPR=4.2\% (9.2$\times$ better) \\
+Extreme heterogeneity (3.4$\times$ variance) & Global thresholds produce high false positive rates on heterogeneous data & 4D Context-Aware Thresholds: Different thresholds per context \\
 \hline
-Multivariate fraud (86.5\% of anomalies) & Business rules catch only 13.5\% & Hybrid K-Means iForestASD: Recall=92.2\% \\
+Multivariate fraud (complex anomaly patterns) & Business rules catch single-feature violations only & Hybrid K-Means iForestASD: Multivariate anomaly detection \\
 \hline
-Concept drift (seasonal + events) & Static models degrade (FPR 4.2\% $\to$ 12.8\%) & IEC 4-strategy adaptation: 78\% resolved in seconds \\
+Concept drift (seasonal + events) & Static models become stale over time & IEC 4-strategy adaptation: Automatic recalibration \\
 \hline
 \end{tabular}
 \end{center}
@@ -442,9 +442,9 @@ The ratio feature makes the fraud signal \textbf{context-independent}, enabling 
 
 \textbf{Empirical Validation (Offline Prototype):}
 \begin{itemize}
-    \item \textbf{Baseline (15D absolute features)}: Recall=81.5\%, FPR=63.6\% (unacceptable -- 2 out of 3 normal trips flagged)
-    \item \textbf{Enhanced (21D with ratio features)}: Recall=92.2\%, FPR=5.0\% (\textbf{12.7$\times$ FPR improvement})
-    \item \textbf{Variance reduction}: $\sigma_{\text{ratio}} / \sigma_{\text{absolute}} = 0.01$--$0.1$ (10--100$\times$ lower)
+    \item \textbf{Baseline (15D absolute features):} Lower recall and higher false positive rate compared to enhanced features
+    \item \textbf{Enhanced (21D with ratio features):} Improved recall and lower false positive rate
+    \item \textbf{Variance reduction:} Ratio features significantly reduce coefficient of variation compared to raw features
 \end{itemize}
 
 The prototype validation confirmed that ratio features are \textbf{essential} for achieving production-grade accuracy on heterogeneous taxi data. Without them, the model cannot distinguish between legitimate high-fare trips (airport) and fraudulent high-fare trips (meter tampering).
@@ -453,9 +453,9 @@ The 21-dimensional enhanced feature vector is normalized to zero mean and unit v
 
 \textbf{In-Memory Scoring with Flink Broadcast State:}
 
-CA-DQStream eliminates all external HTTP calls. The Hybrid K-Means iForestASD model runs \textbf{directly inside the Flink JVM} via an in-memory model instance managed by Flink's Broadcast State mechanism.
+CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The Hybrid K-Means iForestASD model runs \textbf{directly inside the Flink JVM} via an in-memory model instance managed by Flink's Broadcast State mechanism.
 
-Zero-Downtime Model Update Protocol:
+Zero-Pipeline-Interruption Model Update Protocol:
 \begin{enumerate}
     \item IEC detects drift via ADWIN on meta-stream
     \item IEC triggers model update in MLflow (incremental, METER, or full retrain)
@@ -463,7 +463,7 @@ Zero-Downtime Model Update Protocol:
     \item MLflow publishes model bytes to \texttt{if-model-updates} Kafka topic
     \item Flink subscribes to topic using Broadcast State
     \item All parallel IsolationForestOperator instances receive new model
-    \item Atomic model swap in Flink JVM memory (no downtime)
+    \item Atomic model swap in Flink JVM memory (pipeline continues uninterrupted)
 \end{enumerate}
 
 \textbf{Priority assignment:}
@@ -618,7 +618,7 @@ When drift is detected, the IEC executes a tiered response protocol for operatio
     \item Trigger Hybrid K-Means iForestASD retraining on MLflow with new training window.
     \item Validate new model against synthetic anomaly dataset.
     \item Publish new model to \texttt{if-model-updates} Kafka topic.
-    \item Flink Broadcast State delivers new model to all IFScoringOperator instances (zero-downtime hot-swap).
+    \item Flink Broadcast State delivers new model to all IFScoringOperator instances (pipeline continues uninterrupted).
 \end{itemize}
 
 The multi-strategy adaptation framework (Chapter 3.4) determines which strategy (Continuous Evolution, Switching, METER, Spatial Tracking) is applied based on drift characteristics.
@@ -665,7 +665,17 @@ Model update actions (retrain, METER shift, Canary switch) can fail due to trans
     \item Successful retries trigger the same FastAPI endpoints (\texttt{/api/retrain}, \texttt{/api/meter\_shift}, etc.) and are logged to the \texttt{quality\_metrics} table with retry metadata.
 \end{enumerate}
 
-This retry mechanism ensures that temporary failures (e.g., MLflow pod restart, network timeout) do not cause permanent loss of IEC adaptation actions. The exponential backoff prevents retry storms during sustained outages.
+\textbf{Update Lock (Cooldown) Mechanism:} Without a coordination mechanism, a sustained failure in MLflow would cause ADWIN to continuously detect drift and IEC to emit retry actions, creating a retry storm that overwhelms the system. CA-DQStream addresses this with an \textbf{Update Lock} (cooldown) mechanism:
+
+\begin{itemize}
+    \item After IEC triggers any model update action (retrain, METER shift, or model switch), the system enters a \textbf{Lock State} for a cooldown window $T_{\text{lock}}$ (default: 15 minutes).
+    \item During the lock window, ADWIN drift detections on the same metric are suppressed (logged but not actioned). Drift alerts are still emitted to Grafana, but no new retrain/switch/METER actions are dispatched.
+    \item The lock is released when either: (a) the cooldown window expires, or (b) the IEC receives a \texttt{/api/model-ready} callback confirming successful model deployment.
+    \item This prevents the retry storm problem: even if MLflow is down for 17 minutes (the maximum exponential backoff), the system generates at most one retry action rather than hundreds of queued retries accumulating in the replay topic.
+    \item The lock is scoped per region/cluster to avoid blocking unrelated model updates. For example, a lock on the JFK airport context does not prevent model updates for the Manhattan context.
+\end{itemize}
+
+This retry mechanism ensures that temporary failures (e.g., MLflow pod restart, network timeout) do not cause permanent loss of IEC adaptation actions. The exponential backoff combined with the update lock prevents retry storms during sustained outages.
 
 \textbf{Operational Impact:}
 
@@ -967,7 +977,7 @@ With PgBouncer:
 \frac{\text{RAM}_{\text{direct}} - \text{RAM}_{\text{pooled}}}{\text{RAM}_{\text{direct}}} = \frac{560 - 250}{560} = 55.4\% \text{ reduction}
 \end{equation}
 
-Additionally, connection establishment time is eliminated for pooled connections (no TCP handshake, no authentication, no backend process fork), reducing p99 write latency by 95\% (from 450ms to 22ms).
+\textbf{Critical benefit: Connection pool exhaustion prevention.} The primary value of PgBouncer is preventing PostgreSQL from running out of connections under high concurrency. Without pooling, 56 concurrent connections approach the PostgreSQL \texttt{max\_connections=100} limit, leaving no headroom for monitoring, admin tools, or connection spikes during Flink restarts. PgBouncer multiplexes 42 logical client connections onto 25 physical server connections, ensuring PostgreSQL never exhausts its connection pool and the system never encounters FATAL connection errors during production load spikes.
 
 
 % ================================================
@@ -1008,7 +1018,7 @@ CA-DQStream uses Docker Compose for containerized deployment with automatic vers
     \item \textbf{Git tagging:} Each spec version (V1.9, V2.0) gets a git tag
     \item \textbf{Docker build:} Automated build of Flink job JAR and Python dependencies
     \item \textbf{MLflow integration:} Model artifacts pulled from MLflow registry during build
-    \item \textbf{Rolling deployment:} Flink savepoints enable zero-downtime pipeline upgrades
+    \item \textbf{Rolling deployment:} Flink savepoints enable pipeline upgrades without service interruption
 \end{itemize}
 
 % ================================================
@@ -1026,8 +1036,8 @@ This chapter detailed the engineering implementation of CA-DQStream's four core 
     \item \textbf{Optimization Techniques:}
         \begin{itemize}
             \item PyFlink Vectorized UDFs: 16$\times$ throughput improvement
-            \item PgBouncer connection pooling: 95\% reduction in connection overhead
-            \item Broadcast State: zero-downtime model updates
+            \item PgBouncer connection pooling: prevents connection exhaustion, 55\% RAM reduction
+            \item Broadcast State: atomic model swap without pipeline interruption
             \item MurmurHash3: 10--20$\times$ faster than MD5
             \item AggregateFunction pattern: prevents OOM on large windows
         \end{itemize}
