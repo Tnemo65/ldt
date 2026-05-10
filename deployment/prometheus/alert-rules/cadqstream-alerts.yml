@@ -1,0 +1,487 @@
+groups:
+  - name: kafka_alerts
+    interval: 30s
+    rules:
+      # Kafka Broker Down
+      - alert: KafkaBrokerDown
+        expr: up{job="kafka-jmx"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: kafka
+          component: broker
+        annotations:
+          summary: "Kafka broker is down"
+          description: "Kafka broker {{ $labels.instance }} has been down for more than 2 minutes."
+
+      # Kafka Consumer Lag High
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_group_lag_sum > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+          component: consumer
+        annotations:
+          summary: "Kafka consumer lag is high"
+          description: "Consumer group lag on topic {{ $labels.topic }} is {{ $value }} messages behind."
+
+      # Kafka Under-Replicated Partitions
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_topic_partition_under_replicated_topic > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: kafka
+          component: replication
+        annotations:
+          summary: "Kafka has under-replicated partitions"
+          description: "{{ $value }} partition(s) are under-replicated on topic {{ $labels.topic }}."
+
+      # Kafka Offline Partitions
+      - alert: KafkaOfflinePartitions
+        expr: kafka_topic_partition_offline_log_directory > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+          component: storage
+        annotations:
+          summary: "Kafka has offline partitions"
+          description: "{{ $value }} partition(s) are offline on topic {{ $labels.topic }}."
+
+      # Kafka High Produce Rate Drop
+      - alert: KafkaProduceRateDrop
+        expr: |
+          (
+            rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec{topic=~"taxi-nyc-raw|dq-stream-processed"}[5m])
+            /
+            rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec{topic=~"taxi-nyc-raw|dq-stream-processed"}[5m] offset 15m)
+          ) < 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+          component: throughput
+        annotations:
+          summary: "Kafka produce rate dropped significantly"
+          description: "Topic {{ $labels.topic }} message rate dropped by more than 50% compared to 15 minutes ago."
+
+      # Kafka High Request Latency
+      - alert: KafkaHighRequestLatency
+        expr: kafka_network_RequestMetrics_RequestsPerSec{quantile="0.99"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+          component: latency
+        annotations:
+          summary: "Kafka request latency is high"
+          description: "P99 Kafka request latency is {{ $value }}ms on {{ $labels.instance }}."
+
+      # Kafka Exporter Down
+      - alert: KafkaExporterDown
+        expr: up{job="kafka-exporter"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: kafka
+          component: exporter
+        annotations:
+          summary: "Kafka exporter is down"
+          description: "Kafka metrics exporter has been unreachable for 2 minutes."
+
+  - name: flink_alerts
+    interval: 30s
+    rules:
+      # Flink Job Failed
+      - alert: FlinkJobFailed
+        expr: flink_jobmanager_job_status{status="FAILED"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: flink
+          component: job
+        annotations:
+          summary: "Flink job has failed"
+          description: "Flink job {{ $labels.job_name }} has entered FAILED state on {{ $labels.instance }}."
+
+      # Flink Job Restarting
+      - alert: FlinkJobRestarting
+        expr: rate(flink_jobmanager_job_restarting_job_count_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: flink
+          component: job
+        annotations:
+          summary: "Flink job is restarting frequently"
+          description: "Flink job {{ $labels.job_name }} has a restart rate of {{ $value }} restarts/sec."
+
+      # Flink Checkpoint Failure
+      - alert: FlinkCheckpointFailure
+        expr: |
+          rate(flink_jobmanager_job_checkpointing_number_failed_overall[10m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: flink
+          component: checkpoint
+        annotations:
+          summary: "Flink checkpoint failures detected"
+          description: "Flink job {{ $labels.job_name }} has failed checkpoints. Last {{ $value }} failures in 10 minutes."
+
+      # Flink Checkpoint Alignment Duration High
+      - alert: FlinkCheckpointAlignmentHigh
+        expr: flink_jobmanager_job_checkpointing_alignment_duration_seconds{quantile="0.99"} > 30
+        for: 10m
+        labels:
+          severity: warning
+          service: flink
+          component: checkpoint
+        annotations:
+          summary: "Flink checkpoint alignment is slow"
+          description: "P99 checkpoint alignment duration is {{ $value }}s for job {{ $labels.job_name }}."
+
+      # Flink TaskManager Down
+      - alert: FlinkTaskManagerDown
+        expr: up{job="flink-taskmanager"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: flink
+          component: taskmanager
+        annotations:
+          summary: "Flink TaskManager is down"
+          description: "Flink TaskManager {{ $labels.instance }} has been unreachable for 2 minutes."
+
+      # Flink High GC Time
+      - alert: FlinkHighGCTime
+        expr: |
+          rate(jvm_gc_pause_seconds_sum{gc_action="end of major GC"}[5m]) > 5
+          or
+          rate(jvm_gc_pause_seconds_sum{gc_action="end of minor GC"}[5m]) > 30
+        for: 10m
+        labels:
+          severity: warning
+          service: flink
+          component: jvm
+        annotations:
+          summary: "Flink high garbage collection time"
+          description: "JVM GC pause time is elevated on {{ $labels.instance }}. This may impact processing latency."
+
+      # Flink JobManager Down
+      - alert: FlinkJobManagerDown
+        expr: up{job="flink-jobmanager"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: flink
+          component: jobmanager
+        annotations:
+          summary: "Flink JobManager is down"
+          description: "Flink JobManager has been unreachable for 1 minute. No jobs can run."
+
+      # Flink Low Checkpoint Progress
+      - alert: FlinkCheckpointProgressLow
+        expr: |
+          rate(flink_jobmanager_job_checkpointing_number_in_progress[5m]) == 0
+          and
+          rate(flink_jobmanager_job_checkpointing_number_completed[30m]) == 0
+        for: 45m
+        labels:
+          severity: warning
+          service: flink
+          component: checkpoint
+        annotations:
+          summary: "Flink checkpoint progress stalled"
+          description: "No completed checkpoints in the last 30 minutes for job {{ $labels.job_name }}."
+
+      # Flink High Processed Records
+      - alert: FlinkProcessedRecordsHigh
+        expr: rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m]) > 1000000
+        for: 10m
+        labels:
+          severity: info
+          service: flink
+          component: throughput
+        annotations:
+          summary: "Flink high throughput"
+          description: "Flink task {{ $labels.task_name }} is processing {{ $value | humanize }} records/sec."
+
+  - name: postgres_alerts
+    interval: 30s
+    rules:
+      # PostgreSQL Down
+      - alert: PostgreSQLDown
+        expr: up{job="postgres-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: postgres
+          component: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for 1 minute."
+
+      # PostgreSQL High Connection Usage
+      - alert: PostgreSQLHighConnectionUsage
+        expr: |
+          pg_stat_activity_count
+          /
+          pg_settings_max_connections
+          > 0.8
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+          component: connections
+        annotations:
+          summary: "PostgreSQL connection usage is high"
+          description: "PostgreSQL is using {{ $value | humanizePercentage }} of available connections."
+
+      # PostgreSQL Long-Running Queries
+      - alert: PostgreSQLLongRunningQueries
+        expr: |
+          pg_stat_activity_max_duration_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+          component: queries
+        annotations:
+          summary: "PostgreSQL has long-running queries"
+          description: "{{ $value | humanizeDuration }} query running for more than 5 minutes."
+
+      # PostgreSQL Low Cache Hit Rate
+      - alert: PostgreSQLLowCacheHitRate
+        expr: |
+          (
+            sum(pg_stat_database_blks_hit{dbname="dq_pipeline"})
+            /
+            nullif(sum(pg_stat_database_blks_hit{dbname="dq_pipeline"}) + sum(pg_stat_database_blks_read{dbname="dq_pipeline"}), 0)
+          ) < 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: postgres
+          component: cache
+        annotations:
+          summary: "PostgreSQL cache hit rate is low"
+          description: "PostgreSQL buffer cache hit rate is {{ $value | humanizePercentage }}."
+
+      # PostgreSQL Replication Lag (for future HA)
+      - alert: PostgreSQLReplicationLag
+        expr: |
+          pg_replication_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: postgres
+          component: replication
+        annotations:
+          summary: "PostgreSQL replication lag is high"
+          description: "Replication lag is {{ $value | humanizeDuration }}."
+
+      # PostgreSQL Transaction Rate Low
+      - alert: PostgreSQLTransactionRateLow
+        expr: |
+          rate(pg_stat_database_xact_commit{dbname="dq_pipeline"}[15m])
+          +
+          rate(pg_stat_database_xact_rollback{dbname="dq_pipeline"}[15m])
+          < 10
+        for: 30m
+        labels:
+          severity: info
+          service: postgres
+          component: throughput
+        annotations:
+          summary: "PostgreSQL transaction rate is very low"
+          description: "PostgreSQL is processing fewer than 10 transactions/sec. Possible pipeline issue."
+
+      # PostgreSQL Dead Tuples Accumulating
+      - alert: PostgreSQLDeadTuplesAccumulating
+        expr: |
+          pg_stat_user_tables_n_dead_tup > 10000
+        for: 30m
+        labels:
+          severity: warning
+          service: postgres
+          component: maintenance
+        annotations:
+          summary: "PostgreSQL dead tuples accumulating"
+          description: "Table {{ $labels.relname }} has {{ $value | humanize }} dead tuples. VACUUM needed."
+
+  - name: infrastructure_alerts
+    interval: 30s
+    rules:
+      # Host High Memory Usage
+      - alert: HostHighMemoryUsage
+        expr: |
+          1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+          component: memory
+        annotations:
+          summary: "Host memory usage is high"
+          description: "Memory usage on {{ $labels.instance }} is {{ $value | humanizePercentage }}."
+
+      # Host Disk Space Low
+      - alert: HostDiskSpaceLow
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.2
+        for: 5m
+        labels:
+          severity: critical
+          service: infrastructure
+          component: disk
+        annotations:
+          summary: "Host disk space is low"
+          description: "Disk usage on {{ $labels.instance }} is {{ $value | humanizePercentage }} free."
+
+      # Host Disk I/O High
+      - alert: HostHighDiskIO
+        expr: |
+          rate(node_disk_io_time_seconds_total[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          service: infrastructure
+          component: disk
+        annotations:
+          summary: "Host disk I/O utilization is high"
+          description: "Disk I/O utilization on {{ $labels.instance }} is {{ $value | humanizePercentage }}."
+
+      # Host CPU High
+      - alert: HostHighCPU
+        expr: |
+          100 - (rate(node_cpu_seconds_total{mode="idle"}[5m]) * 100) > 90
+        for: 15m
+        labels:
+          severity: warning
+          service: infrastructure
+          component: cpu
+        annotations:
+          summary: "Host CPU usage is very high"
+          description: "CPU usage on {{ $labels.instance }} has been above 90% for 15 minutes."
+
+      # Container Restart Loop
+      - alert: ContainerRestartLoop
+        expr: |
+          rate(container_restart_count[15m]) > 0.5
+        for: 10m
+        labels:
+          severity: critical
+          service: infrastructure
+          component: container
+        annotations:
+          summary: "Container is in restart loop"
+          description: "Container {{ $labels.container_label_com_docker_compose_service }} is restarting more than twice per minute."
+
+      # Prometheus Target Down
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 3m
+        labels:
+          severity: warning
+          service: monitoring
+          component: prometheus
+        annotations:
+          summary: "Prometheus scrape target is down"
+          description: "Target {{ $labels.job }} at {{ $labels.instance }} has been down for 3 minutes."
+
+      # Prometheus High Scraping Latency
+      - alert: PrometheusHighScrapeLatency
+        expr: |
+          prometheus_target_interval_length_seconds{quantile="0.99"} > 20
+        for: 5m
+        labels:
+          severity: warning
+          service: monitoring
+          component: prometheus
+        annotations:
+          summary: "Prometheus scrape interval is high"
+          description: "P99 scrape interval on {{ $labels.job }} is {{ $value }}s (expected 15s)."
+
+      # MinIO Down
+      - alert: MinIODown
+        expr: up{job="minio"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: minio
+          component: storage
+        annotations:
+          summary: "MinIO is down"
+          description: "MinIO object storage has been unreachable for 2 minutes."
+
+      # MLflow Down
+      - alert: MLflowDown
+        expr: up{job="mlflow"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: mlflow
+          component: tracking
+        annotations:
+          summary: "MLflow is down"
+          description: "MLflow tracking server has been unreachable for 5 minutes."
+
+  - name: cadqstream_pipeline_alerts
+    interval: 60s
+    rules:
+      # Pipeline End-to-End Latency High
+      - alert: PipelineE2ELatencyHigh
+        expr: |
+          flink_jobmanager_job_latency_source_idleness{quantile="0.99"} > 60
+        for: 10m
+        labels:
+          severity: warning
+          service: cadqstream
+          component: pipeline
+        annotations:
+          summary: "Pipeline end-to-end latency is high"
+          description: "P99 source idle time is {{ $value }}s for job {{ $labels.job_name }}. Possible bottleneck."
+
+      # Pipeline Record Drop
+      - alert: PipelineRecordDrop
+        expr: |
+          rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m]) == 0
+          and
+          rate(flink_taskmanager_job_task_numRecordsInPerSecond_sum[5m]) > 100
+        for: 15m
+        labels:
+          severity: critical
+          service: cadqstream
+          component: pipeline
+        annotations:
+          summary: "Pipeline is dropping records"
+          description: "Flink task {{ $labels.task_name }} is receiving records but outputting none."
+
+      # Anomaly Detection Rate Spike
+      - alert: AnomalyRateSpike
+        expr: |
+          flink_jobmanager_job_task_S_cadqstream_anomaly_rate > 0.30
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream
+          component: detection
+        annotations:
+          summary: "Anomaly detection rate spiked"
+          description: "Anomaly rate on {{ $labels.neighborhood }} is {{ $value | humanizePercentage }} (normal < 15%)."
+
+      # Drift Detected
+      - alert: DriftDetected
+        expr: |
+          flink_jobmanager_job_task_S_cadqstream_drift_detected > 0
+        for: 3m
+        labels:
+          severity: warning
+          service: cadqstream
+          component: iec
+        annotations:
+          summary: "Data drift detected by IEC"
+          description: "IEC detected drift in {{ $labels.neighborhood }}/{{ $labels.metric }} with magnitude {{ $value }}."

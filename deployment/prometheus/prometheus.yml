@@ -1,0 +1,112 @@
+# =============================================================================
+# Prometheus Configuration for CA-DQStream
+# Scrapes metrics from all pipeline components
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    env: cadqstream
+    cluster: production
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+
+rule_files:
+  - "/etc/prometheus/alert-rules/*.yml"
+
+scrape_configs:
+  # ── Prometheus Self-Monitoring ──────────────────────────────────────────────
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: prometheus
+
+  # ── Node Exporter - Host-Level Infrastructure ───────────────────────────────
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'cadqstream-host'
+
+  # ── PostgreSQL Exporter ────────────────────────────────────────────────────
+  - job_name: 'postgres-exporter'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'postgres'
+
+  # ── Kafka Exporter ─────────────────────────────────────────────────────────
+  - job_name: 'kafka-exporter'
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'kafka'
+
+  # ── Flink JobManager ────────────────────────────────────────────────────────
+  - job_name: 'flink-jobmanager'
+    static_configs:
+      - targets: ['flink-jobmanager:9248']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'flink-jobmanager'
+
+  # ── Flink TaskManager(s) ────────────────────────────────────────────────────
+  - job_name: 'flink-taskmanager'
+    static_configs:
+      - targets: ['flink-taskmanager:9249']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'flink-taskmanager'
+      - source_labels: [__hostname__]
+        target_label: taskmanager_id
+
+  # ── MinIO ──────────────────────────────────────────────────────────────────
+  - job_name: 'minio'
+    static_configs:
+      - targets: ['minio:9096']
+    metrics_path: /minio/v2/metrics/point
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'minio'
+
+  # ── MLflow ─────────────────────────────────────────────────────────────────
+  - job_name: 'mlflow'
+    static_configs:
+      - targets: ['mlflow:5000']
+    metrics_path: /metrics
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'mlflow'
+
+  # ── Kafka JMX (direct) ─────────────────────────────────────────────────────
+  - job_name: 'kafka-jmx'
+    static_configs:
+      - targets: ['kafka:9999']
+    metrics_path: /jmx_prometheus1390461/jmx
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'kafka-jmx'

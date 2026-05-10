@@ -1,5 +1,13 @@
 # Development Rules
 
+## 0. MCP Servers
+
+This project integrates multiple MCP (Model Context Protocol) servers for AI-assisted development across the streaming infrastructure stack. See `MCP-SERVERS.md` for:
+- Setup guide for all 6 MCP servers (Confluent, Kafka, PostgreSQL, MinIO, Grafana, Prometheus)
+- Per-client configuration (Cursor, Claude Desktop, VS Code)
+- Usage examples and troubleshooting
+- Pre-configured JSON files in `mcp-config/`
+
 ## 1. Specification Adherence
 
 **NEVER deviate from plans/specs without asking user first.**

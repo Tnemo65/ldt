@@ -1,0 +1,75 @@
+# =============================================================================
+# Flink Configuration - flink-conf.yml
+# =============================================================================
+
+# JobManager
+jobmanager.rpc.address: ${JOB_MANAGER_RPC_ADDRESS}
+jobmanager.rpc.port: ${JOB_MANAGER_RPC_PORT}
+jobmanager.memory.process.size: 2048m
+jobmanager.execution.failover-strategy: region
+
+# TaskManager
+taskmanager.memory.process.size: 4096m
+taskmanager.memory.managed.fraction: 0.4
+taskmanager.numberOfTaskSlots: ${TASK_MANAGER_NUMBER_OF_TASK_SLOTS}
+taskmanager.memory.task.off-heap.enabled: true
+parallelism.default: ${FLINK_PARALLELISM_DEFAULT}
+
+# State Backend
+state.backend: ${FLINK_STATE_BACKEND}
+state.checkpoints.dir: s3://checkpoints/flink-checkpoints
+state.savepoints.dir: s3://checkpoints/flink-savepoints
+state.checkpoints.num-retained: 3
+
+# Checkpointing
+execution.checkpointing.mode: EXACTLY_ONCE
+execution.checkpointing.interval: ${FLINK_CHECKPOINT_INTERVAL}
+execution.checkpointing.max-concurrent-checkpoints: 1
+execution.checkpointing.min-pause: 30000
+execution.checkpointing.timeout: 300000
+execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+execution.checkpointing.tolerable-failed-checkpoints: 3
+execution.checkpointing.aligned-checkpoint-timeout: 60000
+
+# Restart Strategy
+restart-strategy: exponential-delay
+restart-strategy.exponential-delay.initial-backoff: 10000
+restart-strategy.exponential-delay.max-backoff: 300000
+restart-strategy.exponential-delay.backoff-multiplier: 2.0
+restart-strategy.exponential-delay.reset-backoff-threshold: 600000
+restart-strategy.exponential-delay.jitter-factor: 0.1
+
+# REST API
+rest.port: 8081
+rest.bind-address: 0.0.0.0
+rest.enable cors: true
+
+# Metrics
+metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+metrics.reporter.prom.port: 9248
+metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+metrics.scope.system.jobmanager: jobmanager
+metrics.scope.taskmanager: taskmanager
+metrics.scope.operator: operator
+
+# Network
+taskmanager.network.memory.fraction: 0.1
+taskmanager.network.memory.min: 64mb
+taskmanager.network.memory.max: 1024mb
+
+# Security
+security.ssl.internal.enabled: false
+security.ssl.rest.enabled: false
+
+# Python UDF
+python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
+python.client.executor.args: --python /usr/local/bin/python3
+
+# Pipeline
+pipeline.auto.type-info-hierarchy.enabled: true
+pipeline.object-reuse.max-age: 60000
+
+# RocksDB (optional, for large state)
+# state.backend.incremental: true
+# state.backend.rocksdb.memory.managed: true
+# state.backend.rocksdb.checkpoint.transfer.thread.num: 2

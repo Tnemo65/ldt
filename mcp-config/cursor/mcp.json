@@ -1,0 +1,58 @@
+{
+  "$schema": "https://cursor.sh/schemas/mcp-json-v0.schema.json",
+  "mcpServers": {
+    "confluent": {
+      "command": "C:\\Program Files\\nodejs\\npx.cmd",
+      "args": ["-y", "@confluentinc/mcp-confluent", "-e", "C:/proj/ldt/mcp-confluent/.env"]
+    },
+
+    "postgres": {
+      "command": "C:\\Users\\Administrator\\.local\\bin\\postgres-mcp.exe",
+      "args": ["--access-mode=unrestricted"],
+      "env": {
+        "DATABASE_URI": "postgresql://cadqstream:cadqstream123@localhost:5432/dq_pipeline"
+      }
+    },
+
+    "grafana": {
+      "command": "uvx",
+      "args": ["mcp-grafana"],
+      "env": {
+        "GRAFANA_URL": "http://localhost:3000",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": "<YOUR_GRAFANA_SERVICE_ACCOUNT_TOKEN>"
+      }
+    },
+
+    "prometheus": {
+      "command": "uvx",
+      "args": ["awslabs.prometheus-mcp-server@latest"],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      }
+    },
+
+    "minio": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-e", "MINIO_ENDPOINT=localhost:9000",
+        "-e", "MINIO_ACCESS_KEY=minioadmin",
+        "-e", "MINIO_SECRET_KEY=minioadmin123",
+        "-e", "MINIO_SECURE=false",
+        "quay.io/minio/aistor/mcp-server-aistor:latest",
+        "--allow-admin", "--allow-write", "--allow-delete"
+      ]
+    },
+
+    "kafka": {
+      "command": "C:\\Users\\Administrator\\go\\bin\\kafka-mcp-server.exe",
+      "env": {
+        "KAFKA_BROKERS": "localhost:9092",
+        "KAFKA_CLIENT_ID": "kafka-mcp-server",
+        "MCP_TRANSPORT": "stdio",
+        "KAFKA_SASL_MECHANISM": "",
+        "KAFKA_TLS_ENABLE": "false"
+      }
+    }
+  }
+}
