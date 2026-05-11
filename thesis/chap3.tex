@@ -17,10 +17,10 @@ This chapter presents the four core innovations of CA-DQStream, each addressing 
 
     \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies [RQ3]:} Multi-strategy drift adaptation that selects lightweight incremental updates versus expensive full retraining based on drift characteristics.
 
-    \item \textbf{Hybrid K-Means sHST Model [RQ2]:} Integration of parametric clustering (K-Means) with non-parametric anomaly scoring (Streaming HalfSpaceTrees) for context-aware multivariate detection.
+    \item \textbf{Hybrid K-Means + sklearn IsolationForest [RQ2]:} Integration of parametric clustering (K-Means) with non-parametric anomaly scoring (sklearn IsolationForest) for context-aware multivariate detection.
 \end{enumerate}
 
-These innovations work synergistically: the 4D thresholds provide context cells, K-Means clusters data within contexts, sHST scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts the system when drift occurs.
+These innovations work synergistically: the 4D thresholds provide context cells, K-Means clusters data within contexts, sklearn IsolationForest scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts the system when drift occurs.
 
 
 % ================================================
@@ -153,7 +153,7 @@ where $\Phi$ is the cumulative distribution function of the standard normal dist
 
 \subsection{Integration with Hybrid ML Model}
 
-The 4D context-aware thresholds work synergistically with the Hybrid K-Means sHST model (Section 4.5):
+The 4D context-aware thresholds work synergistically with the Hybrid K-Means + sklearn IsolationForest model (Section 4.5):
 
 \begin{enumerate}
     \item \textbf{Feature Engineering:} The 21D enhanced feature vector includes 15D base features (context dimensions: trip\_type, hour\_sin, hour\_cos, dow\_sin, dow\_cos, pickup\_grid\_x, pickup\_grid\_y, fare, distance, speed, etc.) plus 6D ratio features (fare\_per\_mile\_ratio, implied\_speed\_ratio, etc.) that normalize by baseline values to reduce variance 10--100$\times$. The hybrid model learns the normal joint distribution \emph{within each context}.
@@ -215,7 +215,7 @@ CA-DQStream adopts a \textbf{Rendezvous Pipeline} architecture (also known as ``
 \begin{itemize}
     \item \textbf{Branch 1 -- Canary (Rule-Based):} Fast, stateless, deterministic. Executes 6 business rules (fare$\geq$0, distance$>$0, speed$<$100 mph, etc.) with <5ms latency. Acts as a lightweight sanity check.
 
-    \item \textbf{Branch 2 -- Complex (ML-Based):} Slower, stateful, probabilistic. Computes 21D enhanced features (15D base + 6D ratio features), scores with Hybrid K-Means sHST (~50ms latency). Detects multivariate anomalies that rules cannot express.
+    \item \textbf{Branch 2 -- Complex (ML-Based):} Slower, stateful, probabilistic. Computes 21D enhanced features (15D base + 6D ratio features), scores with Hybrid K-Means + sklearn IsolationForest (~50ms latency). Detects multivariate anomalies that rules cannot express.
 \end{itemize}
 
 The two branches \textbf{join} at the \textbf{MetaAggregator} (Rendezvous Point), which merges both evaluation streams for unified quality metrics and storage.
@@ -528,9 +528,9 @@ Prior work on drift detection uses single-strategy adaptation (always retrain). 
 \end{itemize}
 
 % ================================================
-% 4.5 Innovation 4: Hybrid K-Means sHST Model [RQ2]
+% 4.5 Innovation 4: Hybrid K-Means + sklearn IsolationForest Model [RQ2]
 % ================================================
-\section{Innovation 4: Hybrid K-Means sHST Model [RQ2]}
+\section{Innovation 4: Hybrid K-Means + sklearn IsolationForest Model [RQ2]}
 
 \subsection{Problem: Basic Isolation Forest Lacks Context Awareness}
 
@@ -544,9 +544,9 @@ Consider two taxi trips with identical fare=\$50, distance=2 miles:
 
 Basic Isolation Forest sees both trips as identical in the (fare, distance) feature space and assigns similar anomaly scores. It misses the context that makes Trip B suspicious.
 
-\subsection{Solution: Hybrid K-Means + sHST Architecture}
+\subsection{Solution: Hybrid K-Means + sklearn IsolationForest Architecture}
 
-CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundaries) with \textbf{Streaming HalfSpaceTrees (sHST)} (non-parametric, anomaly scoring, implemented via the River library \citep{montiel2021river}) in a hybrid architecture. sHST is an online variant of the isolation forest approach: unlike batch isolation forest which requires the full dataset for tree construction, sHST builds trees incrementally as new data arrives using a sliding window of recent observations, following the mathematical foundation of Tan et al. (2011) \citep{tan2011streaming} with streaming adaptation from Tan (2015) \citep{tan2015}.
+CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundaries) with \textbf{sklearn IsolationForest} (non-parametric, batch anomaly scoring, \citep{liu2008isolation, sklearn_api}) in a hybrid architecture. sklearn IsolationForest is trained offline on the full ultra-clean training dataset: unlike streaming variants which build trees incrementally, sklearn IsolationForest requires the complete dataset to construct isolation trees using recursive random partitioning. After offline training, the frozen model scores incoming streaming records in real-time, combining the context-awareness of K-Means clustering with the multivariate anomaly detection capability of IsolationForest.
 
 \begin{enumerate}
     \item \textbf{Component 1: K-Means Clusterer (Parametric)}
@@ -562,13 +562,13 @@ CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundari
             \item \textbf{Purpose:} Score anomalies using a \textbf{single global ensemble} of random binary trees trained on ALL 2.97M ultra-clean records. Trees are NOT trained separately per cluster.
             \item \textbf{Input:} 21D enhanced features (15D base + 6D ratio features) for each trip
             \item \textbf{Output:} Anomaly score $s \in [0, 1]$ based on path length to isolate the point
-            \item \textbf{Adaptation:} Trees incrementally updated via online learning (Streaming HalfSpaceTrees, sHST)
+            \item \textbf{Adaptation:} K-Means centroids incrementally updated via online learning; IsolationForest retrained periodically via IEC-triggered full retraining
         \end{itemize}
 \end{enumerate}
 
 The hybrid model combines both components:
 \begin{equation}
-\text{model} = \{\text{clusterer: K-Means (5--7 clusters)}, \text{trees: sHST (1 global model)}\}
+\text{model} = \{\text{clusterer: K-Means (5--7 clusters)}, \text{detector: sklearn IsolationForest (1 global model)}\}
 \end{equation}
 
 \textbf{Key Architectural Decision: ONE Global Model, NOT N Per-Cluster Models}
@@ -576,7 +576,7 @@ The hybrid model combines both components:
 A common misconception is that the hybrid architecture trains separate Isolation Forest models per cluster (e.g., 7 clusters $\to$ 7 models). This is \textbf{incorrect}. CA-DQStream uses:
 
 \begin{itemize}
-    \item \textbf{ONE global sHST model} trained on all 2.97M records across all clusters
+    \item \textbf{ONE global sklearn IsolationForest} trained on all 2.97M records across all clusters
     \item \textbf{K-Means clusters determine thresholds}, not separate models
 \end{itemize}
 
@@ -584,7 +584,7 @@ A common misconception is that the hybrid architecture trains separate Isolation
 
 At inference time:
 \begin{enumerate}
-    \item Trip features (21D) are scored by the \textbf{single global sHST model} $\to$ anomaly score $s$
+    \item Trip features (21D) are scored by the \textbf{single global sklearn IsolationForest} $\to$ anomaly score $s$
     \item Trip's pickup zone is mapped to cluster $C_i$ via K-Means (e.g., zone 161 $\to$ Manhattan Core cluster)
     \item 4D threshold matrix $T_{\text{cell}}$ provides context-specific threshold for cluster $C_i$: $T_{\text{cell}}[i, \text{hour}, \text{day}, \text{trip\_type}]$
     \item Binary decision: $\text{is\_anomaly} = (s > T_{\text{cell}})$
@@ -592,9 +592,9 @@ At inference time:
 
 This separation allows the model to learn from all data while thresholds adapt to local contexts.
 
-\textbf{sHST Configuration (Prototype-Validated):}
+\textbf{sklearn IsolationForest Configuration (Prototype-Validated):}
 
-The Streaming HalfSpaceTrees (sHST) model uses the following configuration:
+The sklearn IsolationForest model uses the following configuration:
 
 \begin{center}
 \begin{tabular}{|l|c|c|l|}
@@ -703,13 +703,13 @@ These 15 features give the hybrid model the contextual information needed to dis
 
 \subsection{PyFlink Deployment with Broadcast State Model Distribution}
 
-CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The hybrid K-Means sHST model runs in the \textbf{PyFlink Python worker process} with model parameters distributed to all parallel instances via Flink's Broadcast State mechanism. When a new model is produced, it is serialized and stored in shared object storage (MinIO/S3-compatible). The Kafka topic \texttt{if-model-updates} carries a lightweight message containing model URI, version, checksum, and timestamp. Each TaskManager downloads the model from object storage asynchronously, avoiding large payload transfers. Critically, PyFlink executes Python UDFs in a \textbf{separate Python worker process} per TaskManager slot, not inside the JVM; Broadcast State distributes model parameters across these worker processes for in-process scoring. This eliminates synchronous HTTP calls while preserving the atomic, zero-downtime model swap property.
+CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The hybrid K-Means + sklearn IsolationForest model runs in the \textbf{PyFlink Python worker process} with model parameters distributed to all parallel instances via Flink's Broadcast State mechanism. When a new model is produced, it is serialized and stored in shared object storage (MinIO/S3-compatible). The Kafka topic \texttt{if-model-updates} carries a lightweight message containing model URI, version, checksum, and timestamp. Each TaskManager downloads the model from object storage asynchronously, avoiding large payload transfers. Critically, PyFlink executes Python UDFs in a \textbf{separate Python worker process} per TaskManager slot, not inside the JVM; Broadcast State distributes model parameters across these worker processes for in-process scoring. This eliminates synchronous HTTP calls while preserving the atomic, zero-downtime model swap property.
 
 \textbf{Zero-Pipeline-Interruption Model Update Protocol:}
 \begin{enumerate}
     \item IEC detects drift via ADWIN on meta-stream
     \item IEC triggers model update in MLflow (incremental, METER, or full retrain)
-    \item MLflow serializes new model (K-Means + sHST) via joblib pickle
+    \item MLflow serializes new model (K-Means + sklearn IsolationForest) via joblib pickle
     \item MLflow publishes model bytes to \texttt{if-model-updates} Kafka topic
     \item Flink subscribes to topic using Broadcast State
     \item All parallel IsolationForestOperator instances receive new model
@@ -718,10 +718,10 @@ CA-DQStream eliminates synchronous per-record HTTP calls in the critical process
 
 \subsection{Research Contribution}
 
-Prior work on streaming DQ uses either (1) basic Isolation Forest without context awareness, or (2) separate models per context (scalability issues). CA-DQStream's hybrid architecture is the first to integrate K-Means clustering with Streaming HalfSpaceTrees for context-aware streaming DQ:
+Prior work on streaming DQ uses either (1) basic Isolation Forest without context awareness, or (2) separate models per context (scalability issues). CA-DQStream's hybrid architecture is the first to integrate K-Means clustering with sklearn IsolationForest for context-aware streaming DQ:
 
 \begin{itemize}
-    \item \textbf{Hybrid architecture:} K-Means (context boundaries) + sHST (anomaly scoring)
+    \item \textbf{Hybrid architecture:} K-Means (context boundaries) + sklearn IsolationForest (anomaly scoring)
     \item \textbf{Spatio-temporal features:} Cyclical encoding (time) + 4$\times$4 grid encoding (space)
     \item \textbf{METER fast adaptation:} Shift K-Means centroids without full retraining
     \item \textbf{PyFlink scoring with Broadcast State:} Model parameters distributed via Broadcast State to PyFlink worker processes; no synchronous HTTP calls, microsecond in-process access latency
@@ -742,9 +742,9 @@ This chapter presented the four core innovations of CA-DQStream, each addressing
 
     \item \textbf{Intelligent Evolution Controller [RQ3]:} Selects from 4 adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking) with most drift resolved by fast incremental updates.
 
-    \item \textbf{Hybrid K-Means sHST [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Streaming HalfSpaceTrees) for context-aware multivariate detection.
+    \item \textbf{Hybrid K-Means + sklearn IsolationForest [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (sklearn IsolationForest) for context-aware multivariate detection.
 \end{enumerate}
 
-These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, sHST scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.
+These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, sklearn IsolationForest scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.
 
 The next chapter details the system architecture and implementation of these innovations on Apache Flink with Kafka, PostgreSQL, and Grafana.

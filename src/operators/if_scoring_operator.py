@@ -1,8 +1,8 @@
 """
-iForestASD Scoring Operator for Layer 2 Complex Branch.
+sklearn IsolationForest Scoring Operator for Layer 2 Complex Branch.
 Spec: Task 2.6-2.10 (Broadcast State pattern with V1.9 bug fixes)
 
-Scores records using iForestASD model with context-aware thresholds.
+Scores records using sklearn IsolationForest with context-aware thresholds.
 Model loaded from Broadcast State for hot-swappable updates.
 """
 
@@ -95,7 +95,7 @@ def get_context_key(record: dict, neighborhood_mapping: dict = None) -> str:
 
 
 class IFScoringOperator(MapFunction):
-    """Score records with iForestASD using Broadcast State model.
+    """Score records with sklearn IsolationForest using Broadcast State model.
 
     V1.9 Spec:
     - Loads model from Broadcast State (hot-swappable)
@@ -173,7 +173,7 @@ class IFScoringOperator(MapFunction):
             raise
 
     def map(self, value):
-        """Score single record with iForestASD.
+        """Score single record with sklearn IsolationForest.
 
         Args:
             value: Record dict (already passed Layer 1 validation)
@@ -193,9 +193,9 @@ class IFScoringOperator(MapFunction):
 
             # sklearn IsolationForest: score_samples returns negative anomaly scores
             # Lower (more negative) = more anomalous
-            # We negate to make higher = more anomalous (same semantics as before)
+            # We negate to make higher = more anomalous
             raw_score = self.model.score_samples(features_scaled.reshape(1, -1))[0]
-            anomaly_score = -raw_score  # Now higher = more anomalous (River-like semantics)
+            anomaly_score = -raw_score  # Now higher = more anomalous
 
             # Get context-aware threshold (using negated threshold for comparison)
             context_key = get_context_key(value, self.neighborhood_mapping)

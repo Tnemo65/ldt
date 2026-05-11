@@ -2,8 +2,18 @@
 Broadcast State Loader for Model Updates.
 Spec: Task 2.7 (V1.9 Bug Fix: clear() before put())
 
-Loads ML model artifacts into Broadcast State for hot-swappable updates.
+Loads ML model artifacts (sklearn IsolationForest + scaler + thresholds)
+into Broadcast State for hot-swappable updates.
 Consumes from if-model-updates Kafka topic (compacted).
+
+Message format: {
+    "model_bytes": <base64>,       -- sklearn IsolationForest pickled model
+    "scaler_bytes": <base64>,     -- fitted StandardScaler
+    "thresholds_json": <json>,    -- per-context threshold matrix
+    "neighborhood_mapping": <json> -- zone-to-neighborhood map
+    "version": "v1.0.0",
+    "timestamp": "2024-01-15T10:30:00"
+}
 """
 
 from pyflink.datastream import BroadcastProcessFunction
