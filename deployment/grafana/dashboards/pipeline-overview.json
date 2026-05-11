@@ -60,7 +60,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(kafka_consumer_group_lag_sum{consumergroup=~\"cadqstream.*\"})",
+          "expr": "sum(kafka_consumer_group_lag{consumergroup=~\"cadqstream.*\"})",
           "legendFormat": "Total Lag",
           "refId": "A"
         }
@@ -220,7 +220,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(pg_stat_user_tables_n_live_tup{relname=\"taxi_trips_raw\"})",
+          "expr": "sum(pg_stat_user_tables_n_live_tup{schemaname=\"public\",relname=\"taxi_trips_raw\"})",
           "legendFormat": "Rows",
           "refId": "A"
         }
@@ -262,7 +262,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_anomaly_rate * 100",
+          "expr": "sum(cadqstream_meta_anomaly_rate) * 100",
           "legendFormat": "Anomaly Rate",
           "refId": "A"
         }
@@ -344,7 +344,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_drift_detected",
+          "expr": "cadqstream_iec_drift_detected_total",
           "legendFormat": "Drift Events",
           "refId": "A"
         }
@@ -549,7 +549,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_violation_rate * 100",
+          "expr": "sum(rate(cadqstream_records_violation_total{type=\"canary\"}[5m])) / sum(rate(cadqstream_records_valid_total{layer=\"L1\"}[5m])) * 100",
           "legendFormat": "Canary Violation Rate",
           "refId": "A"
         }
@@ -610,7 +610,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_anomaly_rate * 100",
+          "expr": "sum(rate(cadqstream_anomalies_ml_total[5m])) / sum(rate(cadqstream_records_valid_total{layer=\"L2\"}[5m])) * 100",
           "legendFormat": "ML Anomaly Rate",
           "refId": "A"
         }
@@ -677,7 +677,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_meta_volume",
+          "expr": "sum(cadqstream_meta_volume)",
           "legendFormat": "Meta Volume (1-min window)",
           "refId": "A"
         }
@@ -736,12 +736,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_null_rate * 100",
+          "expr": "cadqstream_meta_null_rate * 100",
           "legendFormat": "Null Rate",
           "refId": "A"
         },
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_delta_score * 100",
+          "expr": "cadqstream_meta_delta_score * 100",
           "legendFormat": "Delta Score",
           "refId": "B"
         }
@@ -867,7 +867,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_drift_detected",
+          "expr": "cadqstream_iec_drift_detected_total",
           "legendFormat": "Drifts Detected",
           "refId": "A"
         }
@@ -926,22 +926,22 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_strategy_retrain",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"retrain_model\"}",
           "legendFormat": "retrain",
           "refId": "A"
         },
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_strategy_adjust",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"adjust_threshold\"}",
           "legendFormat": "adjust_threshold",
           "refId": "B"
         },
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_strategy_switch",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"switch_model\"}",
           "legendFormat": "switch_model",
           "refId": "C"
         },
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_strategy_nothing",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"do_nothing\"}",
           "legendFormat": "do_nothing",
           "refId": "D"
         }
@@ -1000,7 +1000,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_task_S_cadqstream_iec_confidence",
+          "expr": "cadqstream_iec_confidence",
           "legendFormat": "IEC Confidence",
           "refId": "A"
         }
@@ -1067,32 +1067,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "rate(pg_stat_user_tables_n_live_tup{relname=\"taxi_trips_raw\"}[5m])",
-          "legendFormat": "taxi_trips_raw inserts",
+          "expr": "rate(pg_stat_database_xact_commit{dbname=\"dq_pipeline\"}[5m])",
+          "legendFormat": "Transaction Commits/sec",
           "refId": "A"
-        },
-        {
-          "expr": "rate(pg_stat_user_tables_n_live_tup{relname=\"canary_violations\"}[5m])",
-          "legendFormat": "canary_violations inserts",
-          "refId": "B"
-        },
-        {
-          "expr": "rate(pg_stat_user_tables_n_live_tup{relname=\"anomaly_scores\"}[5m])",
-          "legendFormat": "anomaly_scores inserts",
-          "refId": "C"
-        },
-        {
-          "expr": "rate(pg_stat_user_tables_n_live_tup{relname=\"meta_metrics\"}[5m])",
-          "legendFormat": "meta_metrics inserts",
-          "refId": "D"
-        },
-        {
-          "expr": "rate(pg_stat_user_tables_n_live_tup{relname=\"drift_events\"}[5m])",
-          "legendFormat": "drift_events inserts",
-          "refId": "E"
         }
       ],
-      "title": "PostgreSQL Table Insert Rates",
+      "title": "PostgreSQL Transaction Rate",
       "type": "timeseries"
     }
   ],

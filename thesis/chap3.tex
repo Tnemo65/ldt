@@ -4,7 +4,7 @@
 \pagenumbering{arabic}
 
 % ================================================
-% 3.1 Overview
+% 4.1 Overview
 % ================================================
 \section{Overview}
 
@@ -24,7 +24,7 @@ These innovations work synergistically: the 4D thresholds provide context cells,
 
 
 % ================================================
-% 3.2 Innovation 1: 4D Context-Aware Thresholding Framework [RQ5]
+% 4.2 Innovation 1: 4D Context-Aware Thresholding Framework [RQ5]
 % ================================================
 \section{Innovation 1: 4D Context-Aware Thresholding [RQ5]}
 
@@ -107,7 +107,7 @@ The 4D matrix has $7 \times 4 \times 3 \times 7 = 588$ cells (trip\_type $\times
 
 \subsection{Threshold Computation Algorithm}
 
-The 4D thresholds are computed from the training dataset (January 2024, 2.96M records):
+The 4D thresholds are computed from the training dataset (January 2024, 2.97M records):
 
 \begin{algorithm}[H]
 \caption{Context-Aware Threshold Computation}
@@ -151,7 +151,7 @@ where $\Phi$ is the cumulative distribution function of the standard normal dist
 
 \subsection{Integration with Hybrid ML Model}
 
-The 4D context-aware thresholds work synergistically with the Hybrid K-Means iForestASD model (Section 3.5):
+The 4D context-aware thresholds work synergistically with the Hybrid K-Means iForestASD model (Section 4.5):
 
 \begin{enumerate}
     \item \textbf{Feature Engineering:} The 21D enhanced feature vector includes 15D base features (context dimensions: trip\_type, hour\_sin, hour\_cos, dow\_sin, dow\_cos, pickup\_grid\_x, pickup\_grid\_y, fare, distance, speed, etc.) plus 6D ratio features (fare\_per\_mile\_ratio, implied\_speed\_ratio, etc.) that normalize by baseline values to reduce variance 10--100$\times$. The hybrid model learns the normal joint distribution \emph{within each context}.
@@ -175,7 +175,7 @@ The 4D context-aware thresholds work synergistically with the Hybrid K-Means iFo
             \item Standard trips (RatecodeID=1), Afternoon (11--16h), Weekday: $T = \$28.14$
         \end{itemize}
 
-        A \$65 fare is normal for JFK trips ($< \$78.32$, no flag) but anomalous for standard trips ($> \$28.14$, flagged). This context sensitivity reduces false positives significantly. Experimental evaluation (Chapter 5) validates the improvement.
+        A \$65 fare is normal for JFK trips ($< \$78.32$, no flag) but anomalous for standard trips ($> \$28.14$, flagged). This context sensitivity reduces false positives significantly. Experimental evaluation (Chapter 6) validates the improvement.
 \end{enumerate}
 
 \subsection{Research Contribution}
@@ -190,7 +190,7 @@ This framework is the \textbf{primary innovation} that justifies the ``Context-A
 \end{itemize}
 
 % ================================================
-% 3.3 Innovation 2: Rendezvous Pipeline Architecture [RQ4]
+% 4.3 Innovation 2: Rendezvous Pipeline Architecture [RQ4]
 % ================================================
 \section{Innovation 2: Rendezvous Pipeline Architecture [RQ4]}
 
@@ -226,7 +226,7 @@ This architecture achieves two critical guarantees:
 \begin{enumerate}
     \item \textbf{Throughput Improvement via Parallelism:} Both branches execute independently in parallel, utilizing all Flink TaskManager slots (12 slots in Production mode). Records flow through Canary and Complex simultaneously, not sequentially. In a linear pipeline, the total processing time per record accumulates as $t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}$, forcing serialization of parallelizable work. In the Rendezvous pipeline, the two branches execute concurrently, so the effective per-record processing time is dominated by the slower branch plus fixed overhead: $t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}$. With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$, the Rendezvous pipeline reduces the sequential component from $65\text{ms}$ to $60\text{ms}$ per record. Combined with early exit optimization (13.5\% of records bypass the Complex branch entirely), the measured throughput reaches 18,450 events/sec, a 2.2$\times$ improvement over the linear pipeline baseline of 8,240 events/sec.
 
-        \textbf{Important caveat on throughput modeling:} In a distributed streaming system like Flink, throughput is governed by the bottleneck operator and system-level factors (network bandwidth, GC pauses, Kafka consumer lag), not by simple $1/T$ formulas. The theoretical throughput of a pipeline cannot be derived from per-record latency without accounting for pipelining, batching, and parallel slots. We therefore report measured throughput from production benchmarks (18,450 events/sec for Rendezvous vs 8,240 events/sec for linear) rather than computing it from latency estimates.
+        \textit{Important caveat on throughput modeling:} In a distributed streaming system like Flink, throughput is governed by the bottleneck operator and system-level factors (network bandwidth, GC pauses, Kafka consumer lag), not by simple $1/T$ formulas. The theoretical throughput of a pipeline cannot be derived from per-record latency without accounting for pipelining, batching, and parallel slots. We therefore report measured throughput from production benchmarks (18,450 events/sec for Rendezvous vs 8,240 events/sec for linear) rather than computing it from latency estimates.
 
         \item \textbf{Fault Tolerance:} If the Complex branch is slow or unavailable (model loading failure, OOM), the Canary branch continues processing uninterrupted. The system degrades gracefully rather than failing completely.
 
@@ -242,7 +242,7 @@ This architecture achieves two critical guarantees:
         = 2\text{ms} + 0.135(5\text{ms}) + 0.865(50\text{ms}) + 8\text{ms} = 53.9\text{ms (mean)}
         \end{equation}
 
-        \textbf{Note on Latency vs. Throughput:} The Rendezvous architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through parallel execution. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest branch (Complex/ML at 50ms) and the system-level variance (network jitter, GC pauses, Kafka consumer lag), which early exit cannot reduce. The join point (MetaAggregator) must wait for the slower branch to complete, so p99 latency is determined by the Complex branch's worst-case behavior, not by the early exit optimization. Measuring average latency improvement is the appropriate metric for early exit gains.
+        \textit{Note on latency vs. throughput:} The Rendezvous architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through parallel execution. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest branch (Complex/ML at 50ms) and the system-level variance (network jitter, GC pauses, Kafka consumer lag), which early exit cannot reduce. The join point (MetaAggregator) must wait for the slower branch to complete, so p99 latency is determined by the Complex branch's worst-case behavior, not by the early exit optimization. Measuring average latency improvement is the appropriate metric for early exit gains.
 
         \textbf{Linear Pipeline Comparison:} All records pay the full sequential cost, resulting in higher mean latency compared to the parallel Rendezvous architecture.
 \end{enumerate}
@@ -271,7 +271,7 @@ Prior work on streaming DQ (Great Expectations, AWS Deequ, Soda Core, Stream DaQ
 \end{itemize}
 
 % ================================================
-% 3.4 Innovation 3: IEC with 4 Adaptation Strategies [RQ3]
+% 4.4 Innovation 3: IEC with 4 Adaptation Strategies [RQ3]
 % ================================================
 \section{Innovation 3: Intelligent Evolution Controller (IEC) [RQ3]}
 
@@ -509,7 +509,7 @@ Prior work on drift detection uses single-strategy adaptation (always retrain). 
 \end{itemize}
 
 % ================================================
-% 3.5 Innovation 4: Hybrid K-Means iForestASD Model [RQ2]
+% 4.5 Innovation 4: Hybrid K-Means iForestASD Model [RQ2]
 % ================================================
 \section{Innovation 4: Hybrid K-Means iForestASD Model [RQ2]}
 
@@ -532,7 +532,7 @@ CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundari
 \begin{enumerate}
     \item \textbf{Component 1: K-Means Clusterer (Parametric)}
         \begin{itemize}
-            \item \textbf{Purpose:} Create context boundaries by clustering trips into $k$ groups (e.g., airport trips, short rides, long rides, high-speed trips). \textbf{IMPORTANT:} K-Means is used for \emph{per-cluster threshold assignment}, NOT for training separate models per cluster.
+            \item \textbf{Purpose:} Create context boundaries by clustering trips into $k$ groups (e.g., airport trips, short rides, long rides, high-speed trips). \textit{Note:} K-Means is used for \emph{per-cluster threshold assignment}, not for training separate models per cluster.
             \item \textbf{Input:} Spatial features (avg\_distance, avg\_fare) aggregated per pickup zone
             \item \textbf{Output:} Cluster assignments $C_1, C_2, \ldots, C_k$ representing distinct neighborhood contexts (5--7 clusters total)
             \item \textbf{Adaptation:} METER algorithm shifts centroids when drift detected (Strategy 3)
@@ -540,7 +540,7 @@ CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundari
 
     \item \textbf{Component 2: Isolation Forest Trees (Non-Parametric)}
         \begin{itemize}
-            \item \textbf{Purpose:} Score anomalies using a \textbf{single global ensemble} of random binary trees trained on ALL 2.96M ultra-clean records. Trees are NOT trained separately per cluster.
+            \item \textbf{Purpose:} Score anomalies using a \textbf{single global ensemble} of random binary trees trained on ALL 2.97M ultra-clean records. Trees are NOT trained separately per cluster.
             \item \textbf{Input:} 21D enhanced features (15D base + 6D ratio features) for each trip
             \item \textbf{Output:} Anomaly score $s \in [0, 1]$ based on path length to isolate the point
             \item \textbf{Adaptation:} Trees incrementally updated via online learning (River's HalfSpaceTrees)
@@ -557,11 +557,11 @@ The hybrid model combines both components:
 A common misconception is that the hybrid architecture trains separate Isolation Forest models per cluster (e.g., 7 clusters $\to$ 7 models). This is \textbf{incorrect}. CA-DQStream uses:
 
 \begin{itemize}
-    \item \textbf{ONE global iForestASD model} trained on all 2.96M records across all clusters
+    \item \textbf{ONE global iForestASD model} trained on all 2.97M records across all clusters
     \item \textbf{K-Means clusters determine thresholds}, not separate models
 \end{itemize}
 
-\textbf{Rationale:} Separate models per cluster suffer from data sparsity. Airport cluster has only 120K training records (4\% of total), insufficient for robust Isolation Forest training. A global model trained on 2.96M records learns the full multivariate distribution, then K-Means thresholds adapt the decision boundary per context.
+\textbf{Rationale:} Separate models per cluster suffer from data sparsity. Airport cluster has only 120K training records (4\% of total), insufficient for robust Isolation Forest training. A global model trained on 2.97M records learns the full multivariate distribution, then K-Means thresholds adapt the decision boundary per context.
 
 At inference time:
 \begin{enumerate}
@@ -686,7 +686,7 @@ where $h$ is hour, $d$ is day of week, PU/DO are pickup/dropoff location IDs.
 \mathbf{x}_{\text{norm}} = \frac{\mathbf{x}_{\text{raw}} - \boldsymbol{\mu}_{\text{train}}}{\boldsymbol{\sigma}_{\text{train}}}
 \end{equation}
 
-where $\boldsymbol{\mu}_{\text{train}}$ and $\boldsymbol{\sigma}_{\text{train}}$ are the mean and standard deviation vectors computed from the training dataset (January 2024, 2.96M records). This normalization is critical for distance-based anomaly detection: without it, a fare of \$50 in January (mean \$15.42, std \$12.30) would produce anomaly score 2.84, while the same \$50 fare in June (mean \$17.26, std \$14.10) would score 2.32---different anomaly scores for identical fares due to seasonal drift. Normalization eliminates this artifact.
+where $\boldsymbol{\mu}_{\text{train}}$ and $\boldsymbol{\sigma}_{\text{train}}$ are the mean and standard deviation vectors computed from the training dataset (January 2024, 2.97M records). This normalization is critical for distance-based anomaly detection: without it, a fare of \$50 in January (mean \$15.42, std \$12.30) would produce anomaly score 2.84, while the same \$50 fare in June (mean \$17.26, std \$14.10) would score 2.32---different anomaly scores for identical fares due to seasonal drift. Normalization eliminates this artifact.
 
 These 15 features give the hybrid model the contextual information needed to distinguish legitimate high-fare trips (airport, rush hour, long distance) from fraudulent ones (meter tampering, route padding).
 
@@ -718,7 +718,7 @@ Prior work on streaming DQ uses either (1) basic IForest without context awarene
 \end{itemize}
 
 % ================================================
-% 3.6 Chapter Summary
+% 4.6 Chapter Summary
 % ================================================
 \section{Chapter Summary}
 

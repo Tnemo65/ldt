@@ -22,6 +22,9 @@ Spec: Task 3.21-3.25 (ADWIN-U multi-instance pattern)
 from river.drift import ADWIN
 from datetime import datetime
 from typing import Dict, List, Optional
+import logging
+
+LOGGER = logging.getLogger('cadqstream-adwin-u')
 
 
 class MultiInstanceADWIN:
@@ -86,9 +89,8 @@ class MultiInstanceADWIN:
 
                 self.adwin_instances[key] = ADWIN(delta=delta)
 
-        print(f"[ADWIN-U] Initialized {len(self.adwin_instances)} instances")
-        print(f"  Neighborhoods: {len(neighborhoods)}")
-        print(f"  Metrics: {len(metrics)}")
+        LOGGER.info("[ADWIN-U] Initialized %d instances (neighborhoods=%d, metrics=%d)",
+                   len(self.adwin_instances), len(neighborhoods), len(metrics))
 
     def update(self, neighborhood: str, metric_name: str, value: float):
         """Update ADWIN instance and check for drift.

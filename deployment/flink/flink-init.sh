@@ -67,9 +67,8 @@ if [ -z "$JOB_ID" ]; then
     echo "[flink-init] Trying flink run command..."
 
     flink run -d \
-        -python /opt/flink/e2e/src/flink_job_complete.py \
-        -D python.client.executor.args="--python /opt/flink/e2e/src/flink_job_complete.py" \
-        /opt/flink/opt/python/pyflink.zip 2>&1 || true
+        -py /opt/flink/e2e/src/flink_job_complete.py \
+        2>&1 || true
 
     sleep 5
 else

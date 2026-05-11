@@ -3,7 +3,7 @@
 \pagestyle{fancy}
 
 % ================================================
-% 4.1 System Overview
+% 5.1 System Overview
 % ================================================
 \section{System Overview}
 
@@ -50,7 +50,7 @@ This separation clarifies that the \textbf{infrastructure layers} (Kafka, Postgr
 
 Before deploying the Flink pipeline, CA-DQStream requires a \textbf{Cold-Start Model} trained on ultra-clean baseline data. This offline preprocessing workflow ensures the initial Hybrid K-Means iForestASD model learns from \textbf{sterile data}, not contaminated by physical impossibilities.
 
-\textbf{Why Offline Preprocessing is CRITICAL:}
+\textit{Why offline preprocessing is essential:}
 
 Traditional streaming DQ systems train ML models on raw production data, which contains:
 \begin{itemize}
@@ -63,15 +63,15 @@ If the ML model trains on this contaminated data, it learns to classify \textbf{
 
 \textbf{Why This Matters -- The Catastrophic Failure Mode:}
 
-Without offline preprocessing, the model would train on 3.07M raw records containing 79,223 physical violations (2.58\%). These violations include:
+Without offline preprocessing, the model would train on 3.08M raw records containing 79,485 physical violations (2.58\%). These violations include:
 \begin{itemize}
-    \item 12,456 records with fare $\leq$ 0 (e.g., fare = -\$15.00)
+    \item 12,308 records with fare $\leq$ 0 (e.g., fare = -\$15.00)
     \item 8,923 records with distance $\leq$ 0 (e.g., distance = 0.00 mi)
     \item 6,234 records with speed $>$ 100 mph (GPS malfunctions)
     \item 51,610 records with other data entry errors (passenger\_count=0, dropoff\_before\_pickup)
 \end{itemize}
 
-The model would learn: ``Fare = -\$15.00 appears 12,456 times in training data, therefore it is a normal pattern.'' When deployed to production, the model would assign low anomaly scores to fraudulent negative-fare trips, causing them to pass undetected (False Negatives).
+The model would learn: ``Fare = -\$15.00 appears 12,308 times in training data, therefore it is a normal pattern.'' When deployed to production, the model would assign low anomaly scores to fraudulent negative-fare trips, causing them to pass undetected (False Negatives).
 
 \textbf{Empirical Impact (Prototype Testing):}
 \begin{itemize}
@@ -81,18 +81,18 @@ The model would learn: ``Fare = -\$15.00 appears 12,456 times in training data, 
 
 The 3-stage sequential funnel eliminates this catastrophic failure mode by ensuring the model trains only on \textbf{pristine data} -- records that have passed both Schema Filter and Business Rules validation.
 
-CA-DQStream solves this via a \textbf{3-Stage Sequential Funnel} applied \emph{offline} to the training dataset (January 2024, 3.07M raw records):
+CA-DQStream solves this via a \textbf{3-Stage Sequential Funnel} applied \emph{offline} to the training dataset (July 2024, 3.08M raw records):
 
 \textbf{Stage 1: Physical Violation Filter (Schema + Rules Simulation)}
 
-Simulate Layer 1 (Schema Filter) and Layer 2 (Business Rules) offline on January 2024 raw data:
+Simulate Layer 1 (Schema Filter) and Layer 2 (Business Rules) offline on July 2024 raw data:
 
 \begin{itemize}
     \item \textbf{Schema Filter}: Remove NULL in ML-critical fields (trip\_distance, fare\_amount, PULocationID, passenger\_count)
     \item \textbf{Business Rules}: Remove fare $\leq$ 0, distance $\leq$ 0, speed $>$ 100 mph, passenger\_count $\notin$ [1, 6]
 \end{itemize}
 
-This removes \textbf{2.58\%} of raw data (79,223 records flagged as physical impossibilities).
+This removes \textbf{2.58\%} of raw data (79,485 records flagged as physical impossibilities).
 
 \textbf{Stage 2: IQR Outlier Removal (3$\times$IQR, Stricter)}
 
@@ -104,7 +104,7 @@ x \in \text{outlier} \iff x < Q_1 - 3 \times \mathrm{IQR} \quad \text{or} \quad 
 
 Applied to: fare\_amount, trip\_distance, trip\_duration.
 
-This removes an additional \textbf{0.92\%} of data (27,613 records flagged as statistical outliers -- e.g., \$5,000 negotiated fares, 200-mile trips).
+This removes an additional \textbf{0.92\%} of data (28,312 records flagged as statistical outliers -- e.g., \$5,000 negotiated fares, 200-mile trips).
 
 \textbf{Stage 3: Verification (Sterile Dataset Guarantee)}
 
@@ -116,30 +116,30 @@ Final verification ensures the cleaned baseline meets quality thresholds:
 
 If either threshold is violated, the sanitization process fails-fast with an error, preventing contaminated data from reaching model training.
 
-\textbf{Output: Ultra-Clean Jan 2024 Baseline}
+\textbf{Output: Ultra-Clean Jul 2024 Baseline}
 
 \begin{center}
 \begin{tabular}{|l|r|r|}
 \hline
 \textbf{Stage} & \textbf{Records Remaining} & \textbf{Filtered (\%)} \\
 \hline
-Raw data & 3,066,766 & --- \\
-After physical filter (Stage 1) & 2,987,543 & 2.58\% \\
-After IQR outlier removal (Stage 2) & 2,959,930 & 0.92\% \\
-\textbf{Ultra-clean baseline (Stage 3)} & \textbf{2,959,930} & \textbf{3.48\% total} \\
+Raw data & 3,076,903 & --- \\
+After physical filter (Stage 1) & 2,997,418 & 2.58\% \\
+After IQR outlier removal (Stage 2) & 2,969,106 & 0.92\% \\
+\textbf{Ultra-clean baseline (Stage 3)} & \textbf{2,969,106} & \textbf{3.48\% total} \\
 \hline
 \end{tabular}
 \end{center}
 
-The resulting 2.96M \textbf{ultra-clean baseline} records have:
+The resulting 2.97M \textbf{ultra-clean baseline} records have:
 \begin{itemize}
-    \item \textbf{Zero physical violations:} fare $>$ 0, distance $>$ 0, speed $<$ 100 mph (79,223 violations removed)
+    \item \textbf{Zero physical violations:} fare $>$ 0, distance $>$ 0, speed $<$ 100 mph (79,485 violations removed)
     \item \textbf{Zero data entry errors:} valid passenger counts, timestamps (51,610 errors removed)
-    \item \textbf{Minimal statistical outliers:} removed via 3$\times$IQR (27,613 outliers removed)
+    \item \textbf{Minimal statistical outliers:} removed via 3$\times$IQR (28,312 outliers removed)
     \item \textbf{Verified quality:} Null rate=0.012\%, Violation rate=0.000\% (both $<$ 0.5\% threshold)
 \end{itemize}
 
-This is the \textbf{pristine dataset} on which the Cold-Start Model is trained. The term ``ultra-clean'' is not marketing language -- it is a quantifiable property: the dataset has passed 3 stages of validation and contains zero records that would fail Schema Filter or Business Rules checks.
+This is the \textbf{pristine dataset} on which the Cold-Start Model is trained. The term ``ultra-clean'' reflects a quantifiable property: the dataset has passed 3 stages of validation and contains zero records that would fail Schema Filter or Business Rules checks.
 
 \textbf{Comparison: Ultra-Clean vs Raw Data}
 
@@ -148,8 +148,8 @@ This is the \textbf{pristine dataset} on which the Cold-Start Model is trained. 
 \hline
 \textbf{Metric} & \textbf{Raw Data} & \textbf{Ultra-Clean Baseline} \\
 \hline
-Total records & 3,066,766 & 2,959,930 \\
-Physical violations & 79,223 (2.58\%) & 0 (0.00\%) \\
+Total records & 3,076,903 & 2,969,106 \\
+Physical violations & 79,485 (2.58\%) & 0 (0.00\%) \\
 Null rate & 4.2\% & 0.012\% \\
 Violation rate & 3.4\% & 0.000\% \\
 \hline
@@ -166,7 +166,7 @@ The ultra-clean baseline is the foundation of CA-DQStream's production-grade acc
 
 \textbf{Cold-Start Model Training on Ultra-Clean Data:}
 
-The Hybrid K-Means iForestASD model is trained \emph{offline} on the 2.96M ultra-clean records using scikit-learn and River libraries:
+The Hybrid K-Means iForestASD model is trained \emph{offline} on the 2.97M ultra-clean records using scikit-learn and River libraries:
 
 \begin{enumerate}
     \item \textbf{K-Means Clustering:} Create 5--7 neighborhood clusters based on (avg\_distance, avg\_fare) spatial features. Airport zones (JFK, Newark, LaGuardia) are assigned to a dedicated cluster. Remaining zones are clustered via K-Means (n=5, random\_state=42).
@@ -199,7 +199,7 @@ Without this offline preprocessing, the model would train on raw data containing
 The Cold-Start Model provides a \textbf{sterile baseline} that the IEC later adapts via drift-triggered retraining (Section 4.4).
 
 % ================================================
-% 4.2 Four-Layer Processing Pipeline
+% 5.2 Four-Layer Processing Pipeline
 % ================================================
 \section{Four-Layer Processing Pipeline}
 
@@ -250,7 +250,7 @@ Real-world fraud scenarios exhibit \textbf{multivariate correlations} that busin
     \item \textbf{Traffic Manipulation}: trip takes 90 minutes for 2 miles (speed=1.3 mph) with fare=\$45. Normal speed for traffic but \textbf{fare is inflated} for the distance-time ratio.
 \end{enumerate}
 
-\textbf{Problem:} Business rules (Layer 2a Canary) catch only 13.5\% of anomalies. The remaining 86.5\% require ML-based multivariate detection.
+\textbf{Problem:} Business rules (Layer 2a Canary) catch validity violations (see Experiment 5 in \cref{sec:exp5_br}). The remaining records require ML-based multivariate detection.
 
 \textbf{CA-DQStream Solution:} Hybrid K-Means iForestASD (Chapter 3.5) detects joint-distribution anomalies by learning the normal correlation structure \emph{within each context cluster}.
 
@@ -360,7 +360,7 @@ cash $\to$ tip=0 & Payment inconsistency & payment\_type=2, tip=\$5.00 & Data en
 
 \subsection{Layer 2b: Complex Branch (ML-Based)}
 
-Branch 2 of the Rendezvous pipeline is the \textbf{Complex Model}: Hybrid K-Means iForestASD (detailed in Chapter 3, Section 3.5) with context-aware spatio-temporal feature engineering. This branch detects multivariate anomalies that business rules cannot express.
+Branch 2 of the Rendezvous pipeline is the \textbf{Complex Model}: Hybrid K-Means iForestASD (detailed in Chapter 3, Section 4.5) with context-aware spatio-temporal feature engineering. This branch detects multivariate anomalies that business rules cannot express.
 
 \textbf{Why multivariate detection matters:}
 
@@ -682,7 +682,7 @@ This retry mechanism ensures that temporary failures (e.g., MLflow pod restart, 
 The FastAPI ML Service and Action Replay Worker decouple IEC decision-making (real-time, in Flink) from model execution (batch, in MLflow), enabling the system to maintain sub-second stream processing latency while supporting complex adaptation workflows (full retraining, hypernetwork predictions, routing changes) in the background.
 
 % ================================================
-% 4.3 Infrastructure
+% 5.3 Infrastructure
 % ================================================
 \section{Infrastructure}
 
@@ -801,7 +801,7 @@ Four pre-built Grafana dashboards provide operational visibility:
 Key PromQL queries: violation rates use \texttt{rate(dq\_schema\_violations[1m])} vs \texttt{rate(dq\_business\_rule\_violations[1m])} vs \texttt{rate(dq\_if\_anomalies[1m])}, and IEC drift status uses \texttt{iec\_drift\_events\_total} mapped to alert panels.
 
 % ================================================
-% 4.4 Optimization Techniques
+% 5.4 Optimization Techniques
 % ================================================
 \section{Optimization Techniques}
 
@@ -816,7 +816,7 @@ The AMD Threadripper platform provides:
     \item \textbf{PCIe 4.0 NVMe}: Fast disk I/O for RocksDB state backend checkpointing and PostgreSQL write-ahead logs.
 \end{itemize}
 
-This single-node configuration is validated for throughput and latency benchmarks in Chapter 5.
+This single-node configuration is validated for throughput and latency benchmarks in Chapter 6.
 
 \subsection{Breaking Python GIL with PyFlink Vectorized UDFs}
 
@@ -981,7 +981,7 @@ With PgBouncer:
 
 
 % ================================================
-% 4.5 MLOps Integration
+% 5.5 MLOps Integration
 % ================================================
 \section{MLOps Integration}
 
@@ -1022,7 +1022,7 @@ CA-DQStream uses Docker Compose for containerized deployment with automatic vers
 \end{itemize}
 
 % ================================================
-% 4.6 Chapter Summary
+% 5.6 Chapter Summary
 % ================================================
 \section{Chapter Summary}
 
@@ -1044,4 +1044,4 @@ This chapter detailed the engineering implementation of CA-DQStream's four core 
     \item \textbf{MLOps Integration:} MLflow experiment tracking, Model Registry, CI/CD with Docker Compose
 \end{itemize}
 
-The next chapter (Chapter 5) presents experimental validation of the four core innovations through 11 experiments spanning 72M records across 26 months.
+The next chapter (Chapter 6) presents experimental validation of the four core innovations through 13 experiments spanning 72M records across 26 months.

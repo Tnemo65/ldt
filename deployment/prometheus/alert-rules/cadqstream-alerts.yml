@@ -4,7 +4,7 @@ groups:
     rules:
       # Kafka Broker Down
       - alert: KafkaBrokerDown
-        expr: up{job="kafka-jmx"} == 0
+        expr: up{job="kafka-exporter"} == 0
         for: 2m
         labels:
           severity: critical
@@ -12,7 +12,7 @@ groups:
           component: broker
         annotations:
           summary: "Kafka broker is down"
-          description: "Kafka broker {{ $labels.instance }} has been down for more than 2 minutes."
+          description: "Kafka metrics exporter has been unreachable for 2 minutes."
 
       # Kafka Consumer Lag High
       - alert: KafkaConsumerLagHigh
@@ -462,10 +462,26 @@ groups:
           summary: "Pipeline is dropping records"
           description: "Flink task {{ $labels.task_name }} is receiving records but outputting none."
 
+      # Pipeline Stalled — no records processed
+      - alert: PipelineStalled
+        expr: |
+          rate(cadqstream_records_input_total[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: cadqstream
+          component: pipeline
+        annotations:
+          summary: "Pipeline has stalled"
+          description: "No records processed for 10 minutes. Check Flink job status."
+
       # Anomaly Detection Rate Spike
       - alert: AnomalyRateSpike
         expr: |
-          flink_jobmanager_job_task_S_cadqstream_anomaly_rate > 0.30
+          rate(cadqstream_anomalies_canary_total[5m])
+          /
+          rate(cadqstream_records_valid_total{layer="L1"}[5m])
+          > 0.15
         for: 5m
         labels:
           severity: warning
@@ -473,12 +489,12 @@ groups:
           component: detection
         annotations:
           summary: "Anomaly detection rate spiked"
-          description: "Anomaly rate on {{ $labels.neighborhood }} is {{ $value | humanizePercentage }} (normal < 15%)."
+          description: "Canary violation rate is {{ $value | humanizePercentage }} (threshold: 15%)."
 
       # Drift Detected
       - alert: DriftDetected
         expr: |
-          flink_jobmanager_job_task_S_cadqstream_drift_detected > 0
+          increase(cadqstream_iec_drift_detected_total[5m]) > 0
         for: 3m
         labels:
           severity: warning
@@ -486,4 +502,69 @@ groups:
           component: iec
         annotations:
           summary: "Data drift detected by IEC"
-          description: "IEC detected drift in {{ $labels.neighborhood }}/{{ $labels.metric }} with magnitude {{ $value }}."
+          description: "IEC detected drift in {{ $labels.neighborhood }}. Magnitude: {{ $value }}."
+
+      # High Consumer Lag
+      - alert: HighConsumerLag
+        expr: |
+          kafka_consumer_group_lag_sum{consumergroup=~"cadqstream.*"} > 10000
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+          component: consumer
+        annotations:
+          summary: "Kafka consumer lag exceeds 10,000 messages"
+          description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} is {{ $value }} messages behind."
+
+      # IEC Strategy Retrain Triggered
+      - alert: IECRetrainTriggered
+        expr: |
+          increase(cadqstream_iec_decisions_total{strategy="retrain_model"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: cadqstream
+          component: iec
+        annotations:
+          summary: "IEC triggered model retraining"
+          description: "IEC detected significant drift and initiated model retraining in {{ $labels.neighborhood }}."
+
+      # IEC Strategy Switch Triggered
+      - alert: IECSwitchTriggered
+        expr: |
+          increase(cadqstream_iec_decisions_total{strategy="switch_model"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cadqstream
+          component: iec
+        annotations:
+          summary: "IEC triggered model switch"
+          description: "IEC detected severe drift and is switching to alternative model."
+
+      # Pipeline Checkpoint Duration High
+      - alert: PipelineCheckpointDurationHigh
+        expr: |
+          flink_jobmanager_job_checkpointing_last_checkpoint_duration > 300000
+        for: 5m
+        labels:
+          severity: critical
+          service: flink
+          component: checkpoint
+        annotations:
+          summary: "Flink checkpoint duration exceeds 5 minutes"
+          description: "Last checkpoint took {{ $value }}s for job {{ $labels.job_name }}."
+
+      # PostgreSQL Write Latency High (via anomaly producer metrics)
+      - alert: PostgreSQLWriteLatencyHigh
+        expr: |
+          rate(pg_stat_database_xact_commit{dbname="dq_pipeline"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          service: cadqstream
+          component: sink
+        annotations:
+          summary: "PostgreSQL write rate dropped to zero"
+          description: "No commits to dq_pipeline for 5 minutes. JDBC sink may be stalled."

@@ -59,7 +59,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_taskmanager_StatusReporter_TaskManagerStatus_Value{status=\"ACTIVE\"})",
+          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers)",
           "legendFormat": "TMs",
           "refId": "A"
         }
@@ -145,7 +145,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_checkpointing_last_checkpoint_duration / 1000",
+          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointDuration / 1000",
           "legendFormat": "Last Checkpoint Duration",
           "refId": "A"
         }
@@ -187,7 +187,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_checkpointing_state_size",
+          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointSize",
           "legendFormat": "Checkpoint Size",
           "refId": "A"
         }
@@ -227,7 +227,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_number_of_restarts",
+          "expr": "flink_jobmanager_job_Restarting_NumberOfRestarts",
           "legendFormat": "Restarts",
           "refId": "A"
         }
@@ -267,7 +267,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_taskmanager_StatusReporter_TaskManagerStatus_Value{status=\"ACTIVE\"}) * 4",
+          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers) * 4",
           "legendFormat": "Total Slots",
           "refId": "A"
         }
@@ -335,17 +335,17 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "rate(flink_jobmanager_job_checkpointing_number_completed[5m]) * 60",
+          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfCompletedCheckpoints[5m]) * 60",
           "legendFormat": "Completed /min",
           "refId": "A"
         },
         {
-          "expr": "rate(flink_jobmanager_job_checkpointing_number_failed[5m]) * 60",
+          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfFailedCheckpoints[5m]) * 60",
           "legendFormat": "Failed /min",
           "refId": "B"
         },
         {
-          "expr": "rate(flink_jobmanager_job_checkpointing_number_in_progress[5m])",
+          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfInProgressCheckpoints[5m])",
           "legendFormat": "In Progress",
           "refId": "C"
         }
@@ -404,12 +404,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_checkpointing_state_size",
+          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointSize",
           "legendFormat": "Checkpoint Size",
           "refId": "A"
         },
         {
-          "expr": "flink_jobmanager_job_checkpointing_external_path",
+          "expr": "\"Checkpointing enabled\"",
           "legendFormat": "External Path",
           "refId": "B"
         }
@@ -602,22 +602,22 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_taskmanager_JobManager_HeapMemory_Used",
+          "expr": "flink_jobmanager_JobManager_Memory_Heap_Used",
           "legendFormat": "JM Heap Used",
           "refId": "A"
         },
         {
-          "expr": "flink_taskmanager_JobManager_HeapMemory_Max",
+          "expr": "flink_jobmanager_JobManager_Memory_Heap_Max",
           "legendFormat": "JM Heap Max",
           "refId": "B"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_HeapMemory_Used",
+          "expr": "flink_taskmanager_TaskManager_Memory_Heap_Used",
           "legendFormat": "TM Heap Used",
           "refId": "C"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_HeapMemory_Max",
+          "expr": "flink_taskmanager_TaskManager_Memory_Heap_Max",
           "legendFormat": "TM Heap Max",
           "refId": "D"
         }
@@ -676,12 +676,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_taskmanager_StatusReporter_NumberOfRunningTasks",
+          "expr": "flink_taskmanager_TaskManager_NumberOfRunningTasks",
           "legendFormat": "Running Tasks",
           "refId": "A"
         },
         {
-          "expr": "flink_taskmanager_StatusReporter_NumberOfSlot",
+          "expr": "flink_taskmanager_TaskManager_NumberOfSlots",
           "legendFormat": "Available Slots",
           "refId": "B"
         }
@@ -728,7 +728,7 @@
               { "color": "green", "value": null }
             ]
           },
-          "unit": "ms"
+          "unit": "short"
         }
       },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
@@ -748,22 +748,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(flink_taskmanager_job_task_operator_currentInputWatermark_latency[5m])) by (le, task_name))",
-          "legendFormat": "P50 {{task_name}}",
+          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m])) by (task_name)",
+          "legendFormat": "{{task_name}} records/sec",
           "refId": "A"
-        },
-        {
-          "expr": "histogram_quantile(0.95, sum(rate(flink_taskmanager_job_task_operator_currentInputWatermark_latency[5m])) by (le, task_name))",
-          "legendFormat": "P95 {{task_name}}",
-          "refId": "B"
-        },
-        {
-          "expr": "histogram_quantile(0.99, sum(rate(flink_taskmanager_job_task_operator_currentInputWatermark_latency[5m])) by (le, task_name))",
-          "legendFormat": "P99 {{task_name}}",
-          "refId": "C"
         }
       ],
-      "title": "Watermark Latency (P50/P95/P99)",
+      "title": "Task Throughput",
       "type": "timeseries"
     }
   ],

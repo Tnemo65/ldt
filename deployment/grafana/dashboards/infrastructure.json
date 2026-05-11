@@ -224,7 +224,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_taskmanager_StatusReporter_TaskManagerStatus_Value{status=\"ACTIVE\"})",
+          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers)",
           "legendFormat": "Flink TMs",
           "refId": "A"
         }

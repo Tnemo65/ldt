@@ -1,0 +1,78 @@
+\begin{thebibliography}{11}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[{Apache Kafka Project}(2024{\natexlab{a}})]{kafkaintro2024}
+{Apache Kafka Project}.
+\newblock Apache kafka documentation - introduction.
+\newblock \url{https://kafka.apache.org/intro}, 2024{\natexlab{a}}.
+\newblock Available at: \url{https://kafka.apache.org/intro}.
+
+\bibitem[{Apache Kafka Project}(2024{\natexlab{b}})]{kafkastreams2024}
+{Apache Kafka Project}.
+\newblock Apache kafka streams documentation - architecture.
+\newblock \url{https://kafka.apache.org/documentation/streams/architecture},
+  2024{\natexlab{b}}.
+\newblock Available at:
+  \url{https://kafka.apache.org/documentation/streams/architecture}.
+
+\bibitem[{Apache Software Foundation}(2024)]{flinkdocs2024}
+{Apache Software Foundation}.
+\newblock Apache flink documentation.
+\newblock \url{https://flink.apache.org/}, 2024.
+\newblock Available at: \url{https://flink.apache.org/}.
+
+\bibitem[Bifet and Gavalda(2007)]{bifet2007learning}
+Albert Bifet and Ricard Gavalda.
+\newblock Learning from time-changing data with adaptive windowing.
+\newblock pages 443--448, 2007.
+
+\bibitem[Bifet et~al.(2025)Bifet, Gavalda, et~al.]{adwin2025}
+Albert Bifet, Ricard Gavalda, et~al.
+\newblock Adwin-u: Adaptive windowing algorithm with univariate drift
+  detection.
+\newblock \emph{Knowledge and Information Systems}, 2025.
+
+\bibitem[{Data Management Association}(2017)]{dama2017dmbok}
+{Data Management Association}.
+\newblock Dama-dmbok: Data management body of knowledge (2nd edition).
+\newblock 2017.
+
+\bibitem[{Google Cloud}(2024)]{googlemlops2024}
+{Google Cloud}.
+\newblock Mlops: Continuous delivery and automation pipelines in machine
+  learning.
+\newblock
+  \url{https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning},
+  2024.
+\newblock Available at:
+  \url{https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning}.
+
+\bibitem[Liu et~al.(2008)Liu, Ting, and Zhou]{liu2008isolation}
+Fei~Tony Liu, Kai~Ming Ting, and Zhi-Hua Zhou.
+\newblock Isolation forest.
+\newblock pages 413--422, 2008.
+
+\bibitem[Lu et~al.(2018)Lu, Liu, Dong, Pei, Guruler, and
+  Savachkin]{lu2018learning}
+Jie Lu, Anjin Liu, Fan Dong, Fan Pei, Yuchi Guruler, and Alexander Savachkin.
+\newblock Learning under concept drift: A review.
+\newblock \emph{IEEE Transactions on Knowledge and Data Engineering},
+  31\penalty0 (12):\penalty0 2346--2363, 2018.
+
+\bibitem[{MLflow Community}(2024)]{mlflow2024}
+{MLflow Community}.
+\newblock Mlflow: An open source platform for the machine learning lifecycle.
+\newblock \url{https://mlflow.org/}, 2024.
+
+\bibitem[Serra et~al.(2022)Serra, Peralta, Marotta, and Marcel]{contextdq2022}
+Flavia Serra, Veronika Peralta, Adriana Marotta, and Patrick Marcel.
+\newblock Use of context in data quality management: a systematic literature
+  review.
+\newblock 2022.
+\newblock arXiv:2204.10655.
+
+\end{thebibliography}

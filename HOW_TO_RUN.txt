@@ -1,8 +1,497 @@
-# 1. Start all
-powershell -ExecutionPolicy Bypass -File C:\proj\ldt\deployment\scripts\start.ps1
+# =============================================================================
+# CA-DQStream Full Demo - Complete Run Guide
+# =============================================================================
+#
+# Run from project root on Windows PowerShell.
+# Prerequisites:
+#   - Docker Desktop running
+#   - Ports free: 2181, 5432, 5000, 8080, 8081, 8082, 9090, 9092,
+#                 9100, 9187, 9250, 9308, 9637, 9000, 9001
+#
+# =============================================================================
 
-# 2. Send data
-powershell -ExecutionPolicy Bypass -File C:\proj\ldt\deployment\scripts\start-producer.ps1
+# =============================================================================
+# TL;DR - Run these 3 commands in separate terminals:
+# =============================================================================
+#
+# Terminal 1 (start everything):
+#   powershell -ExecutionPolicy Bypass -File deployment/scripts/start.ps1 -TrainModel
+#
+# Terminal 2 (send data to Kafka):
+#   powershell -ExecutionPolicy Bypass -File deployment/scripts/start-producer.ps1
+#
+# Terminal 3 (inject anomalies - optional):
+#   python deployment/kafka/anomaly_producer.py --bootstrap localhost:9092 --mode continuous
+#
+# Then open Grafana at http://localhost:3000 (admin/admin123) and watch data flow.
+#
 
-# 3. Check health
-powershell -ExecutionPolicy Bypass -File C:\proj\ldt\deployment\scripts\check-health.ps1
+# =============================================================================
+# SECTION 1: QUICK START COMMANDS
+# =============================================================================
+
+# STEP 1: START FULL STACK
+#   Builds custom Flink image (3-5 min first run, cached after).
+#   Starts all services, initializes Kafka topics, MinIO buckets, PostgreSQL schema.
+#   Automatically submits the Flink pipeline job.
+#   With -TrainModel: trains IsolationForest and broadcasts to pipeline.
+powershell -ExecutionPolicy Bypass -File deployment/scripts/start.ps1 -TrainModel
+
+# STEP 2: START DATA PRODUCER (in a new terminal)
+#   Sends 100,000 synthetic NYC taxi trips to Kafka at ~5,000 msg/sec.
+powershell -ExecutionPolicy Bypass -File deployment/scripts/start-producer.ps1
+
+# STEP 3: VERIFY DATA FLOW (in a new terminal)
+curl "http://localhost:9090/api/v1/query?query=cadqstream_records_input_total"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) FROM taxi_trips_raw;"
+
+# STEP 4: OPEN GRAFANA DASHBOARDS
+#   http://localhost:3000 (admin / admin123)
+#   All 7 dashboards auto-populate within 1-2 minutes.
+
+# STEP 5: OPEN MLFLOW
+#   http://localhost:5000
+#   See experiment "cadqstream-anomaly-detection" with trained model artifacts.
+
+# STEP 6: STOP
+powershell -ExecutionPolicy Bypass -File deployment/scripts/stop.ps1
+
+
+# =============================================================================
+# SECTION 2: WHAT HAPPENS AT EACH STEP
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 2.1 start.ps1 (full stack)
+# -----------------------------------------------------------------------------
+# The start.ps1 script orchestrates the entire deployment:
+#
+#   Step 0: Docker Reset
+#     - Stops all ldt-* containers, removes old networks
+#     - Ensures clean state for fresh start
+#
+#   Step 1: Build Custom Flink Image
+#     - Builds ldt-flink:1.17.1-py from deployment/flink/Dockerfile
+#     - Includes: Flink 1.17.1, Python 3.10, pyflink, kafka connectors, JDBC
+#     - Cached after first build (-SkipBuild skips this)
+#
+#   Step 2: Start All Services via docker compose
+#     - Infrastructure:   zookeeper, kafka, schema-registry, kafka-ui, kafka-exporter
+#     - Database:           postgres, pgbouncer, pgbouncer-exporter, postgres-exporter
+#     - Storage:            minio, minio-init
+#     - Streaming:         flink-jobmanager, flink-taskmanager, flink-init
+#     - ML Platform:       mlflow
+#     - Observability:      prometheus, grafana, node-exporter, cadqstream-metrics
+#     - Data Producer:     kafka-producer (builds if needed)
+#
+#   Step 3: Wait for Core Services
+#     - Kafka (healthy)       → up to 180s
+#     - PostgreSQL (healthy)  → up to 120s
+#     - MinIO (healthy)       → up to 60s
+#     - cadqstream-metrics    → up to 30s
+#
+#   Step 4: Run Init Containers (one-time setup)
+#     - kafka-init:   Creates 7 Kafka topics with schema registry schemas
+#     - minio-init:   Creates buckets: ml-models, checkpoints, artifacts, mlflow-artifacts
+#     - flink-init:   Waits for Flink REST, submits pipeline job
+#
+#   Step 5: Wait for Flink REST API
+#     - Polls http://localhost:8081/overview
+#     - Proceeds when Flink TaskManagers are registered
+#
+#   Step 6: Submit Flink Pipeline Job
+#     - Runs flink run -py /opt/flink/e2e/src/flink_job_complete.py
+#     - Checks existing jobs first (skips if already running)
+#     - Installs river package if missing
+#
+#   Step 6b: Train ML Model (with -TrainModel flag)
+#     - Generates 50,000 synthetic NYC taxi trips
+#     - Trains IsolationForest (contamination=0.05, n_estimators=200)
+#     - Uploads anomaly_detector_v1.pkl + anomaly_scaler_v1.pkl to MinIO
+#     - Logs to MLflow (experiment: cadqstream-anomaly-detection)
+#
+#   Step 6c: Broadcast Model to Pipeline (with -TrainModel flag)
+#     - Downloads model from MinIO
+#     - Publishes to Kafka topic if-model-updates
+#     - Flink BroadcastState receives model for IFScoringOperator
+#
+#   Step 7: Start Monitoring Stack
+#     - All observability containers already started in Step 2
+#
+# Expected wall time: 3-5 min (first run), 1-2 min (-SkipBuild), 30s (-SkipBuild with healthy services)
+
+# -----------------------------------------------------------------------------
+# 2.2 Data Producer (start-producer.ps1)
+# -----------------------------------------------------------------------------
+# The Kafka producer generates synthetic NYC taxi trips matching the real NYC TLC
+# Yellow Taxi data schema. Each record includes:
+#   VendorID, pickup/dropoff datetime, passenger_count, trip_distance,
+#   PULocationID, DOLocationID, payment_type, fare_amount, total_amount, etc.
+#
+# Records are sent as JSON to the taxi-nyc-raw Kafka topic with 4 partitions.
+# The Flink pipeline reads from this topic and processes through all 4 layers.
+#
+# You can also run directly:
+docker start ldt-kafka-producer
+
+# -----------------------------------------------------------------------------
+# 2.3 Anomaly Injection (optional)
+# -----------------------------------------------------------------------------
+# The anomaly_producer.py injects controlled anomalies to demonstrate detection:
+#
+#   --mode continuous    : Low-rate continuous anomalies (fraudulent fares, zero-distance trips)
+#   --mode burst        : Burst of anomalies every 30 seconds (spike patterns)
+#   --mode drift_inject : Gradual concept drift injection (distribution shift)
+#
+# Running with anomalies will trigger:
+#   - Canary rule violations → canary_violations table + Kafka dq-stream-anomalies
+#   - ML anomaly scores     → anomaly_scores table
+#   - IEC drift detection   → drift_events table + Kafka iec-action-replay
+#   - Grafana alerts        → CadqstreamHighAnomalyRate, CadqstreamDriftDetected
+python deployment/kafka/anomaly_producer.py --bootstrap localhost:9092 --mode continuous
+
+
+# =============================================================================
+# SECTION 3: VERIFY DATA IS FLOWING
+# =============================================================================
+
+# PostgreSQL - all 9 tables should show growing counts:
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS raw_trips   FROM taxi_trips_raw;"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS schema_viol FROM schema_violations;"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS canary_viol  FROM canary_violations;"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS anomaly_scores FROM anomaly_scores;"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS meta_metrics FROM meta_metrics;"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS drift_events  FROM drift_events;"
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) AS model_versions FROM model_versions;"
+
+# PostgreSQL - inspect meta-metrics per neighborhood (updates every ~1 min):
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT neighborhood, volume, violation_rate, anomaly_rate FROM meta_metrics ORDER BY window_start DESC LIMIT 10;"
+
+# PostgreSQL - recent drift events:
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT triggered_at, neighborhood, strategy, drift_magnitude FROM drift_events ORDER BY triggered_at DESC LIMIT 5;"
+
+# Kafka - inspect output topics:
+docker exec ldt-kafka kafka-console-consumer --topic dq-stream-processed --from-beginning --max-messages 3 --bootstrap-server localhost:9092
+docker exec ldt-kafka kafka-console-consumer --topic dq-meta-stream      --from-beginning --max-messages 3 --bootstrap-server localhost:9092
+docker exec ldt-kafka kafka-console-consumer --topic iec-action-replay   --from-beginning --max-messages 3 --bootstrap-server localhost:9092
+
+# Kafka - consumer group status (verify offsets advancing):
+docker exec ldt-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --list
+docker exec ldt-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --group cadqstream-complete-pipeline --describe
+
+# Flink job status:
+curl -s http://localhost:8081/jobs | ConvertFrom-Json | Select-Object -ExpandProperty jobs | Format-Table id, name, state
+
+# Flink task slots:
+curl -s http://localhost:8081/overview | ConvertFrom-Json | Select-Object taskmanagers, totalTaskManagerSlotNumber, totalAvailableSlotNumber
+
+# Prometheus - query cadqstream custom metrics:
+curl "http://localhost:9090/api/v1/query?query=cadqstream_records_input_total"
+curl "http://localhost:9090/api/v1/query?query=cadqstream_records_valid_total"
+curl "http://localhost:9090/api/v1/query?query=cadqstream_anomalies_canary_total"
+curl "http://localhost:9090/api/v1/query?query=cadqstream_meta_volume"
+curl "http://localhost:9090/api/v1/query?query=cadqstream_iec_drift_detected_total"
+curl "http://localhost:9090/api/v1/query?query=cadqstream_pipeline_up"
+curl "http://localhost:9090/api/v1/query?query=cadqstream_flink_job_running"
+
+# Prometheus - all targets:
+curl -s http://localhost:9090/api/v1/targets | ConvertFrom-Json | Select-Object -ExpandProperty data | Where-Object { $_.health -eq "healthy" } | Select-Object -ExpandProperty labels | Select-Object job
+
+
+# =============================================================================
+# SECTION 4: GRAFANA DASHBOARDS
+# =============================================================================
+
+# Open http://localhost:3000 (admin / admin123)
+# All 7 dashboards auto-provision and should populate within 1-2 minutes.
+
+# --- Dashboard 1: CA-DQStream: Pipeline Overview ---
+#   uid: cadqstream-pipeline-overview
+#   Key panels:
+#     - Kafka Consumer Lag (stat) - should be < 1000
+#     - Raw Input Rate (events/sec) - shows taxi-nyc-raw throughput
+#     - Flink Throughput (records/sec) - Layer 1-4 flow rate
+#     - PostgreSQL Records (stat) - taxi_trips_raw row count
+#     - Anomaly Detection Rate (%) - meta anomaly rate from cadqstream metrics
+#     - Layer 1: Raw Event Input Rate - Kafka source rate
+#     - Layer 1: Dedup & Schema Validation - dedup output
+#     - Layer 2: Canary Violation Rate - rule-based anomalies %
+#     - Layer 2: ML Anomaly Rate - IsolationForest scores %
+#     - Layer 3: Meta-Metrics Window Volume - windowed neighborhood aggregates
+#     - Layer 4: ADWIN-U Drift Detection - drift event count
+#     - Layer 4: IEC Strategy Distribution - retrain/adjust/switch/no_action
+#     - PostgreSQL Transaction Rate - JDBC sink commits
+
+# --- Dashboard 2: CA-DQStream: Data Quality ---
+#   uid: cadqstream-data-quality
+#   Key panels:
+#     - Schema Violations (5m) - increase count
+#     - Canary Violation Rate - rate by rule type
+#     - ML Anomaly Rate - IsolationForest rate
+#     - IEC Drift Events (5m) - drift count
+#     - Canary Violation Rate by Rule Type - stacked bars by rule
+#     - Meta Anomaly Rate by Neighborhood - time series per neighborhood
+#     - Drift Events by Neighborhood - 5m bucket bars
+#     - IEC Strategy Execution (1h) - pie chart of strategy distribution
+#     - PostgreSQL Table Row Counts - all 9 tables over time
+
+# --- Dashboard 3: CA-DQStream: Flink Jobs ---
+#   uid: (auto-generated)
+#   Key panels:
+#     - Active TaskManagers - should match replica count (1)
+#     - Flink Job Status - RUNNING / FAILED / CREATED
+#     - Task Manager Status - all GREEN
+#     - Checkpointing: last checkpoint duration, size, state size
+#     - Num Records Out Per Second - throughput per operator
+#     - JVM Heap Memory Used - taskmanager memory
+#     - Garbage Collection - GC pause times
+
+# --- Dashboard 4: CA-DQStream: Kafka Overview ---
+#   uid: cadqstream-kafka-overview
+#   Key panels:
+#     - Broker Online (%) - should be 100%
+#     - Total Consumer Lag - should be low (< 1000)
+#     - Under-Replicated Partitions - should be 0
+#     - Topic Message Rates - all 6 pipeline topics
+#     - Consumer Group Lag - per group per topic
+#     - Consumer Group Offsets - advancing offsets
+#     - Request Latency P50/P95/P99 - broker latency
+
+# --- Dashboard 5: CA-DQStream: Infrastructure ---
+#   uid: cadqstream-infrastructure
+#   Key panels:
+#     - Services Online - count of healthy targets
+#     - Host Memory Usage - should be < 85%
+#     - Host CPU Usage - should be < 80%
+#     - Host Disk Usage - should be < 90%
+#     - CPU Usage Over Time - detailed CPU time series
+#     - Memory Breakdown - total/available/used
+#     - Disk Throughput - read/write bytes
+#     - Network Traffic - RX/TX bytes
+
+# --- Dashboard 6: CA-DQStream: PostgreSQL Health ---
+#   uid: cadqstream-postgres-health
+#   Key panels:
+#     - PostgreSQL Status - UP (green) or DOWN (red)
+#     - Active Connections - should be < 80% of max
+#     - Total Raw Trips - taxi_trips_raw count
+#     - Total Violations - canary + schema violations
+#     - PgBouncer Connections - server/client/waiting
+#     - Buffer Cache Hit Rate - should be > 95%
+#     - Longest Running Query (ms) - should be < 500ms
+#     - Checkpoint Activity - write/sync times
+
+# --- Dashboard 7: CA-DQStream: MLflow ---
+#   uid: cadqstream-mlflow
+#   Key panels:
+#     - MLflow Server Status - up metric
+#     - Pipeline Metrics Summary - cadqstream_records_input_total, cadqstream_meta_volume
+#     - Drift Detection Events - cadqstream_iec_drift_detected_total rate
+#     - Anomaly Counts - cadqstream_anomalies_canary_total, cadqstream_anomalies_ml_total
+#     - IEC Strategy Actions - cadqstream_iec_decisions_total by strategy
+
+
+# =============================================================================
+# SECTION 5: SERVICE URLs & CREDENTIALS
+# =============================================================================
+
+# Service              URL / Port                  Credentials
+# -------------------  -------------------------  --------------------
+# Kafka UI             http://localhost:8080       (no auth)
+# Flink UI            http://localhost:8081        (no auth)
+# Schema Registry     http://localhost:8082        (no auth)
+# Grafana             http://localhost:3000        admin / admin123
+# Prometheus          http://localhost:9090        (no auth)
+# MinIO Console       http://localhost:9001        minioadmin / minioadmin123
+# MLflow              http://localhost:5000         (no auth)
+# PostgreSQL          localhost:5432               cadqstream / cadqstream123
+# PgBouncer          localhost:6432               cadqstream / cadqstream123
+# Kafka               localhost:9092                 (no auth)
+# cadqstream-metrics  http://localhost:9250        (Prometheus scrape target)
+# Node Exporter       http://localhost:9100        (Prometheus scrape target)
+# Kafka Exporter      http://localhost:9308        (Prometheus scrape target)
+# Postgres Exporter   http://localhost:9187        (Prometheus scrape target)
+
+
+# =============================================================================
+# SECTION 6: KAFKA TOPICS & POSTGRES TABLES
+# =============================================================================
+
+# Kafka Topics (created by kafka-init):
+#   taxi-nyc-raw              - Input: raw taxi trips from producer
+#   dq-stream-processed       - Output: deduplicated, validated records
+#   dq-stream-anomalies       - Output: canary rule violations
+#   dq-meta-stream            - Output: windowed meta-metrics per neighborhood
+#   dq-hard-rule-violations  - Output: schema validation failures
+#   dq-metrics                - Output: pipeline operational metrics (reserved)
+#   iec-action-replay         - Output: IEC strategy decisions
+#   if-model-updates          - Input: IsolationForest model broadcast
+
+# PostgreSQL Tables (created by 01-init-schema.sql):
+#   taxi_trips_raw       - Layer 1 output: deduplicated, schema-validated trips
+#   schema_violations    - Layer 1 output: records failing schema validation
+#   canary_violations    - Layer 2 output: rule-based canary violations
+#   anomaly_scores      - Layer 2 output: ML anomaly detection scores
+#   meta_metrics        - Layer 3 output: 1-minute windowed aggregates per neighborhood
+#   drift_events        - Layer 4 output: IEC drift detection + strategy decisions
+#   model_versions      - IEC: model version tracking with MLflow integration
+#   checkpoint_metadata - Flink checkpoint tracking for recovery
+#   pipeline_stats      - General pipeline operational statistics
+
+
+# =============================================================================
+# SECTION 7: RUNNING THE DEMO MULTIPLE TIMES
+# =============================================================================
+
+# Quick Restart (keep all data, ~1-2 min):
+#   Stops containers, keeps volumes (Kafka offsets, PostgreSQL data, MinIO models).
+#   Use when restarting after stopping.
+powershell -ExecutionPolicy Bypass -File deployment/scripts/stop.ps1
+powershell -ExecutionPolicy Bypass -File deployment/scripts/start.ps1 -SkipBuild -TrainModel
+
+# Full Reset (start completely fresh, ~3-5 min):
+#   Removes all Docker volumes (Kafka offsets, PostgreSQL data, MinIO data).
+#   Kafka topics recreated by kafka-init on next start.
+#   Use when you want a clean demo or when Kafka consumer group gets stuck.
+powershell -ExecutionPolicy Bypass -File deployment/scripts/stop.ps1 -CleanKafka -RemoveVolumes
+powershell -ExecutionPolicy Bypass -File deployment/scripts/start.ps1 -TrainModel
+
+# Resume Demo (keep data, restart only Flink):
+#   Use when the pipeline crashed but you want to restart it.
+powershell -ExecutionPolicy Bypass -File deployment/scripts/stop.ps1
+powershell -ExecutionPolicy Bypass -File deployment/scripts/start.ps1 -SkipBuild
+
+# Re-train with new model version:
+docker exec ldt-flink-jobmanager python3 /opt/flink/e2e/scripts/train_model.py --version v2 --n-samples 100000
+docker exec ldt-flink-jobmanager python3 /opt/flink/e2e/scripts/load_model_to_broadcast.py --version v2 --bootstrap kafka:9092
+
+# Reset Kafka offsets (when consumer group is stuck):
+docker exec ldt-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --group cadqstream-complete-pipeline --reset-offsets --to-earliest --all-topics --execute
+
+
+# =============================================================================
+# SECTION 8: TROUBLESHOOTING
+# =============================================================================
+
+# --- Kafka topics not created ---
+docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list
+
+# --- Flink job not running ---
+docker logs ldt-flink-jobmanager --tail 50
+curl http://localhost:8081/jobs
+
+# --- Flink job failed (check exception) ---
+curl -s http://localhost:8081/jobs/<job-id>/exceptions | ConvertFrom-Json
+
+# --- PostgreSQL tables missing ---
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "\dt"
+
+# --- PostgreSQL connection refused ---
+docker logs ldt-postgres --tail 20
+docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT 1;"
+
+# --- MinIO buckets missing ---
+docker exec ldt-minio mc ls local/
+
+# --- Model not in MinIO (train_model.py failed) ---
+docker exec ldt-minio mc ls local/ml-models/
+docker logs ldt-flink-jobmanager --tail 30 | Select-String "train"
+
+# --- MLflow run missing ---
+curl http://localhost:5000/api/2.0/mlflow/experiments/list
+
+# --- Prometheus targets all down ---
+curl http://localhost:9090/api/v1/targets | ConvertFrom-Json | Select-Object -ExpandProperty data | Select-Object labels, lastError, health
+
+# --- Grafana dashboards showing "No data" ---
+# 1. Check Prometheus first:
+curl "http://localhost:9090/api/v1/query?query=cadqstream_records_input_total"
+# 2. If empty: pipeline may not be running
+curl http://localhost:8081/jobs
+# 3. Check Kafka consumer group:
+docker exec ldt-kafka kafka-consumer-groups --bootstrap-server localhost:9092 --group cadqstream-complete-pipeline --describe
+
+# --- Kafka producer not sending data ---
+docker logs ldt-kafka-producer --tail 20
+
+# --- Docker build fails ---
+# Check Docker Desktop is running
+docker version
+# Clean build cache if needed:
+docker builder prune -f
+
+# --- Container health checks failing ---
+# Check individual container status:
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+# --- Resource exhaustion (OOM) ---
+# Flink taskmanager memory limits may be too low:
+# Edit deployment/docker-compose.yml:
+#   flink-taskmanager: mem_limit: 4g  (increase if needed)
+#   flink-jobmanager: mem_limit: 2g  (increase if needed)
+
+# --- Clean up dangling Docker resources ---
+docker system prune -f --volumes
+
+
+# =============================================================================
+# SECTION 9: ARCHITECTURE SUMMARY
+# =============================================================================
+
+# The CA-DQStream pipeline processes NYC taxi data through 4 layers:
+#
+# LAYER 1: BASELINE VALIDATION
+#   Kafka Source (taxi-nyc-raw) → Parse JSON → Watermark → Dedup (MurmurHash3)
+#   → Schema Validation → Valid Records / Schema Violations
+#   Outputs: taxi_trips_raw table, schema_violations table, dq-hard-rule-violations topic
+#
+# LAYER 2: DUAL-BRANCH PROCESSING
+#   Canary Branch: 7 rule-based checks (negative fare, zero distance, etc.)
+#   Complex Branch: IsolationForest ML scoring via BroadcastState
+#   Outputs: canary_violations table, anomaly_scores table, dq-stream-anomalies topic
+#
+# LAYER 3: RENDEZVOUS + META-AGGREGATOR
+#   CoProcessFunction merges both branches keyed by trip_id
+#   VotingEnsembleFunction (canary overrides ML)
+#   1-minute TumblingEventTimeWindow → MetaAggregateFunction
+#   Outputs: meta_metrics table, dq-meta-stream topic
+#
+# LAYER 4: IEC (INTELLIGENT EVOLUTION CONTROLLER)
+#   36 ADWIN-U drift detectors (6 neighborhoods × 6 metrics)
+#   METER strategy prediction (do_nothing/adjust_threshold/retrain_model/switch_model)
+#   Outputs: drift_events table, iec-action-replay topic
+#
+# CONNECTED SERVICES:
+#   PostgreSQL ← JDBC Sinks (7 tables)
+#   Kafka → Flink (input/output topics)
+#   Prometheus ← cadqstream-metrics (custom pipeline metrics) + exporters
+#   Grafana ← Prometheus (dashboards + alerting)
+#   MLflow ← train_model.py (model registry + metrics)
+#   MinIO ← train_model.py (model artifacts) + MLflow (artifact root)
+
+
+# =============================================================================
+# SECTION 10: KEY FILE LOCATIONS
+# =============================================================================
+
+# Flink Pipeline:           src/flink_job_complete.py
+# Flink Operators:          src/operators/
+# ML Training:               deployment/scripts/train_model.py
+# Model Broadcast:          deployment/scripts/load_model_to_broadcast.py
+# Anomaly Injection:        deployment/kafka/anomaly_producer.py
+# Data Producer:            deployment/kafka/fast_producer.py
+# Docker Compose:            deployment/docker-compose.yml
+# Prometheus Config:        deployment/prometheus/prometheus.yml
+# Prometheus Alerts:        deployment/prometheus/alert-rules/cadqstream-alerts.yml
+# Grafana Dashboards:       deployment/grafana/dashboards/
+# Grafana Provisioning:     deployment/grafana/provisioning/
+# Start Script:             deployment/scripts/start.ps1
+# Stop Script:              deployment/scripts/stop.ps1
+# Producer Script:          deployment/scripts/start-producer.ps1
+# Flink Init:              deployment/flink/flink-init.sh
+# Kafka Init:              deployment/kafka/init-scripts/01-create-topics.sh
+# MinIO Init:             deployment/minio/init-scripts/01-create-buckets.sh
+# PostgreSQL Schema:       deployment/postgres/init-scripts/01-init-schema.sql
+# cadqstream-metrics:     deployment/cadqstream-metrics/cadqstream_metrics.py
+# Flink Dockerfile:        deployment/flink/Dockerfile
+# Kafka Producer Dockerfile: deployment/kafka/Dockerfile.producer

@@ -17,6 +17,9 @@ Violations also routed to dq-hard-rule-violations Kafka topic.
 from pyflink.datastream import MapFunction, FilterFunction
 from pyflink.common.typeinfo import Types
 from datetime import datetime
+import logging
+
+LOGGER = logging.getLogger('cadqstream-canary')
 
 
 class CanaryRulesValidator(MapFunction):
@@ -110,10 +113,10 @@ class CanaryRulesValidator(MapFunction):
         value['violation_count'] = len(violations)
 
         # Log stats periodically
-        if self.rules_checked % 10000 == 0:
+        if self.rules_checked % 100000 == 0:
             violation_rate = self.violations_found / self.rules_checked * 100
-            print(f"[CanaryRules] Checked: {self.rules_checked:,}, "
-                  f"Violations: {self.violations_found:,} ({violation_rate:.2f}%)")
+            LOGGER.info("[CanaryRules] Checked: %s, Violations: %s (%.2f%%)",
+                        f"{self.rules_checked:,}", f"{self.violations_found:,}", violation_rate)
 
         return value
 
@@ -201,14 +204,12 @@ class CanaryStatistics:
         """Print statistics summary."""
         summary = self.get_summary()
 
-        print("\n" + "="*60)
-        print("CANARY BRANCH STATISTICS")
-        print("="*60)
-        print(f"Total Checked: {summary['total_checked']:,}")
-        print(f"Total Violations: {summary['total_violations']:,}")
-        print(f"Violation Rate: {summary['violation_rate']}")
-        print("\nViolation Types:")
+        LOGGER.info("========== CANARY BRANCH STATISTICS ==========")
+        LOGGER.info("Total Checked: %s", f"{summary['total_checked']:,}")
+        LOGGER.info("Total Violations: %s", f"{summary['total_violations']:,}")
+        LOGGER.info("Violation Rate: %s", summary['violation_rate'])
+        LOGGER.info("Violation Types:")
         for vtype, count in sorted(summary['violation_types'].items(), key=lambda x: x[1], reverse=True):
             rate = count / summary['total_violations'] * 100 if summary['total_violations'] > 0 else 0
-            print(f"  {vtype}: {count:,} ({rate:.1f}%)")
-        print("="*60)
+            LOGGER.info("  %s: %s (%.1f%%)", vtype, f"{count:,}", rate)
+        LOGGER.info("==============================================")

@@ -24,6 +24,14 @@ import numpy as np
 from pathlib import Path
 import time
 from datetime import datetime
+import logging
+
+LOGGER = logging.getLogger('cadqstream-ml-service')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
 
 # Async cache
 try:
@@ -32,7 +40,7 @@ try:
     ASYNCACHE_AVAILABLE = True
 except ImportError:
     ASYNCACHE_AVAILABLE = False
-    print("⚠ asyncache not available - model caching disabled")
+    LOGGER.warning("asyncache not available - model caching disabled")
 
 # Prometheus metrics
 try:
@@ -40,7 +48,7 @@ try:
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
-    print("⚠ prometheus_client not available - metrics disabled")
+    LOGGER.warning("prometheus_client not available - metrics disabled")
 
 
 # FastAPI app
@@ -127,7 +135,7 @@ if ASYNCACHE_AVAILABLE:
             MODEL_LOAD_TIME.observe(load_time)
             ACTIVE_MODELS.inc()
 
-        print(f"[ModelCache] Loaded {model_path} ({load_time:.3f}s)")
+        LOGGER.info("ModelCache: Loaded %s (%.3fs)", model_path, load_time)
 
         return model
 else:
@@ -147,7 +155,7 @@ else:
         load_time = time.time() - start_time
         _model_cache[model_path] = model
 
-        print(f"[ModelCache] Loaded {model_path} ({load_time:.3f}s)")
+        LOGGER.info("ModelCache: Loaded %s (%.3fs)", model_path, load_time)
 
         return model
 
@@ -173,27 +181,27 @@ app_start_time = time.time()
 @app.on_event("startup")
 async def startup_event():
     """Warmup: preload default model."""
-    print("="*60)
-    print("CA-DQStream ML Service Starting...")
-    print("="*60)
+    LOGGER.info("=" * 60)
+    LOGGER.info("CA-DQStream ML Service Starting...")
+    LOGGER.info("=" * 60)
 
     try:
         # Preload default model
         await load_model_cached('models/iforest_model_v2.pkl')
         await load_scaler()
-        print("✅ Default model preloaded")
+        LOGGER.info("Default model preloaded")
     except Exception as e:
-        print(f"⚠ Could not preload model: {e}")
+        LOGGER.warning("Could not preload model: %s", e)
 
-    print("="*60)
-    print("Service ready on port 8000")
-    print("="*60)
+    LOGGER.info("=" * 60)
+    LOGGER.info("Service ready on port 8000")
+    LOGGER.info("=" * 60)
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Cleanup on shutdown."""
-    print("\n[Shutdown] ML Service stopping...")
+    LOGGER.info("[Shutdown] ML Service stopping...")
 
 
 # Health check endpoints

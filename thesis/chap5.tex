@@ -9,7 +9,7 @@
 
 This chapter validates the four core innovations (Chapter 3) through experimental evaluation on the NYC Yellow Taxi dataset (72M records across 26 months). Experiments are organized by Research Question to demonstrate clear mapping between contributions and validation.
 
-\textbf{Dataset:} NYC TLC Yellow Taxi trips from January 2024 to February 2026 (26 months). Training set: January 2024 (2.96M records). Validation set: July 2024 (3.08M records). Temporal validation: 26 months (72M records total).
+\textbf{Dataset:} NYC TLC Yellow Taxi trips from January 2024 to February 2026 (26 months). Training set: January 2024 (2.97M records). Validation set: July 2024 (3.08M records). Temporal validation: 26 months (72M records total).
 
 \textbf{Evaluation Metrics:}
 \begin{itemize}
@@ -88,7 +88,7 @@ Layer 4 (Drift Alerts) & 12 events & --- & --- \\ \hline
 \label{fig:layer_flow}
 \end{figure}
 
-\subsection{Experiment 6: Ablation Study}
+\subsection{Experiment 2: Ablation Study}
 
 \textbf{Objective:} Measure performance degradation when removing each layer to isolate individual contributions.
 
@@ -157,7 +157,7 @@ This incremental comparison isolates the value of ratio features (Baseline 1 $\t
             \item Traffic manipulation: 90 min for 2 miles with fare=\$45
             \item Payment inflation: tip\_amount $>$ 50\% of fare\_amount
         \end{itemize}
-    \item Train Hybrid K-Means iForestASD on Jan 2024 training set (2.96M records)
+    \item Train Hybrid K-Means iForestASD on Jan 2024 training set (2.97M records)
     \item Score July 2024 validation set (3.08M records + 50K synthetic anomalies)
     \item Measure Precision, Recall, F1, FPR using 4D context-aware thresholds
 \end{enumerate}
@@ -196,7 +196,7 @@ Payment inflation & 0.79 & 0.76 & 0.78 & 7.2\% \\ \hline
 
 \textbf{Method:}
 \begin{enumerate}
-    \item Train all models on Jan 2024 ultra-clean baseline (2.96M records, Chapter 4.1.3)
+    \item Train all models on Jan 2024 ultra-clean baseline (2.97M records, Chapter 4.1.3)
     \item Evaluate on July 2024 validation set with 50K EXTREME synthetic anomalies
     \item Measure Precision, Recall, F1, FPR, training time, inference latency
     \item Run 5 random seeds per variant to quantify variance
@@ -219,7 +219,7 @@ Baseline 4 -- Full iForest & 0.89 & 0.91 & 0.90 & 4.0\% & 51 \\ \hline
 \begin{enumerate}
     \item \textbf{Proposed Context-Aware achieves production targets:} F1=0.91, FPR=3.8\% (below 5\% threshold), Recall=0.92 (exceeds 75\% target)
 
-    \item \textbf{Ratio Features are CRITICAL:}
+    \item \textit{Ratio features are essential for threshold computation:}
         \begin{itemize}
             \item Baseline 1 (no ratio) $\to$ FPR=63.6\% (unusable -- 2 out of 3 normal trips flagged)
             \item Baseline 2 (with ratio) $\to$ FPR=5.0\% (12.7$\times$ improvement)
@@ -263,13 +263,13 @@ Figure~\ref{fig:model_radar} provides a holistic view of the proposed variant ac
 % ================================================
 % 5.5 RQ3: Drift Adaptation
 % ================================================
-\section{RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 5, 6]}
+\section{RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}
 
 \textbf{Research Question 3:} Does the Intelligent Evolution Controller's multi-strategy adaptation (Continuous Evolution, Switching, METER, Spatial Tracking) maintain model accuracy when data distributions drift over 26 months?
 
 \textbf{Hypothesis 3 (H3):} The IEC detects drift within one monitoring window and selects appropriate adaptation strategies based on drift characteristics, resolving most drift events via lightweight incremental updates.
 
-\subsection{Experiment 5: ADWIN Drift Detection Effectiveness}
+\subsection{Experiment 6: ADWIN Drift Detection Effectiveness}
 
 \textbf{Objective:} Validate that IEC detects drift events and triggers appropriate adaptation strategies to maintain model accuracy over 26 months.
 
@@ -491,9 +491,10 @@ Months 19--26 & 8.4\% $\to$ 11.2\% & 4.7\% $\to$ 4.9\% \\ \hline
 % ================================================
 % 5.8 Additional Validation Experiments
 % ================================================
-\section{Additional Validation Experiments [Exp 11, 12, 13, 14]}
+\section{Additional Validation Experiments [Exp 5, 11, 12, 13]}
 
-\subsection{Experiment 2: Business Rules Effectiveness}
+\subsection{Experiment 5: Business Rules Effectiveness}
+\label{sec:exp5_br}
 
 \textbf{Objective:} Validate that the 6 business rules catch validity violations effectively.
 

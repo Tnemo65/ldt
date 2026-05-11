@@ -27,6 +27,9 @@ from pyflink.datastream.window import TumblingEventTimeWindows
 from pyflink.common.time import Time
 from pyflink.common.typeinfo import Types
 from datetime import datetime
+import logging
+
+LOGGER = logging.getLogger('cadqstream-meta-agg')
 
 
 class VotingEnsembleFunction(MapFunction):
@@ -102,10 +105,10 @@ class VotingEnsembleFunction(MapFunction):
         value['voting_timestamp'] = datetime.utcnow().isoformat()
 
         # Log stats periodically
-        if self.records_processed % 10000 == 0:
+        if self.records_processed % 100000 == 0:
             anomaly_rate = self.anomalies_detected / self.records_processed * 100
-            print(f"[VotingEnsemble] Processed: {self.records_processed:,}, "
-                  f"Anomalies: {self.anomalies_detected:,} ({anomaly_rate:.2f}%)")
+            LOGGER.info("[VotingEnsemble] Processed: %s, Anomalies: %s (%.2f%%)",
+                        f"{self.records_processed:,}", f"{self.anomalies_detected:,}", anomaly_rate)
 
         return value
 

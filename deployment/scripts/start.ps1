@@ -4,7 +4,8 @@
 
 param(
     [switch]$SkipBuild,
-    [int]$ProducerMessages = 0
+    [int]$ProducerMessages = 0,
+    [switch]$TrainModel
 )
 
 $ErrorActionPreference = "Continue"
@@ -67,24 +68,6 @@ Write-Host ""
 # ─── Step 2: Start All Services ────────────────────────────────────
 Write-Host "[STEP 2] Starting all services..."
 
-# Fix volume paths in docker-compose.yml if needed
-$composeContent = Get-Content "docker-compose.yml" -Raw
-if ($composeContent -match "^\s+-\s+\.\./\.\./src:") {
-    Write-Host "[FIX] Updating volume paths in docker-compose.yml..."
-    $composeContent = $composeContent -replace '(?m)^\s+-\s+\.\./\.\./src:', '        - C:/proj/ldt/src:'
-    $composeContent = $composeContent -replace '(?m)^\s+-\s+\.\./\.\./scripts:', '        - C:/proj/ldt/scripts:'
-    Set-Content "docker-compose.yml" $composeContent
-}
-
-# Fix S3 checkpoint to local
-$composeContent = Get-Content "docker-compose.yml" -Raw
-if ($composeContent -match "s3://") {
-    Write-Host "[FIX] Updating checkpoint paths from s3:// to file:///tmp/..."
-    $composeContent = $composeContent -replace "s3://checkpoints/flink-checkpoints", "file:///tmp/flink-checkpoints"
-    $composeContent = $composeContent -replace "s3://checkpoints/flink-savepoints", "file:///tmp/flink-savepoints"
-    Set-Content "docker-compose.yml" $composeContent
-}
-
 docker compose -f "docker-compose.yml" up -d 2>&1 | Out-Null
 Write-Host "[OK] All services started."
 Write-Host ""
@@ -95,7 +78,8 @@ Write-Host "[STEP 3] Waiting for services (5 min total)..."
 $services = @(
     @{Name="ldt-kafka"; Wait=180; Interval=10; Desc="Kafka"},
     @{Name="ldt-postgres"; Wait=120; Interval=10; Desc="PostgreSQL"},
-    @{Name="ldt-minio"; Wait=60; Interval=10; Desc="MinIO"}
+    @{Name="ldt-minio"; Wait=60; Interval=10; Desc="MinIO"},
+    @{Name="ldt-cadqstream-metrics"; Wait=30; Interval=5; Desc="cadqstream-metrics"}
 )
 
 foreach ($svc in $services) {
@@ -188,12 +172,33 @@ if ($sourceMounted -notmatch "YES") {
 }
 Write-Host ""
 
+# ─── Step 6b: Train ML Model (optional) ─────────────────────────────
+if ($TrainModel) {
+    Write-Host "[STEP 6b] Training ML model..."
+
+    # Run training inside the Flink jobmanager container (has all Python deps)
+    $trainResult = docker exec ldt-flink-jobmanager bash -c "cd /opt/flink/e2e && python3 scripts/train_model.py --version v1 --n-samples 50000 2>&1" 2>$null
+    if ($trainResult -match "Training Complete" -or $LASTEXITCODE -eq 0) {
+        Write-Host "  [OK] ML model trained and uploaded to MinIO."
+    } else {
+        Write-Host "  [WARN] Model training output: $trainResult"
+    }
+
+    # ─── Step 6c: Broadcast model to Kafka ───────────────────────────
+    Write-Host "[STEP 6c] Broadcasting model to pipeline..."
+    $loadResult = docker exec ldt-flink-jobmanager bash -c "cd /opt/flink/e2e && python3 scripts/load_model_to_broadcast.py --version v1 --bootstrap kafka:9092 2>&1" 2>$null
+    if ($loadResult -match "SUCCESS" -or $LASTEXITCODE -eq 0) {
+        Write-Host "  [OK] Model broadcast to Kafka."
+    } else {
+        Write-Host "  [WARN] Model broadcast output: $loadResult"
+    }
+}
+Write-Host ""
+
 # ─── Step 7: Start Monitoring ───────────────────────────────────────
 Write-Host "[STEP 7] Starting monitoring stack..."
 Start-Sleep -Seconds 10
-docker compose -f "docker-compose.yml" up -d prometheus grafana kafka-exporter postgres-exporter node-exporter kafka-ui 2>&1 | Out-Null
-Start-Sleep -Seconds 20
-Write-Host "[OK] Monitoring stack started."
+Write-Host "[OK] Monitoring stack started (started with all services)."
 Write-Host ""
 
 # ─── Step 8: Run Data Producer (optional) ─────────────────────────
@@ -276,6 +281,11 @@ Write-Host "                        10000 kafka:9092 taxi-nyc-raw"
 Write-Host ""
 Write-Host "  To check health:   powershell -File deployment/scripts/check-health.ps1"
 Write-Host "  To stop:           powershell -File deployment/scripts/stop.ps1"
+Write-Host ""
+Write-Host "  Optional flags:"
+Write-Host "    -SkipBuild      Skip Docker image build"
+Write-Host "    -TrainModel     Train ML model and broadcast to pipeline"
+Write-Host "    -ProducerMsgs N Start producer with N messages"
 Write-Host ""
 
 Pop-Location

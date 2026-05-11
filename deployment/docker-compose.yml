@@ -297,6 +297,32 @@ services:
           cpus: "0.25"
           memory: 256M
 
+  pgbouncer-exporter:
+    image: prometheuscommunity/pgbouncer-exporter:v0.8.0
+    container_name: ldt-pgbouncer-exporter
+    hostname: pgbouncer-exporter
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9637/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    environment:
+      DATA_SOURCE_NAME: "postgres://cadqstream:cadqstream123@pgbouncer:5432/dq_pipeline?sslmode=disable"
+    ports:
+      - "9637:9637"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
+
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     container_name: ldt-postgres-exporter
@@ -530,7 +556,7 @@ services:
     volumes:
       - ./flink/flink-init.sh:/scripts/flink-init.sh:ro
       - C:/proj/ldt/src:/opt/flink/e2e/src:ro
-      - C:/proj/ldt/scripts:/opt/flink/e2e/scripts:ro
+      - C:/proj/ldt/deployment/scripts:/opt/flink/e2e/scripts:ro
     environment:
       FLINK_REST: http://flink-jobmanager:8081
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -705,6 +731,32 @@ services:
           cpus: "0.1"
           memory: 128M
 
+  cadqstream-metrics:
+    build:
+      context: .
+      dockerfile: cadqstream-metrics/Dockerfile
+    container_name: ldt-cadqstream-metrics
+    hostname: cadqstream-metrics
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9250/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    ports:
+      - "9250:9250"
+    environment:
+      FLINK_JM_URL: http://flink-jobmanager:8081
+      FLASK_ENV: production
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 128M
+
   # =============================================================================
   # LAYER 7: Data Producer (for demo/testing)
   # =============================================================================
@@ -725,3 +777,4 @@ services:
     command: ["100000", "kafka:9092", "taxi-nyc-raw"]
     volumes:
       - ./kafka/fast_producer.py:/app/fast_producer.py:ro
+

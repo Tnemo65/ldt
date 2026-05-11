@@ -1,0 +1,4 @@
+flask>=2.3.0
+prometheus-client>=0.17.0
+werkzeug>=2.3.0
+gunicorn>=21.0.0

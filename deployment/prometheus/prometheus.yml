@@ -98,3 +98,22 @@ scrape_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'mlflow'
+
+  # ── PgBouncer Exporter ─────────────────────────────────────────────────────
+  - job_name: 'pgbouncer'
+    static_configs:
+      - targets: ['pgbouncer-exporter:9637']
+    metrics_path: /metrics
+    scrape_interval: 30s
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        replacement: 'pgbouncer'
+
+  # Cadqstream Pipeline Application Metrics (custom cadqstream_* metrics)
+  - job_name: 'cadqstream-app'
+    static_configs:
+      - targets: ['cadqstream-metrics:9250']
+    metrics_path: /metrics
+    scrape_interval: 15s
+    scrape_timeout: 10s

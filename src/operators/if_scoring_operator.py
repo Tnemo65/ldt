@@ -12,9 +12,11 @@ from pyflink.common.typeinfo import Types
 import pickle
 import json
 import sys
+import logging
 from pathlib import Path
 
-# Add project root to path
+LOGGER = logging.getLogger('cadqstream-if-scoring')
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.features.vectorizer import FeatureVectorizer
@@ -138,7 +140,7 @@ class IFScoringOperator(MapFunction):
                 raise RuntimeError("Model not found in Broadcast State - run model loader first")
 
             self.model = pickle.loads(model_bytes)
-            print(f"[IFScoringOperator] Model loaded: {self.model.n_estimators} trees")
+            LOGGER.info("[IFScoringOperator] Model loaded: %s trees", self.model.n_estimators)
 
             # Load scaler
             scaler_bytes = broadcast_state.get("scaler")
@@ -146,7 +148,7 @@ class IFScoringOperator(MapFunction):
                 raise RuntimeError("Scaler not found in Broadcast State")
 
             self.scaler = pickle.loads(scaler_bytes)
-            print(f"[IFScoringOperator] Scaler loaded")
+            LOGGER.info("[IFScoringOperator] Scaler loaded")
 
             # Load thresholds
             threshold_json = broadcast_state.get("thresholds")
@@ -154,7 +156,8 @@ class IFScoringOperator(MapFunction):
                 raise RuntimeError("Thresholds not found in Broadcast State")
 
             self.thresholds = json.loads(threshold_json.decode('utf-8'))
-            print(f"[IFScoringOperator] Thresholds loaded: {len(self.thresholds.get('thresholds', {}))} contexts")
+            LOGGER.info("[IFScoringOperator] Thresholds loaded: %s contexts",
+                        len(self.thresholds.get('thresholds', {})))
 
             # Load neighborhood mapping if available
             mapping_json = broadcast_state.get("neighborhood_mapping")
@@ -163,10 +166,10 @@ class IFScoringOperator(MapFunction):
 
             # Initialize vectorizer
             self.vectorizer = FeatureVectorizer()
-            print(f"[IFScoringOperator] Vectorizer initialized (21D features)")
+            LOGGER.info("[IFScoringOperator] Vectorizer initialized (21D features)")
 
         except Exception as e:
-            print(f"[IFScoringOperator] ERROR in open(): {e}")
+            LOGGER.error("[IFScoringOperator] ERROR in open(): %s", e)
             raise
 
     def map(self, value):
@@ -207,14 +210,14 @@ class IFScoringOperator(MapFunction):
             return {
                 **value,
                 'anomaly_score': float(anomaly_score),
-                'threshold': float(threshold),
+                'threshold': float(threshold_val),
                 'is_anomaly': bool(is_anomaly),
                 'context_key': context_key
             }
 
         except Exception as e:
             # Log error but don't crash pipeline
-            print(f"[IFScoringOperator] ERROR scoring record: {e}")
+            LOGGER.error("[IFScoringOperator] ERROR scoring record: %s", e)
 
             # Return record with error flag
             return {

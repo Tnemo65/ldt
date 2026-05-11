@@ -59,7 +59,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "up{job=\"kafka-jmx\"} * 100",
+          "expr": "up{job=\"kafka-exporter\"} * 100",
           "legendFormat": "Broker Status",
           "refId": "A"
         }
@@ -101,7 +101,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(kafka_consumer_group_lag_sum)",
+          "expr": "sum(kafka_consumer_group_lag)",
           "legendFormat": "Total Lag",
           "refId": "A"
         }
@@ -669,17 +669,17 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, sum(rate(kafka_network_RequestMetrics_TimeMs{quantile=\"0.5\"}[5m])) by (instance, le))",
+          "expr": "histogram_quantile(0.50, sum(rate(kafka_network_RequestMetrics_TimeMs{request=\"Produce\", result=\"success\"}[5m])) by (instance, le))",
           "legendFormat": "P50 {{instance}}",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, sum(rate(kafka_network_RequestMetrics_TimeMs{quantile=\"0.95\"}[5m])) by (instance, le))",
+          "expr": "histogram_quantile(0.95, sum(rate(kafka_network_RequestMetrics_TimeMs{request=\"Produce\", result=\"success\"}[5m])) by (instance, le))",
           "legendFormat": "P95 {{instance}}",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, sum(rate(kafka_network_RequestMetrics_TimeMs{quantile=\"0.99\"}[5m])) by (instance, le))",
+          "expr": "histogram_quantile(0.99, sum(rate(kafka_network_RequestMetrics_TimeMs{request=\"Produce\", result=\"success\"}[5m])) by (instance, le))",
           "legendFormat": "P99 {{instance}}",
           "refId": "C"
         }

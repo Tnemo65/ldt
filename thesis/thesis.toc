@@ -107,20 +107,20 @@
 \contentsline {section}{\numberline {6.2}Experiment Environment}{33}{section.6.2}%
 \contentsline {section}{\numberline {6.3}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{34}{section.6.3}%
 \contentsline {subsection}{\numberline {6.3.1}Experiment 1: Four-Stage Layer Coverage Analysis}{34}{subsection.6.3.1}%
-\contentsline {subsection}{\numberline {6.3.2}Experiment 6: Ablation Study}{35}{subsection.6.3.2}%
+\contentsline {subsection}{\numberline {6.3.2}Experiment 2: Ablation Study}{35}{subsection.6.3.2}%
 \contentsline {section}{\numberline {6.4}RQ2: Does Hybrid K-Means iForestASD Outperform Baselines? [Exp 3, 4]}{35}{section.6.4}%
 \contentsline {subsection}{\numberline {6.4.1}Experiment 3: Isolation Forest Anomaly Detection}{36}{subsection.6.4.1}%
 \contentsline {subsection}{\numberline {6.4.2}Experiment 4: Comparison with Existing DQ Tools}{36}{subsection.6.4.2}%
-\contentsline {section}{\numberline {6.5}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 5, 6]}{38}{section.6.5}%
-\contentsline {subsection}{\numberline {6.5.1}Experiment 5: ADWIN Drift Detection Effectiveness}{38}{subsection.6.5.1}%
+\contentsline {section}{\numberline {6.5}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{38}{section.6.5}%
+\contentsline {subsection}{\numberline {6.5.1}Experiment 6: ADWIN Drift Detection Effectiveness}{38}{subsection.6.5.1}%
 \contentsline {section}{\numberline {6.6}RQ4: Does Rendezvous Architecture Improve Performance? [Exp 7, 8]}{39}{section.6.6}%
 \contentsline {subsection}{\numberline {6.6.1}Experiment 7: Rendezvous vs Linear Pipeline}{39}{subsection.6.6.1}%
 \contentsline {subsection}{\numberline {6.6.2}Experiment 8: End-to-End Throughput Benchmark}{40}{subsection.6.6.2}%
 \contentsline {section}{\numberline {6.7}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{41}{section.6.7}%
 \contentsline {subsection}{\numberline {6.7.1}Experiment 9: Context-Aware vs Global Thresholds}{41}{subsection.6.7.1}%
 \contentsline {subsection}{\numberline {6.7.2}Experiment 10: Temporal Validation}{42}{subsection.6.7.2}%
-\contentsline {section}{\numberline {6.8}Additional Validation Experiments [Exp 11, 12, 13, 14]}{43}{section.6.8}%
-\contentsline {subsection}{\numberline {6.8.1}Experiment 2: Business Rules Effectiveness}{43}{subsection.6.8.1}%
+\contentsline {section}{\numberline {6.8}Additional Validation Experiments [Exp 5, 11, 12, 13]}{43}{section.6.8}%
+\contentsline {subsection}{\numberline {6.8.1}Experiment 5: Business Rules Effectiveness}{43}{subsection.6.8.1}%
 \contentsline {subsection}{\numberline {6.8.2}Experiment 11: Fixed-Rule Baseline Comparison}{43}{subsection.6.8.2}%
 \contentsline {subsection}{\numberline {6.8.3}Experiment 12: PostgreSQL Write Performance}{44}{subsection.6.8.3}%
 \contentsline {subsection}{\numberline {6.8.4}Experiment 13: Grafana Dashboard Usability}{44}{subsection.6.8.4}%
@@ -151,3 +151,4 @@
 \contentsline {subsection}{\numberline {7.5.3}Regulatory Compliance}{50}{subsection.7.5.3}%
 \contentsline {subsection}{\numberline {7.5.4}Open Source Contribution}{50}{subsection.7.5.4}%
 \contentsline {section}{\numberline {7.6}Closing Remarks}{50}{section.7.6}%
+\contentsline {chapter}{REFERENCES}{51}{Item.207}%

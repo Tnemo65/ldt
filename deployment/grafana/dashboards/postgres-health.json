@@ -101,7 +101,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "pg_stat_activity_count",
+          "expr": "pg_stat_activity_count{datname=\"dq_pipeline\"}",
           "legendFormat": "Connections",
           "refId": "A"
         }
@@ -143,7 +143,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "pg_stat_activity_count / pg_settings_max_connections * 100",
+          "expr": "pg_stat_activity_count{datname=\"dq_pipeline\"} / pg_settings_max_connections * 100",
           "legendFormat": "Connection Usage",
           "refId": "A"
         }
@@ -183,7 +183,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(pg_stat_user_tables_n_live_tup{relname=\"taxi_trips_raw\"})",
+          "expr": "sum(pg_stat_user_tables_n_live_tup{schemaname=\"public\",relname=\"taxi_trips_raw\"})",
           "legendFormat": "Total Trips",
           "refId": "A"
         }
@@ -223,7 +223,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(pg_stat_user_tables_n_live_tup{relname=~\"canary_violations|schema_violations\"})",
+          "expr": "sum(pg_stat_user_tables_n_live_tup{schemaname=\"public\",relname=~\"canary_violations|schema_violations\"})",
           "legendFormat": "Violations",
           "refId": "A"
         }
@@ -263,7 +263,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(pg_stat_user_tables_n_live_tup{relname=~\"meta_metrics|drift_events\"})",
+          "expr": "sum(pg_stat_user_tables_n_live_tup{schemaname=\"public\",relname=~\"meta_metrics|drift_events\"})",
           "legendFormat": "Meta",
           "refId": "A"
         }
@@ -539,7 +539,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "pg_stat_activity_max_duration_seconds * 1000",
+          "expr": "pg_stat_activity_max_duration_seconds{datname=\"dq_pipeline\"} * 1000",
           "legendFormat": "Max Duration (ms)",
           "refId": "A"
         }
@@ -773,7 +773,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "pg_stat_user_tables_row_count",
+          "expr": "sum(pg_stat_user_tables_n_live_tup{schemaname=\"public\",relname=\"taxi_trips_raw\"})",
           "format": "table",
           "instant": true,
           "legendFormat": "",

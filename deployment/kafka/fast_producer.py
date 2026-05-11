@@ -4,7 +4,11 @@ import json
 import time
 import sys
 import random
+import logging
 from kafka import KafkaProducer
+
+LOGGER = logging.getLogger('cadqstream-producer')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
 
 VENDOR_IDS = [1, 2]
 RATECODE_IDS = [1, 2, 3, 4, 5, 6, 99]
@@ -83,7 +87,7 @@ if __name__ == "__main__":
     bootstrap = sys.argv[2] if len(sys.argv) > 2 else "kafka:9092"
     topic = sys.argv[3] if len(sys.argv) > 3 else "taxi-nyc-raw"
 
-    print("[producer] Connecting to Kafka at %s..." % bootstrap, flush=True)
+    LOGGER.info("Connecting to Kafka at %s...", bootstrap)
     try:
         producer = KafkaProducer(
             bootstrap_servers=[bootstrap],
@@ -96,10 +100,10 @@ if __name__ == "__main__":
             batch_size=65536,
         )
     except Exception as e:
-        print("[producer] Error connecting: %s" % e, flush=True)
+        LOGGER.error("Error connecting: %s", e)
         sys.exit(1)
 
-    print("[producer] Sending %d messages to topic '%s'..." % (total, topic), flush=True)
+    LOGGER.info("Sending %d messages to topic '%s'...", total, topic)
     sent = 0
     start = time.time()
     hours = [(i % 24) for i in range((total // 100) + 48)]
@@ -111,10 +115,10 @@ if __name__ == "__main__":
         if sent % 5000 == 0:
             elapsed = time.time() - start
             rate = float(sent) / max(elapsed, 0.1)
-            print("[producer] Sent %d/%d (%.0f/sec)" % (sent, total, rate), flush=True)
+            LOGGER.info("Sent %d/%d (%.0f/sec)", sent, total, rate)
 
     producer.flush()
     producer.close()
     elapsed = time.time() - start
     rate = float(sent) / max(elapsed, 0.1)
-    print("[producer] DONE: %d messages sent in %.1fs (%.0f/sec avg)" % (sent, elapsed, rate), flush=True)
+    LOGGER.info("DONE: %d messages sent in %.1fs (%.0f/sec avg)", sent, elapsed, rate)
