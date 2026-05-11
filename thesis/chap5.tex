@@ -40,6 +40,9 @@ This chapter validates the four core innovations (Chapter 3) through experimenta
     \item Python 3.10.12 with River 0.21.0 (iForestASD, ADWIN)
 \end{itemize}
 
+\textbf{Hardware Configuration:}
+CA-DQStream is deployed and benchmarked on a single AMD Threadripper 64-core server (128 threads) with 50GB RAM and PCIe 4.0 NVMe storage. This single-node configuration enables the full distributed Kafka/Flink/PostgreSQL stack to run concurrently for development, evaluation, and throughput benchmarking. The NVMe disk provides high IOPS for RocksDB state backend checkpointing and PostgreSQL write-ahead logs.
+
 % ================================================
 % 5.3 RQ1: Multi-Layer Coverage
 % ================================================

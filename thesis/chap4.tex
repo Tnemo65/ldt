@@ -623,6 +623,27 @@ ML\_score\_mean & 0.001 & 5-minute & Trigger model broadcast update \\ \hline
 
 A lower $\delta$ (e.g., 0.001) provides higher sensitivity but more false positives. $\delta=0.002$ is recommended for most metrics.
 
+\bigskip
+\noindent\textbf{Threshold Lifecycle and Update Mechanisms.}
+
+CA-DQStream employs three distinct threshold mechanisms with different initialization and update strategies. Understanding these differences clarifies how the system maintains data quality accuracy over time.
+
+\textit{(i) ML Thresholds ($T_{\text{cell}}$):} The 4D Context-Aware Threshold Matrix $T_{\text{cell}}$ is initialized offline by computing $\mu_{\text{cell}} + 2\sigma_{\text{cell}}$ from an ultra-clean training dataset curated through multi-pass rule filtering. When ADWIN detects drift, the IEC triggers Tier 2 adaptation: the system expands the data window, recomputes $\mu_{\text{cell}}$ and $\sigma_{\text{cell}}$, and runs A/B validation against the current threshold. The new threshold is committed only if the new FPR is lower than the baseline, ensuring that threshold updates are data-driven and conservative.
+
+\textit{(ii) ADWIN Drift Cut Points ($\epsilon_{\text{cut}}$):} The ADWIN $\epsilon_{\text{cut}}$ is not a static threshold in the traditional sense. It is a dynamic, self-adjusting cut point computed from the statistical variance of the observed window, governed by the Wald-based confidence interval formula described in Chapter 3.3 (Equation 3.1). The sensitivity parameter $\delta$ is the only user-specified constant (e.g., 0.002 for null\_rate); the cut point $\epsilon_{\text{cut}}$ adapts automatically at each event as the window's variance changes. A lower $\delta$ yields a narrower confidence interval (more sensitive drift detection, more false positives), while a higher $\delta$ requires stronger evidence before declaring drift.
+
+\textit{(iii) $\Delta$\_Score (Canary-Complex Divergence):} The $\Delta$\_score is not a threshold but a meta-metric computed continuously at Layer 3 (MetaAggregator) every 1 minute, measuring the divergence between Rule-based (Canary) and ML-based (Complex) anomaly classifications. It is monitored by ADWIN with $\delta=0.001$ to signal concept uncertainty: when $\Delta$\_score increases significantly, it indicates that the ML model's learned patterns no longer align with current data distribution, triggering IEC investigation.
+
+\begin{longtable}{|m{2.5cm}|m{3cm}|m{2cm}|m{5cm}|}
+\hline
+\textbf{Component} & \textbf{Initialization} & \textbf{Update Trigger} & \textbf{Update Mechanism} \\ \hline
+ML Threshold $T_{\text{cell}}$ & Offline: $\mu+2\sigma$ from clean dataset & ADWIN drift detected & Expand window, recompute $\mu$/$\sigma$, A/B validate, commit if FPR improves \\ \hline
+ADWIN $\epsilon_{\text{cut}}$ & Fixed $\delta$ parameter (0.001--0.002) & Every event (self-adjusting) & Dynamically computed from window variance via confidence interval formula \\ \hline
+$\Delta$\_score & Computed from first meta-batch & Every 1 minute (Layer 3) & ADWIN monitors $\delta=0.001$; rising $\Delta$\_score signals concept uncertainty to IEC \\ \hline
+\caption{Summary of threshold initialization and update mechanisms in CA-DQStream.}
+\label{tab:threshold_lifecycle}
+\end{longtable}
+
 \textbf{IEC 3-Tier Self-Adaptation Protocol:}
 
 When drift is detected, the IEC executes a tiered response protocol for operational integration:
@@ -828,23 +849,36 @@ Four pre-built Grafana dashboards provide operational visibility:
 
 Key PromQL queries: violation rates use \texttt{rate(dq\_schema\_violations[1m])} vs \texttt{rate(dq\_business\_rule\_violations[1m])} vs \texttt{rate(dq\_if\_anomalies[1m])}, and IEC drift status uses \texttt{iec\_drift\_events\_total} mapped to alert panels.
 
+\subsection{Object Storage (MinIO) for Checkpointing}
+
+CA-DQStream uses \textbf{MinIO} as an S3-compatible object storage layer for Flink checkpointing and savepointing. MinIO provides a lightweight, self-hosted alternative to AWS S3, enabling the same API semantics for distributed storage within a local or on-premise cluster.
+
+\textbf{Role in CA-DQStream:}
+\begin{itemize}
+    \item \textbf{Checkpoint Storage:} Flink's incremental checkpoints are written to MinIO bucket \texttt{flink-checkpoints} at 45-second intervals. This provides fault tolerance: in the event of a TaskManager failure, Flink rewinds to the last consistent checkpoint and resumes processing without data loss.
+    \item \textbf{Savepoint Storage:} Operator-level savepoints (manual snapshots before upgrades or code changes) are stored in \texttt{flink-savepoints} bucket, enabling zero-downtime deployments and pipeline migrations.
+    \item \textbf{Model Artifact Storage:} Trained Hybrid K-Means iForestASD model artifacts (serialized Pickle files) are archived in \texttt{models} bucket, enabling model versioning and rollback through MLflow Model Registry.
+\end{itemize}
+
+MinIO was chosen over HDFS or local filesystem storage because it provides S3 API compatibility, enabling CA-DQStream to switch to cloud S3 (AWS, GCS, Azure Blob) with minimal configuration changes in production deployments.
+
+\subsection{Control Plane (FastAPI \& MLflow)}
+
+The \textbf{Control Plane} manages model lifecycle and IEC action execution, decoupled from the real-time Flink streaming pipeline:
+
+\textbf{MLflow (Model Registry):} MLflow serves as the central model registry for all Hybrid K-Means iForestASD model versions. Each training run produces a registered model with stages (Staging, Production, Archived), experiment metadata (hyperparameters, feature sets, evaluation metrics), and artifact URIs pointing to MinIO storage. MLflow's REST API and Python client enable programmatic model promotion and demotion, which the IEC uses to trigger retraining workflows (detailed in Section 5.5 MLOps Integration).
+
+\textbf{FastAPI ML Service:} The FastAPI microservice exposes a lightweight REST endpoint (\texttt{/predict}, \texttt{/retrain}) that the IEC calls to trigger retraining and receive updated model parameters. This decouples IEC decision-making (real-time, in Flink) from model execution (batch, in MLflow), maintaining sub-second stream processing latency while complex adaptation workflows run asynchronously in the background. The Action Replay Worker (Section 5.4.2) consumes IEC drift events from the \texttt{if-model-updates} Kafka topic and orchestrates the retraining pipeline without blocking the Flink stream.
+
+\begin{itemize}
+    \item \textbf{MLflow:} \texttt{http://localhost:5000} --- Experiment tracking, model versioning, registry lifecycle.
+    \item \textbf{FastAPI:} \texttt{http://localhost:8000} --- IEC retrain endpoint, model parameter serving.
+\end{itemize}
+
 % ================================================
 % 5.4 Optimization Techniques
 % ================================================
 \section{Optimization Techniques}
-
-\subsection{Hardware Architecture (AMD Threadripper 64-core, 50GB RAM)}
-
-CA-DQStream V2.2.0 is deployed on a single AMD Threadripper 64-core server with 50GB RAM. This high-core-count, high-memory system enables the full CA-DQStream pipeline to run in a single-node configuration for development and evaluation, while the distributed Kafka/Flink/PostgreSQL stack handles production-scale workloads.
-
-The AMD Threadripper platform provides:
-\begin{itemize}
-    \item \textbf{64 cores / 128 threads}: Sufficient parallelism to run all Flink TaskManagers, Kafka broker, PostgreSQL, and monitoring stack concurrently on a single machine.
-    \item \textbf{50GB RAM}: Accommodates the full Flink JVM heap (for Broadcast State IF model), RocksDB state backend, and PostgreSQL shared buffers simultaneously.
-    \item \textbf{PCIe 4.0 NVMe}: Fast disk I/O for RocksDB state backend checkpointing and PostgreSQL write-ahead logs.
-\end{itemize}
-
-This single-node configuration is validated for throughput and latency benchmarks in Chapter 6.
 
 \subsection{Breaking Python GIL with PyFlink Vectorized UDFs}
 
