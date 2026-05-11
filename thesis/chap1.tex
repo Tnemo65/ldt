@@ -34,7 +34,16 @@ Kafka's retention mechanism stores events durably for as long as needed (configu
 
 The Kafka Streams API \citep{kafkastreams2024} enables implementing stream processing applications and microservices with higher-level functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Kafka Streams partitions data for processing using the same partitioning as Kafka's storage layer, enabling data locality, elasticity, scalability, high performance, and fault tolerance.
 
-In the context of the CA-DQStream framework, Kafka serves as the distributed event streaming backbone. NYC TLC Parquet files are ingested via Kafka Producer into the \texttt{taxi-nyc-raw} topic, and the six output/meta topics (\texttt{dq-schema-violations}, \texttt{dq-hard-rule-violations}, \texttt{dq-if-anomalies}, \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}, and \texttt{if-model-updates}) form the streaming pipeline. Figure~\ref{fig:kafka_streams_overview} shows the Kafka Streams architecture.
+In the context of the CA-DQStream framework, Kafka serves as the distributed event streaming backbone. NYC TLC Parquet files are ingested via Kafka Producer into the \texttt{taxi-nyc-raw} topic, and the six output/meta topics (\texttt{dq-schema-violations}, \texttt{dq-hard-rule-violations}, \texttt{dq-if-anomalies}, \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}, and \texttt{if-model-updates}) form the streaming pipeline.
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.75\textwidth]{figs/Thesis_Figures/kafka1.PNG}}
+\caption{CA-DQStream Kafka topics and consumer groups in the Flink Web UI. The seven topics (taxi-nyc-raw, dq-schema-violations, dq-hard-rule-violations, dq-if-anomalies, dq-anomaly-scores, dq-meta-stream, if-model-updates) with 12 partitions each enable parallel processing across the streaming pipeline.}
+\label{fig:kafka_topics_ui}
+\end{figure}
+
+The generic Kafka Streams architecture is illustrated in Figure~\ref{fig:kafka_streams_overview} for reference. In production, CA-DQStream deploys the Kafka layer with seven topics as shown in Figure~\ref{fig:kafka_topics_ui}.
 
 \begin{figure}[H]
 \centering
@@ -57,6 +66,13 @@ The Flink architecture is built around four critical concepts \citep{flinkdocs20
 \end{itemize}
 
 Flink provides exactly-once state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies.
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/flink1.PNG}}
+\caption{Apache Flink Web UI showing the CA-DQStream job execution. The dashboard displays running tasks, checkpoint status, and task manager metrics.}
+\label{fig:flink_ui}
+\end{figure}
 
 Flink supports both \textit{unbounded streams} (continuous, no defined end, must be continuously processed) and \textit{bounded streams} (batch processing with a defined start and end). Bounded streams are internally processed by algorithms and data structures specifically designed for fixed-size datasets, yielding excellent performance. This makes Flink a unified batch-stream processing engine.
 

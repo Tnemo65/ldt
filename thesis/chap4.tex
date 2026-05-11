@@ -18,9 +18,37 @@ The infrastructure provides the distributed computing foundation:
 \begin{enumerate}
     \item \textbf{Storage \& Messaging Layer:} Apache Kafka (event streaming backbone with 7 topics, 12 partitions each), PostgreSQL (persistent storage for clean/dirty records), MinIO (S3-compatible checkpoint storage), Confluent Schema Registry (Avro schema enforcement).
 
-    \item \textbf{MLOps Layer:} MLflow (experiment tracking and model versioning), FastAPI ML Service (model serving endpoint), Model Registry (Staging/Production/Archived lifecycle management).
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/kafka2.PNG}}
+\caption{CA-DQStream Kafka producer and consumer configuration. The Kafka Connect source ingests NYC TLC Parquet files into the \texttt{taxi-nyc-raw} topic, while Flink consumers subscribe to all seven topics for pipeline processing.}
+\label{fig:kafka_infra}
+\end{figure}
 
-    \item \textbf{Monitoring Layer:} Prometheus (metrics collection from all components), Grafana (real-time dashboards for DQ overview, ML comparison, system performance, and drift alerts).
+\item \textbf{MLOps Layer:} MLflow (experiment tracking and model versioning), FastAPI ML Service (model serving endpoint), Model Registry (Staging/Production/Archived lifecycle management).
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/flink2.PNG}}
+\caption{Apache Flink cluster overview in the Web UI. The JobManager and TaskManagers form the distributed processing cluster, with processing slots allocated across worker nodes for parallel pipeline execution.}
+\label{fig:flink_cluster}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/flink3.PNG}}
+\caption{Flink TaskManager metrics showing heap memory usage, garbage collection statistics, and network buffer utilization. These metrics are scraped by Prometheus for real-time cluster health monitoring.}
+\label{fig:flink_tm_metrics}
+\end{figure}
+
+\item \textbf{Monitoring Layer:} Prometheus (metrics collection from all components), Grafana (real-time dashboards for DQ overview, ML comparison, system performance, and drift alerts).
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/prometheus.PNG}}
+\caption{Prometheus targets page showing CA-DQStream monitoring endpoints. Prometheus scrapes metrics from Flink TaskManagers (port 9249), PostgreSQL (port 9187), and Kafka JMX (port 7071) at 15-second intervals.}
+\label{fig:prometheus_targets}
+\end{figure}
 \end{enumerate}
 
 \subsection{Processing Pipeline Overview}
@@ -250,7 +278,7 @@ Real-world fraud scenarios exhibit \textbf{multivariate correlations} that busin
     \item \textbf{Traffic Manipulation}: trip takes 90 minutes for 2 miles (speed=1.3 mph) with fare=\$45. Normal speed for traffic but \textbf{fare is inflated} for the distance-time ratio.
 \end{enumerate}
 
-\textbf{Problem:} Business rules (Layer 2a Canary) catch validity violations (see Experiment 5 in \cref{sec:exp5_br}). The remaining records require ML-based multivariate detection.
+\textbf{Problem:} Business rules (Layer 2a Canary) catch validity violations (see Experiment 5 in Section~\ref{sec:exp5_br}). The remaining records require ML-based multivariate detection.
 
 \textbf{CA-DQStream Solution:} Hybrid K-Means iForestASD (Chapter 3.5) detects joint-distribution anomalies by learning the normal correlation structure \emph{within each context cluster}.
 
