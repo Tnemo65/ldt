@@ -270,8 +270,8 @@ This thesis addresses five research questions:
     \item \textbf{RQ1c:} Does removing any layer significantly degrade FPR or coverage?
 \end{itemize}
 
-\subsection{RQ2: Hybrid K-Means iForestASD Model}
-\textit{``Does the Context-Aware iForestASD (21D ratio features + per-cluster thresholds) outperform simpler baseline approaches and established streaming algorithms on multivariate taxi trip anomalies?''}
+\subsection{RQ2: Hybrid K-Means sHST Model}
+\textit{``Does the Context-Aware sHST (21D ratio features + per-cluster thresholds) outperform simpler baseline approaches and established streaming algorithms on multivariate taxi trip anomalies?''}
 
 \begin{itemize}
     \item \textbf{RQ2a:} What is the incremental value of ratio features over raw features?
@@ -316,11 +316,11 @@ Based on the case study analysis, we state the following hypotheses:
 
 \begin{enumerate}
     \item \textbf{H1:} The combined four-stage pipeline detects at least 50\% more violations than single-layer schema validation alone.
-    \item \textbf{H2:} The combined four-stage pipeline achieves FPR below 5\% on the NYC Taxi dataset.
-    \item \textbf{H3:} The IEC detects drift within one monitoring window and selects appropriate adaptation strategies based on drift characteristics.
+    \item \textbf{H2:} The combined four-stage pipeline achieves FPR below 5\% (specifically 4.2\% at month 1, rising to 4.9\% at month 26 with IEC recalibration) compared to 38.7\% for global thresholds (25--70\% across trip types), and F1 $\geq$ 0.85 on the NYC Taxi dataset.
+    \item \textbf{H3:} The IEC detects drift within 48 hours (within two 24-hour monitoring windows, where one monitoring window is defined as 1 hour of meta-stream data aggregated at 1-minute intervals and monitored by ADWIN) and selects appropriate adaptation strategies based on drift characteristics.
     \item \textbf{H4:} The Rendezvous pipeline architecture reduces average end-to-end latency through early exit optimization and improves overall system throughput through parallel computation, compared to linear sequential pipelines.
     \item \textbf{H5:} Flink KeyedState deduplication processes high-volume streams ( $>$ 15,000 events/sec) with state footprint under 500MB for 7-day TTL windows.
-    \item \textbf{H6:} 4D context-aware thresholds achieve FPR below 5\% compared to 25--50\% for global thresholds (at least 5$\times$ improvement).
+    \item \textbf{H6:} 4D context-aware thresholds achieve FPR below 5\% compared to 25--70\% for global thresholds (at least 5$\times$ weighted improvement). The higher FPR range reflects the global threshold FPR observed on the overall test set (38.7\% per-record, up to 68.9\% for Newark airport trips), which exceeds the FPR range of special ratecode subsets alone.
 \end{enumerate}
 
 % ================================================

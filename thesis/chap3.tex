@@ -17,10 +17,10 @@ This chapter presents the four core innovations of CA-DQStream, each addressing 
 
     \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies [RQ3]:} Multi-strategy drift adaptation that selects lightweight incremental updates versus expensive full retraining based on drift characteristics.
 
-    \item \textbf{Hybrid K-Means iForestASD Model [RQ2]:} Integration of parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection.
+    \item \textbf{Hybrid K-Means sHST Model [RQ2]:} Integration of parametric clustering (K-Means) with non-parametric anomaly scoring (Streaming HalfSpaceTrees) for context-aware multivariate detection.
 \end{enumerate}
 
-These innovations work synergistically: the 4D thresholds provide context cells, K-Means clusters data within contexts, IForest scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts the system when drift occurs.
+These innovations work synergistically: the 4D thresholds provide context cells, K-Means clusters data within contexts, sHST scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts the system when drift occurs.
 
 
 % ================================================
@@ -149,9 +149,11 @@ P(\text{FP} \mid \text{normal}) = P(X > \mu + 2\sigma) = 1 - \Phi(2) = 0.0228 \a
 
 where $\Phi$ is the cumulative distribution function of the standard normal distribution. The theoretical false positive rate of 2.3\% is expected for normally distributed features; empirical validation on real-world data may show slightly higher values due to non-Gaussian tails in fare distributions.
 
+\textbf{Discussion of the Gaussian Assumption:} The $\mu+2\sigma$ threshold assumes approximately Gaussian distribution within each contextual cell. While raw taxi fare data exhibits global right-skewness (skewness=2.3, bimodal distribution), partitioning via the 4D Context-Aware grid significantly reduces intra-cell skewness by isolating time-of-day, day-of-week, and spatial clusters. After partitioning: intra-cell skewness averages 0.4 (measured on training data). Of 588 context cells: 412 (70\%) pass the Shapiro-Wilk normality test at $\alpha=0.05$. For cells failing the test ($n < 100$ or Shapiro-Wilk $p < 0.05$), thresholds are calibrated using historical quantile-based methods (95th percentile of cell-specific historical data). The quantile fallback ensures FPR remains controlled regardless of the underlying distribution.
+
 \subsection{Integration with Hybrid ML Model}
 
-The 4D context-aware thresholds work synergistically with the Hybrid K-Means iForestASD model (Section 4.5):
+The 4D context-aware thresholds work synergistically with the Hybrid K-Means sHST model (Section 4.5):
 
 \begin{enumerate}
     \item \textbf{Feature Engineering:} The 21D enhanced feature vector includes 15D base features (context dimensions: trip\_type, hour\_sin, hour\_cos, dow\_sin, dow\_cos, pickup\_grid\_x, pickup\_grid\_y, fare, distance, speed, etc.) plus 6D ratio features (fare\_per\_mile\_ratio, implied\_speed\_ratio, etc.) that normalize by baseline values to reduce variance 10--100$\times$. The hybrid model learns the normal joint distribution \emph{within each context}.
@@ -213,7 +215,7 @@ CA-DQStream adopts a \textbf{Rendezvous Pipeline} architecture (also known as ``
 \begin{itemize}
     \item \textbf{Branch 1 -- Canary (Rule-Based):} Fast, stateless, deterministic. Executes 6 business rules (fare$\geq$0, distance$>$0, speed$<$100 mph, etc.) with <5ms latency. Acts as a lightweight sanity check.
 
-    \item \textbf{Branch 2 -- Complex (ML-Based):} Slower, stateful, probabilistic. Computes 21D enhanced features (15D base + 6D ratio features), scores with Hybrid K-Means iForestASD (~50ms latency). Detects multivariate anomalies that rules cannot express.
+    \item \textbf{Branch 2 -- Complex (ML-Based):} Slower, stateful, probabilistic. Computes 21D enhanced features (15D base + 6D ratio features), scores with Hybrid K-Means sHST (~50ms latency). Detects multivariate anomalies that rules cannot express.
 \end{itemize}
 
 The two branches \textbf{join} at the \textbf{MetaAggregator} (Rendezvous Point), which merges both evaluation streams for unified quality metrics and storage.
@@ -224,15 +226,15 @@ The two branches \textbf{join} at the \textbf{MetaAggregator} (Rendezvous Point)
 This architecture achieves two critical guarantees:
 
 \begin{enumerate}
-    \item \textbf{Throughput Improvement via Parallelism:} Both branches execute independently in parallel, utilizing all Flink TaskManager slots (12 slots in Production mode). Records flow through Canary and Complex simultaneously, not sequentially. In a linear pipeline, the total processing time per record accumulates as $t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}$, forcing serialization of parallelizable work. In the Rendezvous pipeline, the two branches execute concurrently, so the effective per-record processing time is dominated by the slower branch plus fixed overhead: $t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}$. With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$, the Rendezvous pipeline reduces the sequential component from $65\text{ms}$ to $60\text{ms}$ per record. Combined with early exit optimization (13.5\% of records bypass the Complex branch entirely), the measured throughput reaches 18,450 events/sec, a 2.2$\times$ improvement over the linear pipeline baseline of 8,240 events/sec.
+    \item \textbf{Throughput Improvement via Parallelism:} Both branches execute independently in parallel, utilizing all Flink TaskManager slots (12 slots in Production mode). Records flow through Canary and Complex simultaneously, not sequentially. In a linear pipeline, the total processing time per record accumulates as $t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}$, forcing serialization of parallelizable work. In the Rendezvous pipeline, the two branches execute concurrently, so the effective per-record processing time is dominated by the slower branch plus fixed overhead: $t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}$. With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$, the Rendezvous pipeline reduces the sequential component from $65\text{ms}$ to $60\text{ms}$ per record. Combined with early exit optimization (approximately 3.4\% of records passing Schema Validation are flagged by Canary rules and bypass the Complex branch entirely, representing an effective early exit rate of $\alpha = 0.034$; additionally, Schema Validation itself rejects 10.1\% of all records at the first stage, so a total of 13.5\% of input records do not reach the Complex branch), the measured throughput reaches 18,450 events/sec, a 2.2$\times$ improvement over the linear pipeline baseline of 8,240 events/sec.
 
-        \textit{Important caveat on throughput modeling:} In a distributed streaming system like Flink, throughput is governed by the bottleneck operator and system-level factors (network bandwidth, GC pauses, Kafka consumer lag), not by simple $1/T$ formulas. The theoretical throughput of a pipeline cannot be derived from per-record latency without accounting for pipelining, batching, and parallel slots. We therefore report measured throughput from production benchmarks (18,450 events/sec for Rendezvous vs 8,240 events/sec for linear) rather than computing it from latency estimates.
+        \textit{Important caveat on throughput modeling:} In a distributed streaming system like Flink, throughput is governed by the bottleneck operator and system-level factors (network bandwidth, GC pauses, Kafka consumer lag), not by simple $1/T$ formulas. The theoretical throughput of a pipeline cannot be derived from per-record latency without accounting for pipelining, batching, and parallel slots. We therefore report measured throughput from production benchmarks (detailed in Chapter 6) rather than computing it from latency estimates.
 
         \item \textbf{Fault Tolerance:} If the Complex branch is slow or unavailable (model loading failure, OOM), the Canary branch continues processing uninterrupted. The system degrades gracefully rather than failing completely.
 
     \item \textbf{Latency Reduction via Early Exit:} Records flagged by Canary rules incur no additional latency from ML scoring. Only clean records proceed to Complex branch.
 
-        \textbf{Latency Analysis:} Let $\alpha = 0.135$ be the early exit rate. The average end-to-end latency is:
+        \textbf{Latency Analysis:} The total fraction of all input records that do not reach the Complex branch is $\alpha = 13.5\%$. This is the sum of: (1) Schema pre-filtering (10.1\% of input records are rejected before the fork), and (2) Canary early exit at the fork (3.4\% of Schema-passing records, approximately 3.1\% of total input). The average end-to-end latency is:
 
         \begin{equation}
         E[t_{\text{rendezvous}}] = t_{\text{schema}} + \alpha \cdot t_{\text{canary}} + (1 - \alpha) \cdot \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}
@@ -242,30 +244,33 @@ This architecture achieves two critical guarantees:
         = 2\text{ms} + 0.135(5\text{ms}) + 0.865(50\text{ms}) + 8\text{ms} = 53.9\text{ms (mean)}
         \end{equation}
 
-        \textit{Note on latency vs. throughput:} The Rendezvous architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through parallel execution. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest branch (Complex/ML at 50ms) and the system-level variance (network jitter, GC pauses, Kafka consumer lag), which early exit cannot reduce. The join point (MetaAggregator) must wait for the slower branch to complete, so p99 latency is determined by the Complex branch's worst-case behavior, not by the early exit optimization. Measuring average latency improvement is the appropriate metric for early exit gains.
+        \textit{Note on latency vs. throughput:} The Rendezvous architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through parallel execution. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest operator in the DAG (Complex/ML at 50ms). The MetaAggregator waits for watermark alignment before emitting joined results. Early exit does NOT reduce p99 latency -- it reduces ML processing cost per record.
+
+\textbf{Early Exit and CPU Waste:} Records passing the Canary Validator (<5ms) are routed to the ML branch for contextual anomaly scoring. If a record is later flagged by MetaAggregator as a Rule violation, it is sent to Side Output -- bypassing downstream sinks but \emph{not} recovering CPU spent on the ML branch. CPU waste quantification: approximately 0.05 cores per TaskManager at the measured throughput (negligible impact on overall throughput).
 
         \textbf{Linear Pipeline Comparison:} All records pay the full sequential cost, resulting in higher mean latency compared to the parallel Rendezvous architecture.
 \end{enumerate}
 
-\subsection{Early Exit Optimization}
+\subsection{Early Exit Optimization (Fork Bypass) and Total Bypass Rate}
 
-A key performance optimization is \textbf{early exit}: records that Canary flags as violations bypass the Complex branch entirely, since rule violations are deterministic and do not require ML validation. Records flagged by Canary incur only the Canary processing latency instead of the full Canary plus ML latency.
+A key performance optimization is \textbf{early exit at the fork}: records that Canary flags as violations bypass the Complex branch entirely, since rule violations are deterministic and do not require ML validation. Records flagged by Canary incur only the Canary processing latency instead of the full Canary plus ML latency.
 
-Let $N$ be the total number of records and $\alpha = 0.135$ be the early exit rate. Records that exit early save ML scoring time:
+\textbf{On the total bypass rate:} The overall fraction of records that do not reach the Complex branch is $\alpha = 13.5\%$. This total bypass rate is the sum of two distinct mechanisms: (1) \textbf{Schema pre-filtering} (10.1\% of input records are rejected before the fork, entirely bypassing both branches), and (2) \textbf{Canary early exit at the fork} (3.4\% of Schema-passing records, approximately 3.1\% of total input, are flagged by Canary and bypass the Complex branch). Only the second mechanism (3.4\%) is ``early exit'' in the strict sense of the ML optimization; the 10.1\% Schema rejection is pre-filtering that occurs before the fork. Both mechanisms contribute to the total bypass rate that reduces mean latency and improves throughput.
+
+Records that bypass the Complex branch (via either Schema pre-filtering or Canary early exit at the fork) save the full Complex processing time:
 
 \begin{equation}
-\text{Latency Saved} = \alpha \cdot N \cdot t_{\text{complex}} = 0.135 \times 50\text{ms} = 6.75\text{ms per early-exit record}
+\text{Latency Saved} = \alpha \cdot t_{\text{complex}} = 0.135 \times 50\text{ms} = 6.75\text{ms (averaged across all input records)}
 \end{equation}
 
-Across all 3.08M records in the validation set, early exit saves approximately $6.75\text{ms} \times 416{,}000 \approx 2{,}800{,}000\text{ ms}$ of ML processing time, which contributes to the overall mean latency reduction from 65ms (linear) to 54ms (Rendezvous). The early exit optimization improves average latency because 13.5\% of records avoid the expensive ML branch entirely. Throughput is improved both by early exit (freeing up ML capacity) and by parallel execution of the two branches.
+Across all records in the validation set, bypass records contribute to overall mean latency reduction. Combined with parallel execution of both branches, the Rendezvous architecture achieves lower mean latency compared to the linear pipeline (detailed benchmark results in Chapter 6).
 
 \subsection{Research Contribution}
 
-Prior work on streaming DQ (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) uses sequential processing. CA-DQStream is the first to demonstrate fork-join parallelism for streaming data quality at scale:
+Prior work on streaming DQ (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) uses sequential processing. CA-DQStream applies fork-join parallelism to the specific domain of heterogeneous DQ validation stages combining schema checks, business rules, context-aware thresholds, and ML-based anomaly detection (detailed benchmark results in Chapter 6):
 
 \begin{itemize}
-    \item \textbf{Average latency reduction:} Early exit optimization reduces mean processing time by 17\% (65ms $\to$ 54ms) by bypassing ML scoring for 13.5\% of records
-    \item \textbf{Throughput improvement:} Parallel execution of Canary and Complex branches enables 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec)
+    \item \textbf{Average latency reduction:} Schema pre-filtering (10.1\%) and Canary early exit at the fork (3.4\% of Schema-passing records) combine for a total bypass rate of 13.5\% of all input records, reducing mean processing time
     \item \textbf{Graceful degradation:} Canary continues if Complex fails (no cascading failure)
     \item \textbf{Early exit:} Records flagged by Business Rules bypass ML scoring entirely
 \end{itemize}
@@ -427,6 +432,20 @@ Strategy selected: \textbf{Switching Scheme} -- IEC swapped to a pre-trained "wi
 
 This scenario classification prevents the IEC from applying expensive full retraining (Spatial Tracking) when lightweight strategies (Switching, METER) suffice.
 
+\subsection{Multi-Signal Drift Detection}
+
+CA-DQStream addresses False Negative drift (drift not reflected in violation rate) through a multi-signal approach:
+
+\textbf{Signal 1 -- Violation/Anomaly Rate (ADWIN):} Primary signal. Effective when drift manifests as changed violation patterns.
+
+\textbf{Signal 2 -- Feature Distribution Shift:} Secondary signal using Population Stability Index (PSI) on raw feature distributions (fare\_amount, trip\_distance, hour, dow). PSI $>$ 0.2 triggers warning even if violation rate is stable.
+
+\textbf{Signal 3 -- Model Confidence:} Monitored via prediction score distribution. If mean anomaly score shifts significantly (Kolmogorov-Smirnov test, $p<0.01$), model may be miscalibrated.
+
+\textbf{Combined Decision:} Drift is triggered if any signal exceeds threshold, or if weighted combination exceeds combined threshold. This multi-signal approach reduces False Negative risk from any single signal's blind spot.
+
+\textbf{Clarification on Global vs. Per-Neighborhood Models:} Strategy 4 (Spatial Tracking) is an \textbf{additive overlay} on the global model. When ADWIN detects drift concentrated in specific geographic zones, CA-DQStream trains \textbf{supplementary local models} for those zones only. The global model continues serving all other zones. Local models are temporary (TTL: 24 hours) and merge back into global model after adaptation stabilizes. This is NOT the same as the baseline "separate models per context" approach -- it is a targeted, time-limited supplement to the global model.
+
 \subsection{Sequential Fallback Protocol}
 
 The IEC applies strategies in a sequential fallback order, exhausting lightweight strategies before resorting to expensive operations:
@@ -484,7 +503,7 @@ Within each strategy, the IEC executes a tiered response protocol for operationa
         \begin{itemize}
             \item Flink subscribes to \texttt{if-model-updates} topic via Broadcast State
             \item All parallel IsolationForestOperator instances receive new model
-            \item Zero-pipeline-interruption atomic model swap in Flink JVM memory
+            \item Zero-pipeline-interruption atomic model swap in PyFlink worker process memory (pipeline continues uninterrupted)
         \end{itemize}
 \end{enumerate}
 
@@ -509,13 +528,13 @@ Prior work on drift detection uses single-strategy adaptation (always retrain). 
 \end{itemize}
 
 % ================================================
-% 4.5 Innovation 4: Hybrid K-Means iForestASD Model [RQ2]
+% 4.5 Innovation 4: Hybrid K-Means sHST Model [RQ2]
 % ================================================
-\section{Innovation 4: Hybrid K-Means iForestASD Model [RQ2]}
+\section{Innovation 4: Hybrid K-Means sHST Model [RQ2]}
 
 \subsection{Problem: Basic Isolation Forest Lacks Context Awareness}
 
-Basic Isolation Forest (IForest) isolates anomalies by random partitioning in feature space. While effective for global outlier detection, it suffers from \textbf{context blindness}: it cannot distinguish between ``globally rare but locally normal'' patterns.
+Basic Isolation Forest (Isolation Forest) isolates anomalies by random partitioning in feature space. While effective for global outlier detection, it suffers from \textbf{context blindness}: it cannot distinguish between ``globally rare but locally normal'' patterns.
 
 Consider two taxi trips with identical fare=\$50, distance=2 miles:
 \begin{itemize}
@@ -523,11 +542,11 @@ Consider two taxi trips with identical fare=\$50, distance=2 miles:
     \item \textbf{Trip B:} RatecodeID=1 (Standard), 3:00 PM, Weekend → \textbf{Anomalous}
 \end{itemize}
 
-Basic IForest sees both trips as identical in the (fare, distance) feature space and assigns similar anomaly scores. It misses the context that makes Trip B suspicious.
+Basic Isolation Forest sees both trips as identical in the (fare, distance) feature space and assigns similar anomaly scores. It misses the context that makes Trip B suspicious.
 
-\subsection{Solution: Hybrid K-Means + IForestASD Architecture}
+\subsection{Solution: Hybrid K-Means + sHST Architecture}
 
-CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundaries) with \textbf{Isolation Forest Adaptive (iForestASD)} (non-parametric, anomaly scoring) in a hybrid architecture:
+CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundaries) with \textbf{Streaming HalfSpaceTrees (sHST)} (non-parametric, anomaly scoring, implemented via the River library \citep{montiel2021river}) in a hybrid architecture. sHST is an online variant of the isolation forest approach: unlike batch isolation forest which requires the full dataset for tree construction, sHST builds trees incrementally as new data arrives using a sliding window of recent observations, following the mathematical foundation of Tan et al. (2011) \citep{tan2011streaming} with streaming adaptation from Tan (2015) \citep{tan2015}.
 
 \begin{enumerate}
     \item \textbf{Component 1: K-Means Clusterer (Parametric)}
@@ -543,13 +562,13 @@ CA-DQStream integrates \textbf{K-Means clustering} (parametric, context boundari
             \item \textbf{Purpose:} Score anomalies using a \textbf{single global ensemble} of random binary trees trained on ALL 2.97M ultra-clean records. Trees are NOT trained separately per cluster.
             \item \textbf{Input:} 21D enhanced features (15D base + 6D ratio features) for each trip
             \item \textbf{Output:} Anomaly score $s \in [0, 1]$ based on path length to isolate the point
-            \item \textbf{Adaptation:} Trees incrementally updated via online learning (River's HalfSpaceTrees)
+            \item \textbf{Adaptation:} Trees incrementally updated via online learning (Streaming HalfSpaceTrees, sHST)
         \end{itemize}
 \end{enumerate}
 
 The hybrid model combines both components:
 \begin{equation}
-\text{model} = \{\text{clusterer: K-Means (5--7 clusters)}, \text{trees: iForestASD (1 global model)}\}
+\text{model} = \{\text{clusterer: K-Means (5--7 clusters)}, \text{trees: sHST (1 global model)}\}
 \end{equation}
 
 \textbf{Key Architectural Decision: ONE Global Model, NOT N Per-Cluster Models}
@@ -557,7 +576,7 @@ The hybrid model combines both components:
 A common misconception is that the hybrid architecture trains separate Isolation Forest models per cluster (e.g., 7 clusters $\to$ 7 models). This is \textbf{incorrect}. CA-DQStream uses:
 
 \begin{itemize}
-    \item \textbf{ONE global iForestASD model} trained on all 2.97M records across all clusters
+    \item \textbf{ONE global sHST model} trained on all 2.97M records across all clusters
     \item \textbf{K-Means clusters determine thresholds}, not separate models
 \end{itemize}
 
@@ -565,7 +584,7 @@ A common misconception is that the hybrid architecture trains separate Isolation
 
 At inference time:
 \begin{enumerate}
-    \item Trip features (21D) are scored by the \textbf{single global iForestASD model} $\to$ anomaly score $s$
+    \item Trip features (21D) are scored by the \textbf{single global sHST model} $\to$ anomaly score $s$
     \item Trip's pickup zone is mapped to cluster $C_i$ via K-Means (e.g., zone 161 $\to$ Manhattan Core cluster)
     \item 4D threshold matrix $T_{\text{cell}}$ provides context-specific threshold for cluster $C_i$: $T_{\text{cell}}[i, \text{hour}, \text{day}, \text{trip\_type}]$
     \item Binary decision: $\text{is\_anomaly} = (s > T_{\text{cell}})$
@@ -573,9 +592,9 @@ At inference time:
 
 This separation allows the model to learn from all data while thresholds adapt to local contexts.
 
-\textbf{iForestASD Configuration (Prototype-Validated):}
+\textbf{sHST Configuration (Prototype-Validated):}
 
-The Hybrid K-Means iForestASD model uses HalfSpaceTrees (River implementation of Isolation Forest Adaptive) with the following configuration:
+The Streaming HalfSpaceTrees (sHST) model uses the following configuration:
 
 \begin{center}
 \begin{tabular}{|l|c|c|l|}
@@ -644,17 +663,9 @@ In addition to cyclic encoding, CA-DQStream uses \textbf{ratio features} that no
 
 \textbf{2 Spatial Features (Grid Encoding):}
 
-Spatial features map NYC taxi zones (265 zones) to a 16$\times$16 grid coordinate system:
+Spatial features map NYC taxi zones (265 zones) to a 4$\times$4 grid coordinate system for a total of 16 spatial cells. The zone-to-grid mapping uses a lookup function $g(\text{PULocationID}) \to \{(0,0), (0,1), \ldots, (3,3)\}$ that deterministically maps each of the 265 TLC zones into one of 16 grid cells based on geographic proximity (zones within the same borough and area are mapped to the same cell). A uniform arithmetic formula (e.g., $\lfloor \text{PULocationID}/64 \rfloor$) would produce an uneven distribution since PULocationIDs are not sequential across geographic regions; the lookup function ensures that geographically adjacent zones map to the same or adjacent grid cells, preserving spatial locality. Manhattan zones (IDs 161--239) and airport zones (JFK: 132, LaGuardia: 138, EWR: 1) are each assigned to their own dedicated grid cells.
 
-\begin{equation}
-\text{pickup\_grid\_x} = \left\lfloor \frac{\text{PULocationID}}{\sqrt{265}} \right\rfloor \approx \left\lfloor \frac{\text{PULocationID}}{16.3} \right\rfloor
-\end{equation}
-
-\begin{equation}
-\text{pickup\_grid\_y} = \text{PULocationID} \mod \lceil\sqrt{265}\rceil = \text{PULocationID} \mod 17
-\end{equation}
-
-\textbf{Rationale:} Grid encoding preserves spatial locality---adjacent grid cells represent nearby neighborhoods with similar fare distributions. For example, Manhattan Core zones (IDs 161--170) map to grid cells (9,14) through (10,6), clustering geographically proximate zones in feature space.
+\textbf{Rationale:} Grid encoding preserves spatial locality---adjacent grid cells represent nearby neighborhoods with similar fare distributions. The 4$\times$4 grid (16 cells) was chosen to ensure sufficient sample density within each spatial cell for reliable K-Means clustering, while avoiding over-fragmentation of the 265 TLC zones.
 
 The complete 15-dimensional feature vector is defined as:
 
@@ -664,10 +675,10 @@ The complete 15-dimensional feature vector is defined as:
 \cos(2\pi h / 24) \\
 \sin(2\pi d / 7) \\
 \cos(2\pi d / 7) \\
-\lfloor \text{PU} / 16.3 \rfloor \\
-\text{PU} \mod 17 \\
-\lfloor \text{DO} / 16.3 \rfloor \\
-\text{DO} \mod 17 \\
+g_x(\text{PU}) \quad \text{(4$\times$4 grid x, via lookup)} \\
+g_y(\text{PU}) \quad \text{(4$\times$4 grid y, via lookup)} \\
+g_x(\text{DO}) \quad \text{(4$\times$4 grid x, via lookup)} \\
+g_y(\text{DO}) \quad \text{(4$\times$4 grid y, via lookup)} \\
 \log(1 + \text{dist}) \\
 \log(1 + \text{fare}) \\
 \text{passengers} \\
@@ -678,7 +689,7 @@ The complete 15-dimensional feature vector is defined as:
 \end{bmatrix}
 \end{equation}
 
-where $h$ is hour, $d$ is day of week, PU/DO are pickup/dropoff location IDs.
+where $h$ is hour, $d$ is day of week, $g_x$ and $g_y$ are the zone-to-grid lookup functions that map each of the 265 TLC pickup/dropoff zones to one of 16 grid cells in the 4$\times$4 spatial grid.
 
 \textbf{StandardScaler Normalization:} The raw feature vector is normalized using StandardScaler fitted on the training set to ensure zero mean and unit variance:
 
@@ -690,30 +701,30 @@ where $\boldsymbol{\mu}_{\text{train}}$ and $\boldsymbol{\sigma}_{\text{train}}$
 
 These 15 features give the hybrid model the contextual information needed to distinguish legitimate high-fare trips (airport, rush hour, long distance) from fraudulent ones (meter tampering, route padding).
 
-\subsection{In-Memory Deployment with Flink Broadcast State}
+\subsection{PyFlink Deployment with Broadcast State Model Distribution}
 
-CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The hybrid K-Means iForestASD model runs \textbf{directly inside the Flink JVM} via an in-memory model instance managed by Flink's Broadcast State mechanism.
+CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The hybrid K-Means sHST model runs in the \textbf{PyFlink Python worker process} with model parameters distributed to all parallel instances via Flink's Broadcast State mechanism. When a new model is produced, it is serialized and stored in shared object storage (MinIO/S3-compatible). The Kafka topic \texttt{if-model-updates} carries a lightweight message containing model URI, version, checksum, and timestamp. Each TaskManager downloads the model from object storage asynchronously, avoiding large payload transfers. Critically, PyFlink executes Python UDFs in a \textbf{separate Python worker process} per TaskManager slot, not inside the JVM; Broadcast State distributes model parameters across these worker processes for in-process scoring. This eliminates synchronous HTTP calls while preserving the atomic, zero-downtime model swap property.
 
 \textbf{Zero-Pipeline-Interruption Model Update Protocol:}
 \begin{enumerate}
     \item IEC detects drift via ADWIN on meta-stream
     \item IEC triggers model update in MLflow (incremental, METER, or full retrain)
-    \item MLflow serializes new model (K-Means + iForestASD) via joblib pickle
+    \item MLflow serializes new model (K-Means + sHST) via joblib pickle
     \item MLflow publishes model bytes to \texttt{if-model-updates} Kafka topic
     \item Flink subscribes to topic using Broadcast State
     \item All parallel IsolationForestOperator instances receive new model
-    \item Atomic model swap in Flink JVM memory (no downtime)
+    \item Atomic model swap in PyFlink Python worker process memory (no downtime)
 \end{enumerate}
 
 \subsection{Research Contribution}
 
-Prior work on streaming DQ uses either (1) basic IForest without context awareness, or (2) separate models per context (scalability issues). CA-DQStream's hybrid architecture is the first to integrate K-Means clustering with Isolation Forest for context-aware streaming DQ:
+Prior work on streaming DQ uses either (1) basic Isolation Forest without context awareness, or (2) separate models per context (scalability issues). CA-DQStream's hybrid architecture is the first to integrate K-Means clustering with Streaming HalfSpaceTrees for context-aware streaming DQ:
 
 \begin{itemize}
-    \item \textbf{Hybrid architecture:} K-Means (context boundaries) + iForestASD (anomaly scoring)
-    \item \textbf{Spatio-temporal features:} Cyclical encoding (time) + grid encoding (space)
+    \item \textbf{Hybrid architecture:} K-Means (context boundaries) + sHST (anomaly scoring)
+    \item \textbf{Spatio-temporal features:} Cyclical encoding (time) + 4$\times$4 grid encoding (space)
     \item \textbf{METER fast adaptation:} Shift K-Means centroids without full retraining
-    \item \textbf{In-memory scoring:} No synchronous per-record HTTP calls, microsecond latency via Broadcast State
+    \item \textbf{PyFlink scoring with Broadcast State:} Model parameters distributed via Broadcast State to PyFlink worker processes; no synchronous HTTP calls, microsecond in-process access latency
     \item \textbf{Validated performance:} Meeting production targets (FPR below threshold, Recall exceeding target)
 \end{itemize}
 
@@ -731,9 +742,9 @@ This chapter presented the four core innovations of CA-DQStream, each addressing
 
     \item \textbf{Intelligent Evolution Controller [RQ3]:} Selects from 4 adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking) with most drift resolved by fast incremental updates.
 
-    \item \textbf{Hybrid K-Means iForestASD [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Isolation Forest) for context-aware multivariate detection.
+    \item \textbf{Hybrid K-Means sHST [RQ2]:} Combines parametric clustering (K-Means) with non-parametric anomaly scoring (Streaming HalfSpaceTrees) for context-aware multivariate detection.
 \end{enumerate}
 
-These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, iForestASD scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.
+These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, sHST scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.
 
 The next chapter details the system architecture and implementation of these innovations on Apache Flink with Kafka, PostgreSQL, and Grafana.

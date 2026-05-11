@@ -1,0 +1,46 @@
+1. Học thuật & Thuật toán (AI/MLOps Scientist)
+Ngụy biện khoảng trống nghiên cứu (Strawman): Tác giả khẳng định rằng các framework hiện tại (bao gồm Stream DaQ) "chỉ hỗ trợ các luật định định cơ bản" (basic deterministic rules) và "xử lý tuần tự" (sequential processing)
+. Đây là một sự đánh tráo khái niệm và phủ nhận trắng trợn. Tài liệu gốc của Stream DaQ ghi rõ họ hỗ trợ các kiểm tra phức tạp như phân tích phân phối (distribution analysis), phát hiện trôi dạt (data drift), và xác thực feature-label cho các luồng Machine Learning (stream freshness, ML inference pipelines) trên cấu trúc windowing
+.
+Thiên lệch Baseline: Tác giả chứng minh kiến trúc Rendezvous tăng thông lượng gấp 2.2 lần so với Linear Pipeline (từ 8,240 lên 18,450 events/sec)
+. Tuy nhiên, tác giả không làm rõ liệu baseline "Linear" này có được áp dụng kỹ thuật tối ưu hóa PyFlink Vectorized UDFs như nhánh ML của Rendezvous hay không. Chính tác giả thừa nhận Vectorized UDFs mang lại mức tăng tốc lên tới 16 lần (từ 1,150 lên 18,450 events/sec)
+. Nếu baseline Linear không dùng Vectorized UDFs, sự so sánh này hoàn toàn bị thao túng.
+Sai lầm trong giả định toán học: Tác giả sử dụng công thức T=μ+2σ để tính toán ngưỡng 4D Context-Aware Thresholds
+, dựa trên giả định phân phối chuẩn (Gaussian) với FPR lý thuyết là 2.3%
+. Tuy nhiên, dữ liệu cước phí (fare amount) và khoảng cách chuyến đi của NYC Taxi có bản chất là phân phối đuôi dài (long-tailed/power-law). Việc áp dụng công thức μ+2σ cho một phân phối phi chuẩn là sai lệch nghiêm trọng về bản chất thống kê.
+Cách tiêm lỗi phá hỏng tính chất dữ liệu: Việc tiêm lỗi nhân tạo (synthetic anomalies) như "Meter tampering" hay "Traffic manipulation" thông qua phép thao túng giá trị trực tiếp
+ phá vỡ tính liên kết không gian - thời gian tự nhiên của dữ liệu giao thông. Mô hình Isolation Forest (iForestASD) có thể đạt F1 cao
+ đơn giản vì nó nhận diện được "dấu vết nhân tạo" của phép nội suy, chứ không phải vì nó có khả năng nắm bắt được quy luật ẩn của luồng giao thông thực.
+2. Kiến trúc Hệ thống (System Architect)
+Rủi ro thắt cổ chai Broadcast State: Tác giả thiết kế cơ chế "Zero-Pipeline-Interruption Model Update" bằng cách load mô hình 48MB (K-Means + iForestASD) qua Broadcast State của Flink tới TẤT CẢ các instances song song
+. Trong môi trường Production với hàng trăm TaskManager slots, việc đẩy đồng loạt 48MB qua Kafka topic có thể gây bão hòa băng thông mạng (network saturation), dội ngược lại độ trễ của toàn bộ pipeline.
+Vi phạm độ trễ và nhầm lẫn cơ chế đồng bộ: Tác giả liên tục hô hào "giảm độ trễ trung bình" nhờ kiến trúc Rendezvous (từ 65ms xuống 54ms) thông qua Early Exit (13.5% bỏ qua ML)
+. Tuy nhiên, đặc thù của kiến trúc Fork-Join (Rendezvous) là điểm nối (MetaAggregator) bắt buộc phải đợi nhánh chậm nhất
+. Biểu đồ CDF cho thấy p99 latency lên tới 294ms
+. Đối với các hệ thống phân tích stream yêu cầu độ trễ cực thấp (sub-150ms như kiến trúc phân tán ở tài liệu khác
+), kiến trúc này đã vi phạm SLA một cách thảm hại ở các phần tử "đuôi" của luồng sự kiện.
+Điểm yếu chết người của Python GIL/GC: Mặc dù dùng mini-batching để giảm tải IPC, tác giả vẫn thừa nhận thông lượng bị kẹt ở "Python GC pauses" và "gRPC connection pooling limits"
+. Đây là rủi ro tràn state bất cứ lúc nào nếu GC pause xảy ra trong một cú spike traffic.
+3. Văn bản & Logic (Academic Reviewer)
+Mâu thuẫn trong lập luận thông lượng/độ trễ: Tác giả tuyên bố rằng thông lượng (throughput) của hệ thống phân tán không thể được tính toán bằng các công thức toán học nội suy từ độ trễ 1/T do có pipelining/batching
+. Tuy nhiên, ngay phía dưới, tác giả lại hồn nhiên sử dụng công thức toán học tuyến tính đơn giản: 0.135×50ms=6.75ms để tính toán thời gian latency được tiết kiệm
+. Hai lập luận này tự tát vào mặt nhau.
+Lỗi rò rỉ kết quả sớm (Premature Results): Trong Chương 3 - Định nghĩa Bài toán (Problem Definition), tác giả đã công bố trước các kết quả validation như số liệu loại trừ của Layer 1 (Schema Validation) hay số bản ghi vi phạm từ Isolation Forest
+. Việc trình bày kết quả thực nghiệm trước cả khi mô tả Phương pháp và Kiến trúc Hệ thống (Chương 4 & 5) là sai quy chuẩn cấu trúc luận án nghiêm trọng.
+4. Lỗ hổng Tài liệu (Literature Review)
+Tác giả cho rằng các kiểm tra quy tắc kinh doanh (Business rules) không thể nắm bắt được tương quan đa biến và luôn cần đến Machine Learning như Isolation Forest
+.
+Sự bỏ qua (hoặc cố tình lờ đi) này phản bội lại các tiến bộ trong lĩnh vực Data Quality Streaming. Chẳng hạn, tài liệu Rapidash chứng minh rằng các luật Denial Constraints (DCs) có thể biểu diễn và phát hiện vi phạm bất phương trình đa chiều (multivariate anomalies) cực kỳ hiệu quả thông qua cấu trúc cây không gian KD-Tree (orthogonal range search) mà không hề cần đến các mô hình Machine Learning nặng nề và mang tính xác suất
+.
+5. Câu hỏi Tấn công (Dành cho Tác giả)
+Yêu cầu tác giả phải giải trình các vấn đề "đánh đổi" (trade-offs) sau đây đối với kiến trúc hệ thống:
+Về Consistency vs Latency: Tại điểm giao cắt MetaAggregator của kiến trúc Rendezvous
+, nếu nhánh ML (Complex branch) bị đình trệ nghiêm trọng do Python Garbage Collection (GC pauses)
+, làm thế nào hệ thống duy trì được tính năng "Graceful degradation"
+ mà không vi phạm cơ chế exactly-once semantics của Flink Watermark? Hệ thống sẽ vứt bỏ (drop) kết quả của nhánh ML, hay chặn (backpressure) nhánh Canary lại?
+Về rủi ro đụng độ (Collision) khi tối ưu RAM: Tác giả nén dung lượng bộ nhớ KeyedState xuống 198MB bằng cách dùng mã băm MurmurHash3 (40 bytes string) để thay thế dữ liệu thô
+. Trên luồng dữ liệu 72 triệu bản ghi
+, tần suất xảy ra đụng độ băm (hash collision) là hoàn toàn hiện hữu. Tác giả đã tính toán tỷ lệ loại bỏ nhầm (False Positive - drop records hợp lệ) do đụng độ hàm băm này vào chỉ số FPR tổng thể
+ chưa?
+Về rủi ro thao túng trôi dạt (Adversarial Drift): Cơ chế ADWIN được mô tả là tự động kích hoạt model update khi phát hiện trôi dạt dữ liệu (Concept drift)
+. Nếu một hệ thống bên ngoài liên tục bơm các bất thường nhỏ vào luồng dữ liệu nhằm đẩy nhanh quá trình trôi dạt của các biến μ và σ (Poisoning attack), cơ chế Threshold 4D của tác giả sẽ tự động "nới lỏng" (hợp pháp hóa) các chuyến xe gian lận mà không hề có bất kỳ lớp phòng thủ chéo nào xác minh lại?

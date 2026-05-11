@@ -76,7 +76,7 @@ This separation clarifies that the \textbf{infrastructure layers} (Kafka, Postgr
 
 \subsection{Cold-Start Model Training (Offline Phase)}
 
-Before deploying the Flink pipeline, CA-DQStream requires a \textbf{Cold-Start Model} trained on ultra-clean baseline data. This offline preprocessing workflow ensures the initial Hybrid K-Means iForestASD model learns from \textbf{sterile data}, not contaminated by physical impossibilities.
+Before deploying the Flink pipeline, CA-DQStream requires a \textbf{Cold-Start Model} trained on ultra-clean baseline data. This offline preprocessing workflow ensures the initial Hybrid K-Means sHST model learns from \textbf{sterile data}, not contaminated by physical impossibilities.
 
 \textit{Why offline preprocessing is essential:}
 
@@ -124,15 +124,13 @@ This removes \textbf{2.58\%} of raw data (79,485 records flagged as physical imp
 
 \textbf{Stage 2: IQR Outlier Removal (3$\times$IQR, Stricter)}
 
-Remove statistical outliers using Interquartile Range (IQR) method:
+Remove statistical outliers using Interquartile Range (IQR) method applied \textbf{per Context Cell} (not globally):
 
 \begin{equation}
-x \in \text{outlier} \iff x < Q_1 - 3 \times \mathrm{IQR} \quad \text{or} \quad x > Q_3 + 3 \times \mathrm{IQR}
+x \in \text{outlier} \iff x < Q_1 - 3 \times \mathrm{IQR}_{\text{cell}} \quad \text{or} \quad x > Q_3 + 3 \times \mathrm{IQR}_{\text{cell}}
 \end{equation}
 
-Applied to: fare\_amount, trip\_distance, trip\_duration.
-
-This removes an additional \textbf{0.92\%} of data (28,312 records flagged as statistical outliers -- e.g., \$5,000 negotiated fares, 200-mile trips).
+Applied per context cell to: fare\_amount, trip\_distance, trip\_duration. The 3$\times$IQR filter is applied per Context Cell (not globally), preserving cell-specific legitimate high values (e.g., \$5,000 negotiated fares in the Negotiated ratecode context cell) while removing statistical anomalies. This ensures sHST learns the full contextual distribution.
 
 \textbf{Stage 3: Verification (Sterile Dataset Guarantee)}
 
@@ -194,29 +192,29 @@ The ultra-clean baseline is the foundation of CA-DQStream's production-grade acc
 
 \textbf{Cold-Start Model Training on Ultra-Clean Data:}
 
-The Hybrid K-Means iForestASD model is trained \emph{offline} on the 2.97M ultra-clean records using scikit-learn and River libraries:
+The Hybrid K-Means sHST model is trained \emph{offline} on the 2.97M ultra-clean records using scikit-learn and River libraries:
 
 \begin{enumerate}
     \item \textbf{K-Means Clustering:} Create 5--7 neighborhood clusters based on (avg\_distance, avg\_fare) spatial features. Airport zones (JFK, Newark, LaGuardia) are assigned to a dedicated cluster. Remaining zones are clustered via K-Means (n=5, random\_state=42).
 
-    \item \textbf{iForestASD Trees:} Train 100 isolation trees per cluster on 21D enhanced features (15D base + 6D ratio features). Contamination parameter set to 0.02 (2\% expected anomaly rate in production).
+    \item \textbf{sHST Trees:} Train 100 isolation trees per cluster on 21D enhanced features (15D base + 6D ratio features). Contamination parameter set to 0.02 (2\% expected anomaly rate in production).
 
     \item \textbf{Threshold Matrix:} Compute 4D context-aware thresholds (588 cells) from the clean distribution. Each cell stores $(\mu_{\text{cell}}, \sigma_{\text{cell}}, T_{\text{cell}} = \mu + 2\sigma)$ for the context (trip\_type, time\_window, day\_type, neighborhood).
 
     \item \textbf{Scaler Fitting:} Fit StandardScaler on the 21D feature matrix to compute mean and std dev vectors. These are saved as \texttt{scaler.pkl} for deployment.
 
-    \item \textbf{Model Serialization:} Export K-Means clusterer, iForestASD trees, threshold matrix, and scaler to joblib pickle format. Total size: 48 MB.
+    \item \textbf{Model Serialization:} Export K-Means clusterer, sHST trees, threshold matrix, and scaler to joblib pickle format.
 \end{enumerate}
 
 \textbf{Deployment to Flink:}
 
-The Cold-Start Model artifacts are published to Kafka topic \texttt{if-model-updates} at system initialization. Flink's Broadcast State mechanism loads the model into all parallel IsolationForestOperator instances before processing begins:
+The Cold-Start Model artifacts are published to Kafka topic \texttt{if-model-updates} at system initialization. Flink's Broadcast State mechanism distributes the model parameters to all PyFlink Python worker processes for in-process scoring:
 
 \begin{enumerate}
     \item Flink job starts, subscribes to \texttt{if-model-updates} topic
-    \item Kafka delivers Cold-Start Model bytes (48 MB)
-    \item Each TaskManager deserializes model via joblib.load()
-    \item Model stored in Broadcast State (in-memory, microsecond access latency)
+    \item Kafka delivers model metadata (URI, version, checksum)
+    \item Each PyFlink Python worker downloads model from object storage and deserializes via \texttt{joblib.load()}
+    \item Model loaded in Python worker process memory (microsecond access latency)
     \item Processing begins -- first 1M records scored by pristine model
 \end{enumerate}
 
@@ -280,7 +278,7 @@ Real-world fraud scenarios exhibit \textbf{multivariate correlations} that busin
 
 \textbf{Problem:} Business rules (Layer 2a Canary) catch validity violations (see Experiment 5 in Section~\ref{sec:exp5_br}). The remaining records require ML-based multivariate detection.
 
-\textbf{CA-DQStream Solution:} Hybrid K-Means iForestASD (Chapter 3.5) detects joint-distribution anomalies by learning the normal correlation structure \emph{within each context cluster}.
+\textbf{CA-DQStream Solution:} Hybrid K-Means sHST (Chapter 3.5) detects joint-distribution anomalies by learning the normal correlation structure \emph{within each context cluster}.
 
 \textbf{Challenge 3: Concept Drift (Seasonal and Event-Driven)}
 
@@ -304,7 +302,7 @@ NYC Taxi fare distribution shifts over time due to:
 \hline
 Extreme heterogeneity (3.4$\times$ variance) & Global thresholds produce high false positive rates on heterogeneous data & 4D Context-Aware Thresholds: Different thresholds per context \\
 \hline
-Multivariate fraud (complex anomaly patterns) & Business rules catch single-feature violations only & Hybrid K-Means iForestASD: Multivariate anomaly detection \\
+Multivariate fraud (complex anomaly patterns) & Business rules catch single-feature violations only & Hybrid K-Means sHST: Multivariate anomaly detection \\
 \hline
 Concept drift (seasonal + events) & Static models become stale over time & IEC 4-strategy adaptation: Automatic recalibration \\
 \hline
@@ -388,7 +386,7 @@ cash $\to$ tip=0 & Payment inconsistency & payment\_type=2, tip=\$5.00 & Data en
 
 \subsection{Layer 2b: Complex Branch (ML-Based)}
 
-Branch 2 of the Rendezvous pipeline is the \textbf{Complex Model}: Hybrid K-Means iForestASD (detailed in Chapter 3, Section 4.5) with context-aware spatio-temporal feature engineering. This branch detects multivariate anomalies that business rules cannot express.
+Branch 2 of the Rendezvous pipeline is the \textbf{Complex Model}: Hybrid K-Means sHST (detailed in Chapter 3, Section 4.5) with context-aware spatio-temporal feature engineering. This branch detects multivariate anomalies that business rules cannot express.
 
 \textbf{Why multivariate detection matters:}
 
@@ -401,7 +399,7 @@ Business rules catch single-feature violations. However, a trip may have individ
     \item \textbf{Payment inflation}: card payment with unusually high tip (tip\_amount > 50\% of fare\_amount), which no single rule catches.
 \end{itemize}
 
-The Hybrid K-Means iForestASD model (Chapter 3.5) detects these by learning the normal joint distribution of features within each context cluster.
+The Hybrid K-Means sHST model (Chapter 3.5) detects these by learning the normal joint distribution of features within each context cluster.
 
 \textbf{Feature Vectorization:}
 
@@ -423,8 +421,8 @@ The full context-aware feature vector (\textbf{21 features}) is computed for eac
 10 & hour\_cos & Temporal & $\cos(2\pi h / 24)$ \\ \hline
 11 & dow\_sin & Temporal & $\sin(2\pi \cdot \text{dow} / 7)$ \\ \hline
 12 & dow\_cos & Temporal & $\cos(2\pi \cdot \text{dow} / 7)$ \\ \hline
-13 & pickup\_grid\_x & Spatial & $\lfloor \text{PULocationID} / 10 \rfloor$ \\ \hline
-14 & pickup\_grid\_y & Spatial & $\text{PULocationID} \bmod 10$ \\ \hline
+13 & pickup\_grid\_x & Spatial & $g_x(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
+14 & pickup\_grid\_y & Spatial & $g_y(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
 15 & trip\_distance\_log & Transformed & $\log(1 + trip\_distance)$ \\ \hline
 \multicolumn{4}{|c|}{\textbf{RATIO FEATURES (6D) -- VARIANCE REDUCTION 10--100$\times$}} \\ \hline
 16 & fare\_per\_mile\_ratio & Normalized & $\text{fare\_per\_mile} / \mu_{\text{fpm}}^{\text{ctx}}$ \\ \hline
@@ -433,7 +431,7 @@ The full context-aware feature vector (\textbf{21 features}) is computed for eac
 19 & tip\_ratio\_normalized & Normalized & $(\text{tip} / \text{fare}) / \mu_{\text{tip}}^{\text{ctx}}$ \\ \hline
 20 & passenger\_density\_ratio & Normalized & $(\text{passengers} / d) / \mu_{\text{density}}$ \\ \hline
 21 & distance\_log\_ratio & Transformed & $\log(1+d) / \mu_{\log d}^{\text{ctx}}$ \\ \hline
-\caption{21-dimensional enhanced feature vector for Hybrid K-Means iForestASD.}
+\caption{21-dimensional enhanced feature vector for Hybrid K-Means sHST.}
 \label{tab:feature_vector}
 \end{longtable}
 
@@ -479,19 +477,19 @@ The prototype validation confirmed that ratio features are \textbf{essential} fo
 
 The 21-dimensional enhanced feature vector is normalized to zero mean and unit variance via StandardScaler before scoring.
 
-\textbf{In-Memory Scoring with Flink Broadcast State:}
+\textbf{PyFlink Deployment with Broadcast State Model Distribution:}
 
-CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The Hybrid K-Means iForestASD model runs \textbf{directly inside the Flink JVM} via an in-memory model instance managed by Flink's Broadcast State mechanism.
+CA-DQStream eliminates synchronous per-record HTTP calls in the critical processing path. The Hybrid K-Means sHST model runs in the \textbf{PyFlink Python worker process} with model parameters distributed to all parallel operator instances via Flink's Broadcast State mechanism. When a new model is produced, it is serialized and stored in shared object storage (MinIO/S3-compatible). The Kafka topic \texttt{if-model-updates} carries a lightweight message containing model URI, version, checksum, and timestamp. Each TaskManager downloads the model from object storage asynchronously, avoiding large payload transfers. Critically, PyFlink executes Python UDFs in a \textbf{separate Python worker process} per TaskManager slot, not inside the JVM; Broadcast State distributes model parameters across these worker processes for in-process scoring.
 
 Zero-Pipeline-Interruption Model Update Protocol:
 \begin{enumerate}
     \item IEC detects drift via ADWIN on meta-stream
     \item IEC triggers model update in MLflow (incremental, METER, or full retrain)
-    \item MLflow serializes new model (K-Means + iForestASD) via joblib pickle
+    \item MLflow serializes new model (K-Means + sHST) via joblib pickle
     \item MLflow publishes model bytes to \texttt{if-model-updates} Kafka topic
     \item Flink subscribes to topic using Broadcast State
     \item All parallel IsolationForestOperator instances receive new model
-    \item Atomic model swap in Flink JVM memory (pipeline continues uninterrupted)
+    \item Atomic model swap in PyFlink worker process memory (pipeline continues uninterrupted)
 \end{enumerate}
 
 \textbf{Priority assignment:}
@@ -514,7 +512,9 @@ Scale: Approximately 89,230 records out of 3M (2.9\%) are flagged at the Isolati
 
 Flink operators maintain state in RocksDB (on-disk, persistent) or Java Heap (in-memory, fast). State size must be carefully managed to avoid out-of-memory (OOM) errors and excessive disk I/O.
 
-\textbf{Deduplication State (Layer 1):} The deduplication operator stores a Boolean flag (not full records) for each unique trip\_id within the 7-day TTL window:
+\textbf{State Backend Sizing (with RocksDB overhead):}
+
+The deduplication operator stores a Boolean flag (not full records) for each unique trip\_id within the 7-day TTL window:
 
 \begin{equation}
 \text{State\_size}_{\text{dedup}} = N_{\text{keys}} \times (\text{key\_size} + \text{value\_size})
@@ -525,11 +525,17 @@ where:
     \item $N_{\text{keys}}$ = 7-day record count $\approx 690{,}000 \text{ records/day} \times 7 = 4{,}830{,}000$ keys
     \item $\text{key\_size}$ = 40 bytes (MurmurHash3 128-bit hash as string)
     \item $\text{value\_size}$ = 1 byte (Boolean flag)
+    \item RocksDB overhead (metadata, WAL, serialization, TTL timestamps) $\approx$ 15 bytes per entry
+    \item Flink metadata $\approx$ 16 bytes per entry
 \end{itemize}
 
 \begin{equation}
-\text{State\_size}_{\text{dedup}} = 4{,}830{,}000 \times 41 = 198 \text{ MB}
+\text{State\_size}_{\text{dedup}} = 4{,}830{,}000 \times (40 + 1 + 16 + 8 + 15) \approx 370 \text{ MB per slot}
 \end{equation}
+
+With checkpoint replication factor 2: approximately 740 MB per checkpoint.
+
+\textbf{Production Memory Observation:} With RocksDB block cache (256 MB), write buffer (64 MB), and WAL overhead, actual managed memory is approximately 850 MB--1.1 GB per TaskManager. Bloom filters (Section 5.2.3) reduce RocksDB I/O by approximately 90\%, and adaptive TTL reduces state growth during high-throughput periods.
 
 If full Avro records were stored instead:
 \begin{equation}
@@ -538,7 +544,7 @@ If full Avro records were stored instead:
 
 \textbf{Storage Reduction:}
 \begin{equation}
-\frac{\text{State\_size}_{\text{full-record}}}{\text{State\_size}_{\text{dedup}}} = \frac{7.2 \text{ GB}}{198 \text{ MB}} = 37.2\times
+\frac{\text{State\_size}_{\text{full-record}}}{\text{State\_size}_{\text{dedup}}} = \frac{7.2 \text{ GB}}{370 \text{ MB}} \approx 20\times
 \end{equation}
 
 \textbf{Rendezvous State (Layer 2c):} The CoProcessFunction synchronizes Canary and Complex branches using MapState with 5-second TTL:
@@ -562,12 +568,12 @@ If full Avro records were stored:
 \text{State\_size}_{\text{full-avro}} = 100{,}000 \times 1{,}500 = 150 \text{ MB (16.7$\times$ larger)}
 \end{equation}
 
-\textbf{Total State Footprint:}
+\textbf{Total State Footprint (with RocksDB overhead):}
 \begin{equation}
-\text{State}_{\text{total}} = 198 \text{ MB (dedup)} + 9 \text{ MB (rendezvous)} = 207 \text{ MB}
+\text{State}_{\text{total}} = 370 \text{ MB (dedup)} + 9 \text{ MB (rendezvous)} \approx 379 \text{ MB}
 \end{equation}
 
-This fits comfortably in the 16 GB TaskManager heap, leaving 15.8 GB for RocksDB block cache, network buffers, and JVM overhead.
+This fits comfortably in the 16 GB TaskManager heap, leaving 15.6 GB for RocksDB block cache, network buffers, and JVM overhead.
 
 \subsection{Layer 3: MetaAggregator (Rendezvous Point)}
 
@@ -576,7 +582,7 @@ After the two parallel branches (Business Rules and Isolation Forest) complete t
 The MetaAggregator serves two \textbf{distinct} functions:
 
 \begin{enumerate}
-    \item \textbf{Data Routing (Data Plane):} Merges results from both branches. Violation records (from Business Rules or IForest) are emitted to \texttt{dq-dirty-data} Kafka topic (written to PostgreSQL dirty\_data table). Clean records are emitted to \texttt{dq-clean-data}.
+    \item \textbf{Data Routing (Data Plane):} Merges results from both branches. Violation records (from Business Rules or sHST) are emitted to \texttt{dq-dirty-data} Kafka topic (written to PostgreSQL dirty\_data table). Clean records are emitted to \texttt{dq-clean-data}.
 
     \item \textbf{Meta-stream Generation (Control Plane):} Computes aggregated quality metrics (violation\_rate, anomaly\_rate, null\_rate, $\Delta$\_score) over 1-minute windows grouped by neighborhood, then emits the statistics stream to \texttt{dq-meta-stream} Kafka topic for IEC to monitor. MetaAggregator does NOT route clean/dirty data to PostgreSQL -- it only emits aggregate statistics to the meta-stream.
 \end{enumerate}
@@ -589,10 +595,10 @@ The quality meta-stream consists of six metrics:
     \item \texttt{anomaly\_rate(t)} = |IF anomalies| / |total records|
     \item \texttt{volume(t)} = |records processed| per minute
     \item \texttt{dedup\_rate(t)} = |duplicates detected| / |total|
-    \item \texttt{$\Delta$\_score(t)} = |violation\_rate(t) $-$ anomaly\_rate(t)| \quad \textbf{(Concept Uncertainty)}
+    \item $\Delta$\_score(t) = (|violation\_rate(t) $-$ anomaly\_rate(t)|) / (violation\_rate(t) + anomaly\_rate(t) + $\epsilon$) \quad (normalized divergence)
 \end{itemize}
 
-The sixth metric, \textbf{$\Delta$\_score} (Concept Uncertainty), is the absolute difference between the violation rate detected by Business Rules (deterministic, static) and the anomaly rate detected by Isolation Forest (probabilistic, adaptive). This metric is the most sensitive indicator of concept drift:
+The sixth metric, \textbf{$\Delta$\_score} (Concept Uncertainty), is the normalized divergence between the violation rate detected by Business Rules (deterministic, static) and the anomaly rate detected by sHST (probabilistic, adaptive). The normalized formulation addresses calibration assumptions about the correlation between violation and anomaly rates. A warm-up period allows the system to learn baseline correlation patterns before activating drift detection. This metric is the most sensitive indicator of concept drift:
 
 \begin{itemize}
     \item When $\Delta$\_score is stable, both models agree on the data distribution.
@@ -613,7 +619,7 @@ The \textbf{Intelligent Evolution Controller (IEC)} is the self-monitoring compo
 \textbf{Metric} & \textbf{$\delta$} & \textbf{Aggregation} & \textbf{Self-Adaptation Action} \\ \hline
 null\_rate & 0.002 & 1-minute & Recalculate schema validation thresholds \\ \hline
 violation\_rate & 0.002 & 1-minute & Recalculate business rule thresholds \\ \hline
-anomaly\_rate & 0.001 & 1-minute & Retrain Hybrid K-Means iForestASD, broadcast via Broadcast State \\ \hline
+anomaly\_rate & 0.001 & 1-minute & Retrain Hybrid K-Means sHST, broadcast via Broadcast State \\ \hline
 volume & 0.005 & 5-minute & Alert operators \\ \hline
 $\Delta$\_score & 0.001 & 5-minute & Retrain both BR and IF models \\ \hline
 ML\_score\_mean & 0.001 & 5-minute & Trigger model broadcast update \\ \hline
@@ -664,7 +670,7 @@ When drift is detected, the IEC executes a tiered response protocol for operatio
 
 \textbf{Tier 3 (Model retraining, within 1 hour):}
 \begin{itemize}
-    \item Trigger Hybrid K-Means iForestASD retraining on MLflow with new training window.
+    \item Trigger Hybrid K-Means sHST retraining on MLflow with new training window.
     \item Validate new model against synthetic anomaly dataset.
     \item Publish new model to \texttt{if-model-updates} Kafka topic.
     \item Flink Broadcast State delivers new model to all IFScoringOperator instances (pipeline continues uninterrupted).
@@ -683,7 +689,7 @@ CA-DQStream implements this operational layer through two components: a \textbf{
 The FastAPI ML Service is an asynchronous HTTP service that exposes three endpoints for IEC-triggered model updates:
 
 \begin{enumerate}
-    \item \texttt{POST /api/retrain} --- Triggers full Hybrid K-Means iForestASD retraining on MLflow. Loads a recent training window from PostgreSQL, retrains the model asynchronously (non-blocking), and publishes the new model to the \texttt{if-model-updates} Kafka topic for Flink Broadcast State consumption.
+    \item \texttt{POST /api/retrain} --- Triggers full Hybrid K-Means sHST retraining on MLflow. Loads a recent training window from PostgreSQL, retrains the model asynchronously (non-blocking), and publishes the new model to the \texttt{if-model-updates} Kafka topic for Flink Broadcast State consumption.
 
     \item \texttt{POST /api/meter\_shift} --- Applies METER hypernetwork parameter shifts. Loads the pre-trained METER model (MLP 64-32-16), computes new K-Means centroid displacements based on input meta-metrics (null\_rate, violation\_rate, anomaly\_rate, volume, dedup\_rate, $\Delta$\_score), and publishes the updated model parameters to Kafka.
 
@@ -714,13 +720,14 @@ Model update actions (retrain, METER shift, Canary switch) can fail due to trans
     \item Successful retries trigger the same FastAPI endpoints (\texttt{/api/retrain}, \texttt{/api/meter\_shift}, etc.) and are logged to the \texttt{quality\_metrics} table with retry metadata.
 \end{enumerate}
 
-\textbf{Update Lock (Cooldown) Mechanism:} Without a coordination mechanism, a sustained failure in MLflow would cause ADWIN to continuously detect drift and IEC to emit retry actions, creating a retry storm that overwhelms the system. CA-DQStream addresses this with an \textbf{Update Lock} (cooldown) mechanism:
+\textbf{Update Lock (Cooldown) and Failure Handling Mechanism:} Without a coordination mechanism, a sustained failure in MLflow would cause ADWIN to continuously detect drift and IEC to emit retry actions, creating a retry storm that overwhelms the system. CA-DQStream addresses this with an \textbf{Update Lock} (cooldown) mechanism combined with a \textbf{degraded mode} fallback chain:
 
 \begin{itemize}
     \item After IEC triggers any model update action (retrain, METER shift, or model switch), the system enters a \textbf{Lock State} for a cooldown window $T_{\text{lock}}$ (default: 15 minutes).
-    \item During the lock window, ADWIN drift detections on the same metric are suppressed (logged but not actioned). Drift alerts are still emitted to Grafana, but no new retrain/switch/METER actions are dispatched.
-    \item The lock is released when either: (a) the cooldown window expires, or (b) the IEC receives a \texttt{/api/model-ready} callback confirming successful model deployment.
-    \item This prevents the retry storm problem: even if MLflow is down for 17 minutes (the maximum exponential backoff), the system generates at most one retry action rather than hundreds of queued retries accumulating in the replay topic.
+    \item \textbf{Immediate retry:} Retry with exponential backoff (1min $\to$ 2min $\to$ 4min, max 3 retries).
+    \item \textbf{After 2 failed retries:} Emit alert to monitoring system. Continue processing with stale model but flag all Layer 3 scores as \texttt{DRIFT\_SUSPECTED}.
+    \item \textbf{After 3 failed retries:} Switch to Strategy 2 (Switching) if available -- use rule-based fallback model.
+    \item \textbf{Lock release:} After $T_{\text{lock}} = 15$ minutes, system automatically releases lock and attempts update regardless of previous state. This prevents the retry storm problem while ensuring eventual recovery.
     \item The lock is scoped per region/cluster to avoid blocking unrelated model updates. For example, a lock on the JFK airport context does not prevent model updates for the Manhattan context.
 \end{itemize}
 
@@ -744,8 +751,37 @@ CA-DQStream implements the Rendezvous pattern on Apache Flink \citep{flinkdocs20
     \item \textbf{TaskManagers:} Worker nodes executing parallel subtasks (12 slots total in Production Development mode, 4 slots in Laptop mode).
     \item \textbf{Event Time Processing:} Uses \texttt{tpep\_pickup\_datetime} as event timestamp (not processing time) for consistent time-based analytics.
     \item \textbf{Checkpointing:} Incremental snapshots every 45 seconds to MinIO S3 storage, enabling exactly-once guarantee and failure recovery.
+
+\textbf{Exactly-Once Semantics:} CA-DQStream achieves end-to-end exactly-once through two complementary mechanisms: (1) \textbf{Flink Checkpointing:} Periodic state snapshots (45s interval) ensure operator state can be restored on failure. (2) \textbf{Kafka Transactions:} The Flink Kafka producer uses transactional writes with \texttt{transaction.timeout.ms = 10 minutes}. On checkpoint recovery, in-flight transactions are aborted and replayed idempotently. This is \emph{not} a traditional Two-Phase Commit (2PC) distributed transaction -- there is no blocking coordinator; throughput impact is limited to checkpoint barrier alignment phase (approximately 200-400ms per 45s interval, less than 1\% overhead).
     \item \textbf{RocksDB State Backend:} Manages KeyedState (7-day dedup TTL) with local SSD storage for high IOPS.
-    \item \textbf{Broadcast State:} Distributes Hybrid K-Means iForestASD model to all parallel operator instances for in-memory access (microsecond latency).
+    \item \textbf{Broadcast State:} Distributes Hybrid K-Means sHST model to all parallel operator instances via Kafka-to-Python-worker delivery, loaded in-process for microsecond-access scoring.
+
+\textbf{Network and GC Impact of Broadcast State:} For a 4-node cluster, a model update generates approximately 768 MB aggregate network traffic. Model deserialization triggers approximately 150-200ms GC pause on each receiving TaskManager (G1GC, 4GB heap). With update frequency of 2-3 times/day, total GC overhead is less than 0.01\% of daily uptime. Checkpoint impact: approximately 200-400ms per barrier alignment, approximately 0.5\% throughput impact.
+
+\textbf{Latency Dimensions in CA-DQStream:}
+
+\begin{longtable}{|m{2.5cm}|m{4cm}|m{2cm}|m{4cm}|}
+\hline
+\textbf{Layer} & \textbf{Latency Type} & \textbf{Value} & \textbf{Scope} \\
+\hline
+State Lookup & Microsecond-level & $<$500 $\mu$s & In-memory keyed state access \\
+\hline
+Per-event Processing & Median E2E & 54 ms & Schema $\to$ Rules $\to$ ML Scoring $\to$ Sink \\
+\hline
+Per-event Processing & p99 E2E & 294 ms & 99th percentile under load \\
+\hline
+Drift Detection & Window Aggregation & 60 seconds & ADWIN sliding window \\
+\hline
+Model Retrain & API Response & 2--5 minutes & FastAPI /job-retrain (async, non-blocking) \\
+\hline
+\end{longtable}
+
+\textbf{Real-time definition:} CA-DQStream operates as a \textbf{soft real-time system}. Per-event processing latency (median 54ms, p99 294ms) falls within soft real-time (bounded latency with probabilistic guarantees). The target SLA is p99 $<$ 500ms for data quality validation.
+
+\textbf{Asynchronous Model Loading:} (1) Current model continues processing events during download/deserialization. (2) New model deserialized in a separate thread pool. (3) Atomic swap: once new model is ready, a volatile reference is atomically updated. (4) Processing thread reads from the volatile reference -- zero lock contention. (5) Old model dereferenced and garbage collected in background. This ensures zero-pipeline-interruption by maintaining two model versions during the transition period. The swap latency is sub-millisecond (atomic reference update).
+
+\textbf{PyFlink Vectorized UDF as Micro-batching Optimization:} The ML scoring layer uses a mini-batching strategy (batch\_size=500) for: (1) \textbf{Python JVM Interoperability}: PyFlink requires serialization of each record across process boundaries (JVM $\leftrightarrow$ Python). Batch serialization amortizes IPC overhead across 500 records. (2) \textbf{Vectorized NumPy Operations}: Batch processing enables NumPy's BLAS-accelerated matrix operations, 10--100$\times$ faster than row-by-row Python loops. (3) \textbf{Throughput vs. Latency Trade-off}: CA-DQStream prioritizes throughput (15K-18K events/sec) over per-record sub-millisecond latency. This is explicitly a micro-batching design. For sub-10ms per-event requirements, alternative approaches (pure JVM-based ML, stateless scoring) should be considered.
+
 \end{itemize}
 
 Flink operators implement the pipeline stages:
@@ -773,7 +809,7 @@ Apache Kafka serves as the distributed event streaming backbone. The CA-DQStream
 taxi-nyc-raw & Raw NYC TLC records ingested from Parquet files \\ \hline
 dq-schema-violations & Records rejected at Schema Validation (NULL, duplicates) \\ \hline
 dq-hard-rule-violations & Records rejected by Business Rules (Canary branch) \\ \hline
-dq-if-anomalies & Anomalies detected by Hybrid K-Means iForestASD (Complex branch) \\ \hline
+dq-if-anomalies & Anomalies detected by Hybrid K-Means sHST (Complex branch) \\ \hline
 dq-anomaly-scores & Raw anomaly scores for all records \\ \hline
 dq-meta-stream & Aggregated quality metrics (6 metrics) for IEC monitoring \\ \hline
 if-model-updates & Serialized model bytes for Broadcast State updates \\ \hline
@@ -797,7 +833,7 @@ schema\_violations & Schema validation rejects (NULL fields, invalid types, dupl
 business\_rule\_violations & Business rules rejects (negative fare, zero distance, extreme speed, etc.) \\ \hline
 if\_anomalies & Isolation Forest detections with anomaly score, priority, and context features \\ \hline
 quality\_metrics & Aggregated DQ metrics per 1-minute window with IEC drift flags \\ \hline
-baseline\_stats & Rolling baseline statistics for Hybrid K-Means iForestASD retraining \\ \hline
+baseline\_stats & Rolling baseline statistics for Hybrid K-Means sHST retraining \\ \hline
 ml\_experiment\_results & Model ablation study results (Precision/Recall/F1/FPR) \\ \hline
 \caption{PostgreSQL database schema for CA-DQStream.}
 \label{tab:postgres_schema}
@@ -823,7 +859,7 @@ Kafka & kafka & kafka\_consumer\_lag\_sum, kafka\_messages\_in\_per\_sec \\ \hli
 \label{tab:prometheus_metrics}
 \end{longtable}
 
-The \texttt{if\_model\_version} metric tracks which Hybrid K-Means iForestASD model version is currently deployed (incremented on each Broadcast State update). This enables correlating drift events with model version changes.
+The \texttt{if\_model\_version} metric tracks which Hybrid K-Means sHST model version is currently deployed (incremented on each Broadcast State update). This enables correlating drift events with model version changes.
 
 Prometheus also collects IEC-specific metrics:
 
@@ -857,7 +893,7 @@ CA-DQStream uses \textbf{MinIO} as an S3-compatible object storage layer for Fli
 \begin{itemize}
     \item \textbf{Checkpoint Storage:} Flink's incremental checkpoints are written to MinIO bucket \texttt{flink-checkpoints} at 45-second intervals. This provides fault tolerance: in the event of a TaskManager failure, Flink rewinds to the last consistent checkpoint and resumes processing without data loss.
     \item \textbf{Savepoint Storage:} Operator-level savepoints (manual snapshots before upgrades or code changes) are stored in \texttt{flink-savepoints} bucket, enabling zero-downtime deployments and pipeline migrations.
-    \item \textbf{Model Artifact Storage:} Trained Hybrid K-Means iForestASD model artifacts (serialized Pickle files) are archived in \texttt{models} bucket, enabling model versioning and rollback through MLflow Model Registry.
+    \item \textbf{Model Artifact Storage:} Trained Hybrid K-Means sHST model artifacts (serialized Pickle files) are archived in \texttt{models} bucket, enabling model versioning and rollback through MLflow Model Registry.
 \end{itemize}
 
 MinIO was chosen over HDFS or local filesystem storage because it provides S3 API compatibility, enabling CA-DQStream to switch to cloud S3 (AWS, GCS, Azure Blob) with minimal configuration changes in production deployments.
@@ -866,7 +902,7 @@ MinIO was chosen over HDFS or local filesystem storage because it provides S3 AP
 
 The \textbf{Control Plane} manages model lifecycle and IEC action execution, decoupled from the real-time Flink streaming pipeline:
 
-\textbf{MLflow (Model Registry):} MLflow serves as the central model registry for all Hybrid K-Means iForestASD model versions. Each training run produces a registered model with stages (Staging, Production, Archived), experiment metadata (hyperparameters, feature sets, evaluation metrics), and artifact URIs pointing to MinIO storage. MLflow's REST API and Python client enable programmatic model promotion and demotion, which the IEC uses to trigger retraining workflows (detailed in Section 5.5 MLOps Integration).
+\textbf{MLflow (Model Registry):} MLflow serves as the central model registry for all Hybrid K-Means sHST model versions. Each training run produces a registered model with stages (Staging, Production, Archived), experiment metadata (hyperparameters, feature sets, evaluation metrics), and artifact URIs pointing to MinIO storage. MLflow's REST API and Python client enable programmatic model promotion and demotion, which the IEC uses to trigger retraining workflows (detailed in Section 5.5 MLOps Integration).
 
 \textbf{FastAPI ML Service:} The FastAPI microservice exposes a lightweight REST endpoint (\texttt{/predict}, \texttt{/retrain}) that the IEC calls to trigger retraining and receive updated model parameters. This decouples IEC decision-making (real-time, in Flink) from model execution (batch, in MLflow), maintaining sub-second stream processing latency while complex adaptation workflows run asynchronously in the background. The Action Replay Worker (Section 5.4.2) consumes IEC drift events from the \texttt{if-model-updates} Kafka topic and orchestrates the retraining pipeline without blocking the Flink stream.
 
@@ -900,7 +936,7 @@ The GIL forces serialization: even with 64 CPU cores available, only 12 slots ex
 \begin{enumerate}
     \item Flink's Python worker accumulates a mini-batch of $B = 500$ records over timeout $\tau = 100\text{ms}$
     \item The batch is converted to a Pandas DataFrame (zero-copy view)
-    \item The DataFrame is passed to the Vectorized UDF, which applies the Hybrid K-Means iForestASD scoring vectorized across all 500 records at once
+    \item The DataFrame is passed to the Vectorized UDF, which applies the Hybrid K-Means sHST scoring vectorized across all 500 records at once
     \item NumPy's underlying C/Fortran implementations release the GIL, enabling parallel execution across all 64 cores
     \item Results are collected and emitted back to the Flink stream
 \end{enumerate}
@@ -1049,7 +1085,7 @@ With PgBouncer:
 
 \subsection{MLflow Experiment Tracking}
 
-CA-DQStream uses MLflow \citep{mlflow2024} for ML experiment tracking and model versioning. All Hybrid K-Means iForestASD model training runs are logged to MLflow with:
+CA-DQStream uses MLflow \citep{mlflow2024} for ML experiment tracking and model versioning. All Hybrid K-Means sHST model training runs are logged to MLflow with:
 
 \begin{itemize}
     \item \textbf{Parameters:} n\_trees, max\_samples, contamination, random\_state, n\_clusters (K-Means)
@@ -1062,7 +1098,7 @@ MLflow tracking enables A/B comparison of model versions before deployment.
 
 \subsection{Model Registry \& Lifecycle Management}
 
-MLflow Model Registry manages the Hybrid K-Means iForestASD model lifecycle:
+MLflow Model Registry manages the Hybrid K-Means sHST model lifecycle:
 
 \begin{itemize}
     \item \textbf{Staging:} New models from IEC retraining land in Staging for validation

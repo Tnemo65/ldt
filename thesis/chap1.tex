@@ -148,7 +148,9 @@ CA-DQStream addresses all six dimensions through its layered architecture, as de
 
 \textbf{Threshold Adaptation:} Traditional DQ systems use fixed global thresholds that require manual tuning and become stale as data distributions evolve. Recent work on adaptive thresholding has explored percentile-based methods and statistical process control, but these approaches still collapse heterogeneous data into a single threshold. CA-DQStream's contribution is the integration of \textbf{multi-dimensional context with automated threshold computation} ($\mu_{\text{cell}} + 2\sigma_{\text{cell}}$) and intelligent fallback for sparse cells.
 
-\textbf{Gap:} No existing streaming DQ framework combines (1) multi-dimensional context-aware thresholding, (2) automated threshold computation from training data, and (3) drift-aware threshold recalibration. CA-DQStream fills this gap with the 4D context-aware threshold matrix that reduces FPR from 38.7\% (global threshold) to 4.2\% (context-aware) --- a 9.2$\times$ improvement validated on 72M records.
+\textbf{Gap:} No existing streaming DQ framework combines (1) multi-dimensional context-aware thresholding, (2) automated threshold computation from training data, and (3) drift-aware threshold recalibration. CA-DQStream fills this gap with the 4D context-aware threshold matrix that significantly reduces False Positive Rate compared to baseline methods (detailed benchmark results in Chapter 6). The 4D Context-Aware thresholding combined with adaptive ML inference achieves higher precision in distinguishing genuine anomalies from legitimate contextual outliers.
+
+\textbf{Recent Streaming DQ Frameworks:} While batch-oriented DQ frameworks (Great Expectations, AWS Deequ, Soda Core) have dominated the landscape, recent works have extended DQ monitoring to streaming contexts. Stream DaQ (Papastergios \& Gounaris) employs continuous windowing mechanisms with dynamic constraint adaptation. Grab's Coban system uses FlinkSQL for real-time semantic validation through Kafka stream contracts. Rapidash (Liu et al., 2024) addresses complex multi-record violations using spatial indexing. MemStream (Bhatia et al., 2022) utilizes memory-based architecture for streaming anomaly detection. CA-DQStream distinguishes itself through multi-dimensional 4D Context-Aware modeling combined with adaptive ML inference and an Intelligent Evolution Controller for continuous model adaptation.
 
 \subsection{Rendezvous and Fork-Join Patterns}
 
@@ -158,14 +160,14 @@ CA-DQStream addresses all six dimensions through its layered architecture, as de
 
 \textbf{Application to DQ:} CA-DQStream applies Rendezvous to data quality validation by forking the stream into a \textbf{Canary branch} (fast rule-based checks) and a \textbf{Complex branch} (slow ML-based scoring). This design enables:
 \begin{itemize}
-    \item \textbf{Early exit optimization:} 13.5\% of records flagged by Canary bypass Complex entirely
+    \item \textbf{Early exit optimization:} 3.4\% of Schema-passing records (89,230 records) bypass ML scoring; combined with 10.1\% Schema pre-filtering, 13.5\% of total records avoid the Complex branch
     \item \textbf{Parallel execution:} Clean records are validated by both branches simultaneously
     \item \textbf{Graceful degradation:} System continues with Canary alone if Complex fails
 \end{itemize}
 
 Experiment 7 validates latency reduction and throughput improvement through early exit optimization and parallel execution compared to linear pipelines.
 
-\textbf{Gap:} No existing DQ framework uses Rendezvous architecture for validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use sequential processing. CA-DQStream is the first to demonstrate fork-join parallelism for streaming data quality at scale.
+\textbf{Gap:} No existing DQ framework uses Rendezvous architecture for validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use sequential processing. CA-DQStream applies fork-join parallelism adapted from distributed stream processing paradigms (Flink, Spark Streaming) to the specific domain of data quality validation. While fork-join patterns have been used in general stream processing (e.g., Kappa/Lambda architectures, Grab's Coban system), CA-DQStream is, to our knowledge, the first to apply this pattern specifically to heterogeneous DQ validation stages combining schema checks, business rules, context-aware thresholds, and ML-based anomaly detection within a unified rendezvous architecture.
 
 \subsection{Drift Detection}
 
@@ -180,9 +182,11 @@ where $n = |W|$, $m = \frac{1}{1/|W_0| + 1/|W_1|}$ is the harmonic mean of sub-w
 ADWIN provides the following theoretical guarantees \citep{bifet2007learning}:
 \begin{itemize}
     \item \textbf{False positive bound:} $P(\text{false alarm}) \leq \delta$ at any time step
-    \item \textbf{Detection delay:} $O\left(\frac{1}{\epsilon^2} \ln \frac{1}{\delta}\right)$ observations after a change of magnitude $\epsilon$
+    \item \textbf{Detection delay:} $O\left(\frac{1}{\alpha \epsilon^2} \ln \frac{1}{\delta}\right)$ observations after a change of magnitude $\epsilon$, where $\alpha \in (0, 1]$ is the regularization parameter governing the fraction of the window affected by the change (smaller $\alpha$ implies gradual drift spread over more of the window, requiring more observations to detect)
     \item \textbf{Memory:} $O(\log W)$ using exponential histogram compression
 \end{itemize}
+
+\textbf{On Gradual Drift:} Gradual drift unfolds over extended periods (days to months). ADWIN's sliding window (configured at 1 minute for real-time responsiveness) detects when the \textbf{cumulative effect} of gradual drift produces a statistically significant shift in violation/null rate. The 1-minute window provides rapid responsiveness; drift that develops over weeks is detected as a series of incremental statistical flags, each corresponding to a meaningful change point.
 
 CA-DQStream applies ADWIN to quality meta-streams (aggregated metrics such as violation\_rate, anomaly\_rate, null\_rate) rather than raw data, enabling self-monitoring of the DQ system itself.
 

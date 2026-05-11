@@ -1,0 +1,789 @@
+# PHẢN HỒI PHẢN BIỆN — TỔNG HỢP TẤT CẢ 11 REVIEWS
+## Khóa luận: CA-DQStream: A Context-Aware Framework for Streaming Data Quality Monitoring
+## Tác giả: Lê Đắc Thịnh
+## Nguồn: Reviews 1–11
+## Ngày: Monday May 11, 2026
+
+---
+
+## 1. BẢNG TỔNG HỢP
+
+### 1.1. Phân loại từng Review
+
+|| Reviewer | Tổng ý kiến | ✅ Cần sửa | ❌ Không sửa | ➡️ Không liên quan |
+|-----------|--------------|-------------|--------------|---------------------|
+| Review 1 | 8 | 6 | 2 | - |
+| Review 2 | 12 | 11 | 1 | - |
+| Review 3 | 14 | 11 | 1 | 3 |
+| Review 4 | 9 | 6 | 3 | - |
+| Review 5 | 9 | 8 | 1 | 3 |
+| Review 6 | 9 | 7 | 2 | - |
+| Review 7 | 12 | 10 | 2 | - |
+| Review 8 | 9 | 7 | 2 | - |
+| Review 9 | 8 | 6 | 2 | - |
+| Review 10 | 7 | 6 | 1 | - |
+| Review 11 | 11 | 9 | 0 | 2 |
+| **TỔNG** | **108** | **87** | **17** | **8** |
+
+### 1.2. Phân loại theo chủ đề (Deduplicated)
+
+|| Chủ đề | ✅ Cần sửa | ❌ Không sửa | ➡️ Không liên quan |
+|---------|-----------|--------------|---------------------|
+| Học thuật & Thuật toán | 8 | 6 | 2 |
+| Kiến trúc Hệ thống | 10 | 5 | 1 |
+| Văn bản & Logic | 6 | 6 | - |
+| Lỗ hổng Tài liệu | 8 | 4 | 1 |
+| Câu hỏi Tấn công | 13 | 4 | 2 |
+| **TỔNG** | **45** | **25** | **6** |
+
+### 1.3. Consensus Matrix — Điểm nào được đề cập bởi bao nhiêu reviewers
+
+|| Vấn đề | R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 | R9 | R10 | R11 | Đồng thuận |
+|---------|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Premature Results | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | | | | **7/11** |
+| Related Works Gap | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | **9/11** |
+| State Size RocksDB | | ✅ | | | | ✅ | ✅ | ✅ | ✅ | | ✅ | **5/11** |
+| Gaussian (μ+2σ) | | | | | | ✅ | ✅ | ✅ | | ✅ | ✅ | **5/11** |
+| Baseline External SOTA | | ✅ | ✅ | | | | ✅ | | | ✅ | ✅ | **5/11** |
+| Algorithm Naming | | | | | | | | | | | ✅ | **1/11** |
+| Model Distribution | | | | | | ✅ | ✅ | | | ✅ | ✅ | **4/11** |
+| Early Exit Latency | | ✅ | | | | ✅ | ✅ | | ✅ | | | **4/11** |
+| Lock Cooldown | | | | | | | ✅ | | | | | **1/11** |
+| Multi-signal Drift | | | | | | | | | ✅ | | | **1/11** |
+| Kafka EOS | | | ✅ | | | | ✅ | ✅ | | ✅ | | **4/11** |
+| Buffer Management | | | | | | | | | ✅ | ✅ | | **2/11** |
+| Hash Collision | | | | | | | | | ✅ | | | **1/11** |
+| Error Injection | | ✅ | | ✅ | ✅ | ✅ | ✅ | ✅ | | | | **6/11** |
+| Global vs Local Model | | | | | | | ✅ | | | | | **1/11** |
+| Gradual Drift semantics | | | | | | | | ✅ | | | | **1/11** |
+
+**Ghi chú:** Bảng trên thể hiện mức độ đồng thuận giữa các reviewers. Vấn đề được đề cập bởi ≥3 reviewers được đánh dấu HIGH trọng số.
+
+---
+
+## 2. 🔴 CRITICAL — SỬA NGAY
+
+### 2.1. Rò rỉ kết quả sớm (Premature Results)
+
+**Mức độ:** CRITICAL — 8/11 reviewers đồng ý
+
+**Mô tả:** Số liệu thực nghiệm (FPR 38.7%→4.2%, F1=0.91, throughput 18,450 events/sec) xuất hiện trước Chương 6 (Experiments).
+
+**Các vị trí cần sửa:**
+- Section 1.5: "9.2x FPR reduction", "F1=0.91"
+- Section 3.2.6, 3.2.7, 3.2.8: Layer 1, 2, 3 validation results
+- Section 4.2.4, 4.3.3, 4.3.5: "throughput reaches 18,450 events/sec", "2.2x improvement"
+- Section 4.2.5: "reduces FPR from 38.7%... to 4.2%... validated on 72M records"
+
+**Text mẫu thay thế:**
+
+> **Section 1.5 (Contributions):**
+> "CA-DQStream significantly reduces False Positive Rate compared to baseline methods (detailed benchmark results in Chapter 6). The 4D Context-Aware thresholding combined with adaptive ML inference achieves higher precision in distinguishing genuine anomalies from legitimate contextual outliers."
+
+> **Section 3.2.6, 3.2.7:**
+> "Layer 1 (Schema) and Layer 2 (Business Rules) validation mechanisms are designed to reject obvious violations early in the pipeline. Layer 3 (Contextual Anomaly Detection) employs ML-based scoring for subtle quality issues. Detailed rejection rates and F1 scores are reported in Chapter 6."
+
+> **Section 4.2.4:**
+> "Performance analysis demonstrates that broadcast state eliminates model inference latency from the critical path. Detailed benchmarks including throughput (events/sec) and latency (P50, P95, P99) are presented in Chapter 6."
+
+---
+
+### 2.2. iForestASD vs HalfSpaceTrees — Algorithm Naming
+
+**Mức độ:** CRITICAL — được phát hiện bởi Review 11
+
+**Mô tả:** Tác giả gọi thuật toán là "iForestASD" nhưng implementation dùng River's HalfSpaceTrees. Đây là hai thuật toán khác nhau.
+
+**Hành động bắt buộc:**
+1. Kiểm tra code thực tế
+2. Nếu dùng River's HalfSpaceTrees → đổi tên thành "Streaming HalfSpaceTrees (sHST)"
+3. Thêm citations: Tan et al. (2011), Tan (2015), Montiel et al. (2021)
+
+**Text mẫu sửa Section 4.5.2:**
+
+> "**4.5.2 Streaming Anomaly Detection with HalfSpaceTrees**
+>
+> CA-DQStream employs **Streaming HalfSpaceTrees (sHST)**, an online variant of the isolation forest approach. Unlike batch isolation forest which requires the full dataset for tree construction, sHST builds trees incrementally as new data arrives, making it suitable for unbounded stream processing.
+>
+> **Mathematical Foundation (Tan et al., 2011):** HalfSpaceTrees construct trees by recursively splitting the feature space using random hyperplanes. Each split defines a 'half-space' (one side of the hyperplane). Anomalies are isolated by fewer splits because they reside in sparse regions of the feature space. The anomaly score is the inverse of the average path length.
+>
+> **Streaming Adaptation (Tan, 2015):** sHST uses a sliding window of recent observations to maintain tree relevance. Old mass (weight) is decremented and new mass added as the window slides, without reconstructing trees from scratch. This is O(1) per event.
+>
+> **Implementation:** We use the River library implementation (Montiel et al., 2021), which provides online sHST with configurable window size and number of trees."
+
+---
+
+### 2.3. Khoảng trống Related Works — Streaming DQ Frameworks
+
+**Mức độ:** CRITICAL — 8/11 reviewers đồng ý
+
+**Mô tả:** Tác giả tuyên bố "no existing streaming DQ framework" nhưng bỏ qua nhiều công trình gần đây.
+
+**Các framework cần bổ sung:**
+
+|| Framework | Tác giả | Vị trí |
+|-----------|---------|---------|
+| Stream DaQ | Papastergios & Gounaris | Chương 2 |
+| Grab Coban | InfoQ/Grab | Chương 2 |
+| Rapidash | Liu et al., 2024 | Chương 2, 4 |
+| MemStream | Bhatia et al., 2022 | Chương 2, 6 |
+| METER | 2312.16831 | Chương 7 |
+| CWAE | Dai et al., 2025 | Chương 4 |
+| Ada-Context | Mirzaie et al., 2025 | Chương 2 |
+| Icewafl | - | Chương 2, 6 |
+| Confluent Shift-Left DQ | Confluent | Chương 2 |
+| Conduktor Model Drift | Conduktor | Chương 2 |
+| Weever | Kaminsky et al. | Chương 2 |
+
+**Text mẫu thêm vào Chương 2:**
+
+> "While batch-oriented DQ frameworks (Great Expectations, AWS Deequ, Soda Core) have dominated the landscape, recent works have extended DQ monitoring to streaming contexts. Stream DaQ (Papastergios & Gounaris) employs continuous windowing mechanisms with dynamic constraint adaptation. Grab's Coban system uses FlinkSQL for real-time semantic validation through Kafka stream contracts. Rapidash (Liu et al., 2024) addresses complex multi-record violations using spatial indexing via KD-Tree. MemStream (Bhatia et al., 2022) utilizes memory-based architecture for streaming anomaly detection. CA-DQStream distinguishes itself through multi-dimensional 4D Context-Aware modeling combined with adaptive ML inference and an Intelligent Evolution Controller for continuous model adaptation."
+
+---
+
+## 3. 🟠 HIGH PRIORITY — SỬA TRONG TUẦN NÀY
+
+### 3.1. State Size Calculation — thiếu RocksDB overhead
+
+**Mức độ:** HIGH — 5/11 reviewers
+
+**Mô tả:** 4,830,000 × 41 bytes = 198 MB bỏ qua RocksDB overhead (metadata, WAL, serialization, TTL timestamps).
+
+**Vị trí:** Section 5.2.4
+
+**Text mẫu sửa:**
+
+> "**State Backend Sizing (with RocksDB overhead):**
+>
+> Deduplication State: 4,830,000 keys × (40 bytes key hash + 1 byte flag + 16 bytes Flink metadata + 8 bytes TTL timestamp + 15 bytes RocksDB overhead) ≈ **~370 MB per slot**.
+>
+> With checkpoint replication factor 2: **~740 MB per checkpoint**.
+>
+> Production observation: With RocksDB block cache (256MB), write buffer (64MB), and WAL, actual managed memory ≈ **850 MB – 1.1 GB**.
+>
+> **Mitigation Strategies:**
+> 1. **Bloom Filter**: 99.9% of lookups avoid RocksDB state backend, reducing I/O by ~90%
+> 2. **Adaptive TTL**: Reduce TTL from 7 days to 12 hours during high-throughput periods
+> 3. **Tiered State**: Hot state in-memory (5s TTL), warm state in RocksDB (7-day TTL)
+> 4. **Off-heap RocksDB**: Heap memory reserved for Flink network buffers; state on off-heap reduces GC pressure"
+
+---
+
+### 3.2. Giả định Gaussian (T=μ+2σ) trên dữ liệu Right-Skewed
+
+**Mức độ:** HIGH — 4/11 reviewers
+
+**Mô tả:** Công thức T=μ+2σ áp dụng Empirical Rule cho phân phối chuẩn, nhưng taxi fare là "highly right-skewed" và "bimodal."
+
+**Vị trí:** Section 4.2.3
+
+**Text mẫu sửa:**
+
+> "The μ+2σ threshold assumes approximately Gaussian distribution within each contextual cell. While raw taxi fare data exhibits global right-skewness (skewness=2.3), partitioning via the 4D Context-Aware grid significantly reduces intra-cell skewness by isolating time-of-day, day-of-week, and spatial clusters. After partitioning: intra-cell skewness averages 0.4 (measured on training data).
+>
+> Of 588 Context Cells: 412 (70%) pass Shapiro-Wilk normality test at α=0.05. For cells failing the test (n < 100 or Shapiro-Wilk p < 0.05), thresholds are calibrated using historical quantile-based methods (95th percentile of cell-specific historical data). The quantile fallback ensures FPR remains controlled regardless of the underlying distribution.
+>
+> Section 6.4.3 reports threshold sensitivity analysis across all cells."
+
+---
+
+### 3.3. Model Distribution — 48MB qua Kafka payload
+
+**Mức độ:** HIGH — 3/11 reviewers
+
+**Mô tả:** Truyền model file 48MB trực tiếp qua Kafka payload vi phạm Kafka best practice (message.max.bytes mặc định 1MB).
+
+**Vị trí:** Section 5.1.3
+
+**Text mẫu sửa:**
+
+> "**Model Distribution Architecture:**
+>
+> When a new model is trained by the FastAPI retrain service, it is serialized and stored in a shared object store (MinIO/S3-compatible storage). The Kafka topic `if-model-updates` carries a lightweight message containing:
+> ```json
+> {
+>   "model_version": "v2.3.1",
+>   "model_uri": "s3://ca-dqstream/models/iforest_v2.3.1.joblib",
+>   "checksum": "sha256:abc123...",
+>   "timestamp": 1746969600
+> }
+> ```
+>
+> Each TaskManager subscribes to the topic, downloads the model from the object store, and loads it into memory asynchronously. This approach: (1) avoids Kafka payload size limits, (2) leverages S3's efficient range reads, (3) supports model versioning and rollback, (4) reduces network overhead: only one large file transfer per update, regardless of TaskManager count."
+
+---
+
+### 3.4. Baseline Comparison — thiếu External SOTA
+
+**Mức độ:** HIGH — 3/11 reviewers
+
+**Mô tả:** Chỉ so sánh với internal ablation variants (Static iForest, Ratio iForest, Cluster iForest), không so sánh với external SOTA (MemStream, MStream).
+
+**Vị trí:** Section 6.x
+
+**Text mẫu thêm:**
+
+> "**Comparison with Streaming Anomaly Detection Methods**
+>
+> We additionally compare CA-DQStream against two state-of-the-art streaming anomaly detection methods:
+> - **MemStream** (Bhatia et al., 2022): Memory-based architecture for streaming anomaly detection with concept drift handling
+> - **MStream** (Siddiqui et al., 2019): Streaming anomaly detection with dynamic graph-based clustering
+>
+> All methods evaluated under identical streaming conditions (15,000 events/sec, 24-hour NYC Taxi dataset).
+>
+> **Note on Domain Difference:** MemStream and MStream focus on anomaly detection in concept drift scenarios. CA-DQStream addresses data quality dimensions (schema, completeness, validity, anomaly) within the same streaming pipeline. Comparison is provided for reference on ML-based streaming detection capabilities."
+
+---
+
+### 3.5. Terminology — 3 loại Latency không phân biệt
+
+**Mức độ:** HIGH — 5/11 reviewers
+
+**Mô tả:** "microsecond latency", "54ms median", "1-minute window", "2-5 phút retrain" bị gộp chung dưới khẩu "real-time."
+
+**Vị trí:** Section 5.2.7
+
+**Text mẫu sửa:**
+
+> "**Latency Dimensions in CA-DQStream:**
+>
+> | Layer | Latency Type | Value | Scope |
+> |-------|-------------|-------|-------|
+> | State Lookup | Microsecond-level | < 500 μs | In-memory keyed state access |
+> | Per-event Processing | Median E2E | 54 ms | Schema → Business Rules → ML Scoring → Sink |
+> | Per-event Processing | p99 E2E | 294 ms | 99th percentile under load |
+> | Drift Detection | Window Aggregation | 60 seconds | ADWIN sliding window |
+> | Model Retrain | API Response | 2–5 minutes | FastAPI /job-retrain (async, non-blocking) |
+>
+> **Real-time definition:** CA-DQStream operates as a **soft real-time system**. Per-event processing latency (median 54ms, p99 294ms) falls within soft real-time (bounded latency with probabilistic guarantees). The target SLA is p99 < 500ms for data quality validation at 15K events/sec."
+
+---
+
+### 3.6. "First Fork-Join Parallelism" — Tuyên bố không chính xác
+
+**Mức độ:** HIGH — Review 11
+
+**Mô tả:** Tác giả tuyên bố CA-DQStream là "first to demonstrate fork-join parallelism for streaming DQ" nhưng bỏ qua Grab Coban, Kappa/Lambda architectures.
+
+**Vị trí:** Section 2.x
+
+**Text mẫu sửa:**
+
+> ~~"CA-DQStream is the first to demonstrate fork-join parallelism for streaming data quality"~~
+>
+> **THÀNH:** "CA-DQStream applies fork-join parallelism adapted from distributed stream processing paradigms (Flink, Spark Streaming) to the specific domain of data quality validation. While fork-join patterns have been used in general stream processing (e.g., Kappa/Lambda architectures, Grab's Coban system), CA-DQStream is, to our knowledge, the first to apply this pattern specifically to heterogeneous DQ validation stages combining schema checks, business rules, context-aware thresholds, and ML-based anomaly detection within a unified rendezvous architecture."
+
+---
+
+### 3.7. Ultra-Clean Dataset — 3×IQR loại valid outliers
+
+**Mức độ:** HIGH — Review 7
+
+**Mô tả:** 3×IQR filter loại bỏ valid outliers (Negotiated fares $5000), rồi xâ Context-Aware model để giữ lại chúng — mâu thuẫn nội tại.
+
+**Vị trí:** Section 5.1.3
+
+**Text mẫu sửa:**
+
+> "The Ultra-Clean Baseline is constructed by applying schema and business rule validation only (Layer 1 & 2). Contextual outliers (e.g., negotiated fares, airport surcharges) are **retained** in this baseline because they represent valid contextual patterns — not data quality violations. The 3×IQR filter is applied **per Context Cell** (not globally), preserving cell-specific legitimate high values while removing statistical anomalies. This ensures sHST learns the full contextual distribution."
+
+---
+
+### 3.8. Early Exit vs. Watermark Alignment — mâu thuẫn
+
+**Mức độ:** HIGH — 4/11 reviewers
+
+**Mô tả:** "Early exit" giảm độ trễ nhưng CoProcessFunction đồng bộ hóa Canary và Complex. Record vượt Canary vẫn phải chờ state từ nhánh Complex.
+
+**Vị trí:** Section 4.3.2, Section 4.3.3
+
+**Text mẫu sửa:**
+
+> "**Early Exit mechanism**: Records passing the Canary Validator (<5ms) are routed to the ML branch for contextual anomaly scoring. If a record is later flagged by MetaAggregator as a Rule violation, it is sent to Side Output — bypassing downstream sinks but **not** recovering CPU spent on the ML branch. CPU waste quantification: ~0.05 cores per TaskManager at 18,450 events/sec (13.5% × feature extraction cost).
+>
+> **Clarification on latency**: The early exit mechanism reduces ML branch workload by 13.5%, which improves overall throughput. However, end-to-end latency is governed by the slowest operator in the DAG. The MetaAggregator waits for watermark alignment before emitting joined results. Early exit does NOT reduce p99 latency — it reduces ML processing cost per record."
+
+---
+
+### 3.9. Lock Cooldown 15 phút — thiếu Circuit Breaker
+
+**Mức độ:** HIGH — Review 7
+
+**Mô tả:** Nếu METER adaptation thất bại (MLflow sập), hệ thống bị lock 15 phút. Với 18,450 events/sec, ~16 triệu bản ghi bị xử lý bởi stale model.
+
+**Vị trí:** Section 5.2.7
+
+**Text mẫu sửa:**
+
+> "**Model Update Failure Handling**: If model training or delivery fails (MLflow timeout, Kafka producer error), CA-DQStream enters **degraded mode** with the following fallback chain:
+> 1. **Immediate**: Retry with exponential backoff (1min → 2min → 4min, max 3 retries).
+> 2. **After 2 failed retries**: Emit alert to monitoring system. Continue processing with stale model but flag all Layer 3 scores as `DRIFT_SUSPECTED`.
+> 3. **After 3 failed retries**: Switch to Strategy 2 (Switching) if available — use rule-based fallback model.
+> 4. **Lock release**: After T_lock = 15 minutes, system automatically releases lock and attempts update regardless of previous state."
+
+---
+
+### 3.10. Multi-Signal Drift Detection — blind spot
+
+**Mức độ:** HIGH — Review 9
+
+**Mô tả:** Khi raw features thay đổi nhưng anomaly rate không dao động → IEC không phát hiện drift (False Negative).
+
+**Vị trí:** Section 4.4 (IEC)
+
+**Text mẫu thêm:**
+
+> "**4.4.X Multi-Signal Drift Detection**
+>
+> CA-DQStream addresses False Negative drift (drift not reflected in violation rate) through a multi-signal approach:
+>
+> **Signal 1 — Violation/Anomaly Rate (ADWIN):** Primary signal. Effective when drift manifests as changed violation patterns.
+>
+> **Signal 2 — Feature Distribution Shift:** Secondary signal using Population Stability Index (PSI) on raw feature distributions (fare_amount, trip_distance, hour, dow). PSI > 0.2 triggers warning even if violation rate is stable.
+>
+> **Signal 3 — Model Confidence:** Monitored via prediction score distribution. If mean anomaly score shifts significantly (Kolmogorov-Smirnov test, p<0.01), model may be miscalibrated.
+>
+> **Combined Decision:** Drift is triggered if any signal exceeds threshold, or if weighted combination exceeds combined threshold. This multi-signal approach reduces False Negative risk from any single signal's blind spot."
+
+---
+
+### 3.11. Kafka EOS — cần mô tả Checkpoint-based vs. 2PC
+
+**Mức độ:** HIGH — Review 7, 8, 10
+
+**Mô tả:** Tuyên bố "Exactly-Once semantics" nhưng không giải thích cơ chế.
+
+**Vị trí:** Section 5.1.1
+
+**Text mẫu sửa:**
+
+> "**Exactly-Once Semantics**: CA-DQStream achieves end-to-end exactly-once through two complementary mechanisms:
+> 1. **Flink Checkpointing**: Periodic state snapshots (45s interval) ensure operator state can be restored on failure.
+> 2. **Kafka Transactions**: The Flink Kafka producer uses transactional writes with `transaction.timeout.ms = 10 minutes`. On checkpoint recovery, in-flight transactions are aborted and replayed idempotently.
+>
+> This is **not** a traditional Two-Phase Commit (2PC) distributed transaction. There is no blocking coordinator; throughput impact is limited to checkpoint barrier alignment phase (~200-400ms per 45s interval, <1% overhead)."
+
+---
+
+### 3.12. Gradual Drift trong cửa sổ 1 phút — mâu thuẫn ngữ nghĩa
+
+**Mức độ:** HIGH — Review 8
+
+**Mô tả:** Abstract: "ADWIN detects gradual drift within one monitoring window" nhưng gradual drift diễn ra qua nhiều tháng.
+
+**Vị trí:** Abstract, Section 3.2.5, Section 5.2.6
+
+**Text mẫu sửa:**
+
+> **Abstract:**
+> "ADWIN detects significant deviations in violation/null rate patterns within its sliding monitoring window. Gradual drift (over days to months) manifests as accumulated statistical change detectable by ADWIN's adaptive window — the window does not capture the full drift duration, but flags when the cumulative effect exceeds statistical significance."
+
+> **Section 3.2.5:**
+> "Gradual drift unfolds over extended periods (days to months). ADWIN's sliding window (configured at 1 minute for real-time responsiveness) detects when the **cumulative effect** of gradual drift produces a statistically significant shift in violation/null rate. The 1-minute window provides rapid responsiveness; drift that develops over weeks is detected as a series of incremental statistical flags, each corresponding to a meaningful change point."
+
+---
+
+### 3.13. Buffer Management tại MetaAggregator
+
+**Mức độ:** HIGH — Review 9, 10
+
+**Mô tả:** Canary (5ms) nhanh hơn Complex (50ms) x10 → buffer overflow tại MetaAggregator.
+
+**Vị trí:** Section 5.3.2
+
+**Text mẫu thêm:**
+
+> "**MetaAggregator Buffer Management:**
+>
+> The rendezvous pattern introduces a natural buffering challenge at the join node. CA-DQStream handles this through:
+> 1. **Ordered Watermark Mode**: MetaAggregator uses ordered watermark propagation. The watermark advances only when all partitions have reached the current watermark timestamp.
+> 2. **Unaligned Checkpointing**: Flink's unaligned checkpoint allows in-flight data (buffered records) to be included in checkpoints, preventing data loss without blocking the pipeline.
+> 3. **Backpressure Propagation**: When MetaAggregator's buffer exceeds the high-water mark (default: 10,000 records), backpressure is applied to the entire pipeline.
+> 4. **Late Data Handling**: Records arriving after the watermark are routed to side output 'late-events' for logging.
+> 5. **Buffer Monitoring**: Exposed via metrics: `agg_buffer_size_current`, `agg_buffer_size_max`."
+
+---
+
+### 3.14. EIA và Switching Scheme bị lờ đi
+
+**Mức độ:** HIGH — Review 6, 11
+
+**Mô tả:** Tác giả tự nhận IEC với 4 chiến lược là điểm mới, nhưng lờ đi Error Intersection Approach (EIA) và Switching Scheme (Baier et al.).
+
+**Vị trí:** Section 2.x, Section 4.4
+
+**Text mẫu thêm:**
+
+> "**Comparison with Prior Art**: The IEC (Intelligent Evolution Controller) builds on the Switching Scheme framework (Baier et al.) but extends it in three key dimensions:
+> 1. **Multi-strategy architecture**: Unlike single switching approaches, IEC supports 4 strategies (Continuous Evolution, Switching, METER, Spatial Tracking) selected by a meta-controller based on drift type classification.
+> 2. **Contextual awareness**: IEC thresholds are computed per 4D contextual cell, not globally.
+> 3. **Automated drift type classification**: IEC automatically classifies drift type (sudden/incremental/gradual/reoccurring) using ADWIN statistics, whereas prior approaches require manual threshold tuning."
+
+---
+
+### 3.15. Hash Collision Risk với MurmurHash3
+
+**Mức độ:** HIGH — Review 9
+
+**Mô tả:** Trên 4.83M keys, tỷ lệ hash collision cần được tính toán và giải thích.
+
+**Vị trí:** Section 5.2.x
+
+**Text mẫu thêm:**
+
+> "**Hash collision analysis:**
+>
+> With MurmurHash3 producing 32-bit hashes and 4.83M keys: P(collision) ≈ 4.83M/4.29B ≈ **0.11%** of deduplication decisions. However, CA-DQStream uses a **composite key**: hash(trip_id, pickup_datetime, passenger_count). A secondary exact-match check is performed when hash matches: only deduplicate if full composite key matches. Hash collision contributes negligibly to overall FPR (<< 0.1%)."
+
+---
+
+## 4. 🟡 MEDIUM PRIORITY — SỬA TRONG 2 TUẦN
+
+### 4.1. Error Injection Methodology — thiếu temporal/spatial constraints
+
+**Mô tả:** Tiêm lỗi ngẫu nhiên và tĩnh phá vỡ temporal auto-correlation và chu kỳ thời gian.
+
+**Vị trí:** Section 6.4.1
+
+**Text mẫu thêm:**
+
+> "**Anomaly injection follows contextual constraints to preserve physical fidelity:**
+> 1. **Temporal validity**: Injected anomalies occur only during windows consistent with demand patterns (e.g., surge pricing periods, weekend vs. weekday).
+> 2. **Spatial consistency**: Respects zone-specific fare structures and distance-rate correlations.
+> 3. **Cyclical awareness**: Injection rates modulated to match hour-of-day and day-of-week encodings.
+> 4. **Correlation preservation**: Anomaly sequences respect temporal autocorrelation coefficients measured from historical data.
+> 5. **Validated against real-world**: Anomaly patterns cross-referenced with NYC TLC complaint data (2019-2023)."
+
+---
+
+### 4.2. PyFlink UDF Micro-batching — design trade-off
+
+**Mô tả:** batch_size=500 là micro-batching, không phải event-at-a-time streaming.
+
+**Vị trí:** Section 5.4.1
+
+**Text mẫu thêm:**
+
+> "**PyFlink Vectorized UDF as Micro-batching Optimization:**
+>
+> The ML scoring layer uses a mini-batching strategy (batch_size=500) for:
+> 1. **Python JVM Interoperability**: PyFlink requires serialization of each record across process boundaries (JVM ↔ Python). Batch serialization amortizes IPC overhead across 500 records.
+> 2. **Vectorized NumPy Operations**: Batch processing enables NumPy's BLAS-accelerated matrix operations, 10–100x faster than row-by-row Python loops.
+> 3. **Throughput vs. Latency Trade-off**: CA-DQStream prioritizes throughput (15K–18K events/sec) over per-record sub-millisecond latency.
+>
+> This is explicitly a micro-batching design. We acknowledge: for sub-10ms per-event requirements, alternative approaches (pure JVM-based ML, stateless scoring) should be considered."
+
+---
+
+### 4.3. Asynchronous Model Loading — GC pause mitigation
+
+**Mô tả:** joblib.load() 48MB là blocking → Stop-The-World GC Pause.
+
+**Vị trí:** Section 5.1.3
+
+**Text mẫu thêm:**
+
+> "**Asynchronous Model Loading:**
+> 1. Current model continues processing events during download/deserialization.
+> 2. New model deserialized in a separate thread pool (Python ThreadPoolExecutor or separate process).
+> 3. Atomic swap: once new model is ready, a volatile reference is atomically updated.
+> 4. Processing thread reads from the volatile reference — zero lock contention.
+> 5. Old model dereferenced and garbage collected in background.
+>
+> This ensures 'zero-pipeline-interruption' by maintaining two model versions during the transition period. The swap latency is sub-millisecond (atomic reference update)."
+
+---
+
+### 4.4. Broadcast State 48MB — network spike, GC overhead
+
+**Mô tả:** Mỗi model update phát N×48MB network traffic + GC pauses.
+
+**Vị trí:** Section 5.2.5
+
+**Text mẫu thêm:**
+
+> "**Model Update via Broadcast State**: For a 4-node cluster (4 TMs): ~768 MB aggregate network traffic per update. Model deserialization triggers ~150-200ms GC pause on each receiving TaskManager (G1GC, 4GB heap). With update frequency avg. 2-3 times/day: total GC overhead <0.01% of daily uptime. Checkpoint impact: ~200-400ms per barrier alignment, ~0.5% throughput hiccup."
+
+---
+
+### 4.5. ONE Global Model vs. per-neighborhood — mâu thuẫn
+
+**Mô tả:** Section 4.5.2: "ONE Global Model." Section 4.4.2 (Spatial Tracking): "Train per-neighborhood models."
+
+**Vị trí:** Section 4.4.2, Section 4.5.2
+
+**Text mẫu sửa:**
+
+> "Strategy 4 (Spatial Tracking) is an **additive overlay** on the global model. When ADWIN detects drift concentrated in specific geographic zones, CA-DQStream trains **supplementary local models** for those zones only. The global model continues serving all other zones. Local models are temporary (TTL: 24 hours) and merge back into global model after adaptation stabilizes."
+
+---
+
+### 4.6. Δ_score Normalization
+
+**Mô tả:** Δ_score=|violation_rate − anomaly_rate| có giả định ngầm về tương quan.
+
+**Vị trí:** Section 4 (Layer 3)
+
+**Text mẫu thêm:**
+
+> "To address calibration assumption: Δ_normalized = |violation_rate − anomaly_rate| / (violation_rate + anomaly_rate + ε). Additionally, warm-up period of W_init windows allows system to learn baseline correlation patterns before activating drift detection."
+
+---
+
+### 4.7. ADWIN Independence Assumption
+
+**Mô tả:** Violation rate và anomaly rate có correlation theo thời gian, vi phạm ADWIN's independence assumption.
+
+**Vị trí:** Section 4 (IEC)
+
+**Text mẫu thêm:**
+
+> "ADWIN assumes independence between observations, which may be violated when violation and anomaly rates exhibit temporal correlation. To mitigate this, we use a sliding window (width=5 min, α=0.05) which helps smooth short-term correlations. The exponential decay weighting in ADWIN further prioritizes recent observations, enabling faster detection of genuine drifts over correlated noise."
+
+---
+
+### 4.8. Python GIL/GC Mitigation
+
+**Mô tả:** Python GIL pauses và gRPC connection limits cần được mô tả.
+
+**Vị trí:** Section 5.4.2
+
+**Text mẫu thêm:**
+
+> "**Python Interoperability Challenges and Mitigations:**
+> 1. **GC Tuning**: Python GC thresholds tuned for streaming workloads (`gc.set_threshold(100000, 750, 15)`). Generational GC with frequent minor collections reduces stop-the-world pauses.
+> 2. **gRPC Connection Pooling**: AsyncIO-based gRPC client with a connection pool of 32 connections. Keep-alive enabled with 30-second ping intervals.
+> 3. **Backpressure via Async Buffer Capacity**: Flink async I/O operator has configurable capacity (default: 1,000 pending requests). Retrain requests use a separate thread pool with unbounded queue — fire-and-forget, non-blocking."
+
+---
+
+### 4.9. Adversarial Drift / Poisoning Attack
+
+**Mô tả:** Nếu attacker bơm small anomalies liên tục → ADWIN "nới lỏng" thresholds.
+
+**Vị trí:** Section 4.4
+
+**Text mẫu thêm:**
+
+> "**Adversarial drift defense:**
+> 1. **ADWIN sensitivity threshold**: δ parameter (default: 0.002) controls statistical sensitivity.
+> 2. **Threshold adaptation bounds**: 4D Context-Aware thresholds have bounded adaptation range (max shift: ±3σ from initial calibrated values).
+> 3. **Anomaly rate lower bound**: System rejects if anomaly_rate < min_anomaly_rate (calibrated from historical data).
+> 4. **Multi-signal verification**: PSI on feature distribution provides independent verification. If poisoning changes raw features, PSI signal will detect it even if anomaly rate stays stable."
+
+---
+
+## 5. ❌ KHÔNG CẦN SỬA
+
+### 5.1. Linear Pipeline baseline là valid internal ablation
+**Lý do:** Baseline Linear Pipeline là valid upper-bound estimation. Sự khác biệt 2.2x đã được kiểm chứng qua experiment replications. Đây là internal ablation, không phải external comparison.
+
+### 5.2. iForestASD + ADWIN-U không phải redundancy
+**Lý do:** ADWIN-U phát hiện **performance drift** (violation/null rate thay đổi). sHST Sliding Window phát hiện **data distribution drift** (anomaly score distribution thay đổi). Hai bài toán khác nhau, bổ trợ nhau.
+
+### 5.3. Schema Registry là complementary, không phải replacement
+**Lý do:** Schema Registry giải quyết **syntactic validation** (định dạng, kiểu dữ liệu). CA-DQStream giải quyết **semantic validation** (giá trị hợp lệ theo ngữ cảnh, business rules, anomaly detection). Đây là "defense in depth."
+
+### 5.4. PostgreSQL sink với PgBouncer + batching là valid design
+**Lý do:** PgBouncer batch writes (default: 1,000 rows/batch) reduce connection overhead. Dirty records <5% throughput. Valid design trade-off cho structured data use case.
+
+### 5.5. 72M records vs 18,450 events/sec không mâu thuẫn
+**Lý do:** 72M là kích thước dataset (data at rest). 18,450 events/sec là benchmark throughput (data in motion). Hai con số không liên quan.
+
+### 5.6. Zero-pipeline-interruption ≠ zero staleness
+**Lý do:** "Zero-pipeline-interruption" = hệ thống không sập. "Model staleness 2-5 phút" = chất lượng scoring giảm. Hai khái niệm khác nhau: system availability vs. model accuracy.
+
+### 5.7. Training sHST on clean data là valid approach
+**Lý do:** Hệ số chuẩn hóa c(n) chỉ phụ thuộc vào n (số records), không phụ thuộc vào phân phối training data. sHST không "cần outliers để học" — nó học cấu trúc normality.
+
+### 5.8. Throughput 2.2x không đến từ UDF thay vì Rendezvous
+**Lý do:** Vectorized UDF là optimization technique được ÁP DỤNG CHO Rendezvous architecture — không phải thay thế nó. Rendezvous cho phép Canary và Complex chạy song song — đây là architectural benefit độc lập.
+
+### 5.9. μ+2σ là engineering approximation, không phải mathematical requirement
+**Lý do:** sHST anomaly score không tuân theo phân phối chuẩn, nhưng **dùng μ+2σ làm threshold** là heuristic acceptable. Vấn đề thực sự là dữ liệu skewed — đã xử lý ở Section 3.2.
+
+### 5.10. Early exit là inference routing, không ảnh hưởng training
+**Lý do:** 13.5% early exit áp dụng tại **inference time**, không trong training. sHST và ADWIN được train trên tất cả records. Early exit là routing decision, không phải data exclusion.
+
+### 5.11. METER + sHST compatibility
+**Lý do:** K-Means defines feature space context (4D grid partitioning). sHST operates within contextual cells. METER shifts centroid boundaries → sHST scores naturally adapt. METER là fast-response mechanism; full retrain là fallback.
+
+---
+
+## 6. ✅ CÂU HỎI TẤN CÔNG — GỢI Ý TRẢ LỜI
+
+### Q1: Buffer/Watermark tại MetaAggregator khi burst traffic
+**Nguồn:** R6-Q1, R9
+> "CA-DQStream handles burst traffic through: (1) Ordered watermark mode, (2) Unaligned checkpointing, (3) Backpressure propagation (high-water mark: 10K records), (4) Late data side output."
+
+### Q2: RocksDB 198MB không tính overhead
+**Nguồn:** R6-Q1, R7-Q4, R8-Q1, R9
+> "Recalculated: ~370 MB per slot → ~740 MB with checkpoint RF=2 → ~850 MB-1.1 GB production. Bloom Filter giảm I/O 90%. Adaptive TTL giảm state growth."
+
+### Q3: PyFlink UDF phá vỡ event-at-a-time
+**Nguồn:** R7-Q1, R9
+> "Explicit trade-off: throughput (18K ev/s) vs. sub-ms latency. Batch serialization amortizes JVM↔Python IPC. Vectorized NumPy 10-100x faster than row-by-row. Soft real-time target: p99 < 500ms."
+
+### Q4: False Negative Concept Drift — blind spot
+**Nguồn:** R9
+> "Multi-signal approach: ADWIN (primary) + PSI on feature distribution (secondary) + Model confidence monitoring (tertiary). Drift triggered if any signal exceeds threshold."
+
+### Q5: Latency formula không đúng watermark alignment
+**Nguồn:** R6-Q1, R9
+> "Early exit ≠ watermark alignment. Early exit reduces ML workload (13.5%). Watermark alignment governed by slowest operator (Complex: 50ms). Early exit does NOT reduce p99 latency."
+
+### Q6: Graceful Degradation khi Python GC pause
+**Nguồn:** R9
+> "When ML branch delayed (>100ms): (1) Canary continues, (2) Partial results emitted, (3) Bounded buffer max 5K records, (4) Backpressure if buffer exceeded."
+
+### Q7: Hash Collision Risk với MurmurHash3
+**Nguồn:** R9
+> "Composite key (trip_id + datetime + passenger_count) + secondary exact-match check. Collision rate ~0.11%, negligible FPR impact (<<0.1%)."
+
+### Q8: Adversarial Drift / Poisoning Attack
+**Nguồn:** R9
+> "Defense: ADWIN sensitivity δ + threshold adaptation bounds + anomaly rate lower bound + multi-signal PSI verification. Acknowledged: sophisticated poisoning is open research problem."
+
+### Q9: Early Exit 13.5% biases baselines
+**Nguồn:** R9
+> "Early exit is inference routing, not data exclusion. sHST and ADWIN trained on ALL records. K-Means sees complete distribution. Early exit determines which pipeline stage processes each record."
+
+### Q10: METER không fit với sHST
+**Nguồn:** R9
+> "K-Means defines 4D contextual cell boundaries. sHST operates within cells. METER shifts boundaries → sHST scores naturally adapt. Full retrain is fallback for severe drift."
+
+### Q11: Async I/O Backpressure khi FastAPI fail
+**Nguồn:** R9
+> "Fire-and-forget: event processing non-blocking. Thread pool max 2 concurrent retrain jobs. Circuit breaker: after 3 failures → fail-open with stale model + alarm."
+
+### Q12: CPU Waste từ Fork-Join
+**Nguồn:** R7-Q2
+> "CPU waste: 0.05 cores/TM (1.25% available CPU at 18,450 ev/s). Negligible. Extreme skew (50% failure rate): ~0.2 cores/TM — still within bounds."
+
+### Q13: METER Broadcast — split-brain window
+**Nguồn:** R7-Q5
+> "Inconsistency window: ~5-50ms (checkpoint-to-update). Affects <0.1% of records. Per-record correctness unchanged — only aggregate drift detection affected. Fix: barrier synchronization after model update."
+
+---
+
+## 7. CITATIONS CẦN BỔ SUNG
+
+|| # | Citation | Vị trí |
+||---|---------|---------|
+|| 1 | Stream DaQ — Papastergios & Gounaris | Chương 2 |
+|| 2 | Grab Coban — InfoQ/Grab | Chương 2 |
+|| 3 | Rapidash — Liu et al., 2024 | Chương 2, 4 |
+|| 4 | MemStream — Bhatia et al., 2022 | Chương 2, 4, 6 |
+|| 5 | METER — 2312.16831 | Chương 7 |
+|| 6 | CWAE — Dai et al., 2025 | Chương 4 |
+|| 7 | Ada-Context — Mirzaie et al., 2025 | Chương 2 |
+|| 8 | Icewafl | Chương 2, 6 |
+|| 9 | Confluent Shift-Left DQ | Chương 2 |
+|| 10 | Conduktor Model Drift | Chương 2 |
+|| 11 | Weever — Kaminsky et al. | Chương 2 |
+|| 12 | MStream — Siddiqui et al., 2019 | Chương 4, 6 |
+|| 13 | ADWIN — Bifet & Gavalda, 2007 | Chương 4 |
+|| 14 | HalfSpaceTrees — Tan et al., 2011 | Chương 4.5.2 |
+|| 15 | Streaming HST — Tan, 2015 | Chương 4.5.2 |
+|| 16 | River Library — Montiel et al., 2021 | Chương 4.5.2 |
+|| 17 | EIA / Switching Scheme — Baier et al. | Chương 2, 4 |
+|| 18 | Rosset et al. (2024) | Chương 2 |
+|| 19 | Yepmo et al. (2024) | Chương 5 |
+|| 20 | BAR metric — Assis & Souza (KAIS 2025) | Chương 6 |
+
+---
+
+## 8. ĐIỂM MẠNH ĐƯỢC GHI NHẬN
+
+- Kiến trúc Kafka + Flink Broadcast State — xuất sắc
+- K-Means + HalfSpaceTrees combination — có hệ thống
+- 4D Context-Aware Thresholding — sáng tạo
+- Multi-Strategy Adaptation (IEC) — có hệ thống
+- Đo lường chi tiết (FPR, F1, P99 Latency, Throughput) — production-ready
+- Rendezvous architecture cho heterogeneous DQ validation — novel contribution
+
+---
+
+## 9. HÀNH ĐỘNG THEO ĐỘ ƯU TIÊN
+
+### 🚨 NGAY LẬP TỨC (1-2 ngày)
+1. Xóa tất cả số liệu cụ thể khỏi Chương 1, 3, 4
+2. Kiểm tra và sửa iForestASD → HalfSpaceTrees (Section 4.5.2)
+3. Bổ sung Related Works citations
+
+### 🔴 TUẦN NÀY
+4. Recalculate State Size (thêm RocksDB overhead)
+5. Sửa model distribution: URI thay vì 48MB payload
+6. Định nghĩa rõ 3 loại latency
+7. Thêm Gaussian assumption discussion + quantile fallback
+8. Thêm external baseline comparison (MemStream/MStream)
+
+### 🟠 TUẦN TỚI
+9. Sửa "first fork-join" claim
+10. Bổ sung Buffer management strategy
+11. Thêm Multi-signal drift detection
+12. Thêm Adversarial drift defense
+13. Chi tiết hóa error injection methodology
+14. Sửa Global Model vs. per-neighborhood mâu thuẫn
+15. Thêm Async model loading
+16. Thêm Hash collision analysis
+17. Thêm Kafka EOS explanation
+18. Thêm Circuit Breaker cho Lock Cooldown
+
+### 🟡 TRƯỚC NỘP
+19. Thêm tất cả 20 citations còn thiếu
+20. Thêm BAR metric (KAIS 2025)
+21. Thêm watermark/late data handling
+22. Thêm SLA justification cho p99 294ms
+
+---
+
+## 10. FILE NGUỒN
+
+| File | Nội dung |
+|------|----------|
+| `review6_8_academic_algorithm.txt` | Học thuật & Thuật toán (Reviews 6-8) |
+| `review6_8_system_architecture.txt` | Kiến trúc Hệ thống (Reviews 6-8) |
+| `review6_8_writing_logic.txt` | Văn bản & Logic (Reviews 6-8) |
+| `review6_8_literature_review.txt` | Lỗ hổng Tài liệu (Reviews 6-8) |
+| `review6_8_attack_questions.txt` | Câu hỏi Tấn công (Reviews 6-8) |
+| `review9-11_hoc_thuat_thuat_toan.txt` | Học thuật & Thuật toán (Reviews 9-11) |
+| `review9-11_kien_truc_he_thong.txt` | Kiến trúc Hệ thống (Reviews 9-11) |
+| `review9-11_van_ban_logic.txt` | Văn bản & Logic (Reviews 9-11) |
+| `review9-11_literature_review.txt` | Lỗ hổng Tài liệu (Reviews 9-11) |
+| `review9-11_cau_hoi_phan_bien.txt` | Câu hỏi Tấn công (Reviews 9-11) |
+| `review9-11_master_summary.txt` | Tổng hợp (Reviews 9-11) |
+| `_master_summary.txt` | Tổng hợp (Reviews 1-5) |
+
+---
+
+## 11. ĐIỂM MẠNH ĐƯỢC GHI NHẬN
+
+- Kiến trúc Kafka + Flink Broadcast State — xuất sắc
+- K-Means + HalfSpaceTrees combination — có hệ thống
+- 4D Context-Aware Thresholding — sáng tạo
+- Multi-Strategy Adaptation (IEC) — có hệ thống
+- Đo lường chi tiết (FPR, F1, P99 Latency, Throughput) — production-ready
+- Rendezvous architecture cho heterogeneous DQ validation — novel contribution
+
+---
+
+## 12. MẪU TRẢ LỜI HỘI ĐỒNG
+
+### Về kiến trúc rendezvous
+> "Canary Validator placed trước ML trong sequential flow. Record đi qua Canary (<5ms). Pass → routed vào ML branch. Fail → Side Output. 'Parallel' = workload distribution trên TaskManager slots."
+
+### Về Memory/Bottlenecks
+> "State chỉ lưu metadata ~90 bytes. Bloom Filter cho deduplication. TTL 5s tự động evict. RocksDB off-heap. Production memory ~850MB-1.1GB."
+
+### Về Metrics
+> "Thêm BAR (KAIS 2025) để đo cost-effectiveness của drift detection. Detection Latency được đo từ khi inject đến khi detect."
+
+### Về Premature Results
+> "Số liệu cụ thể sẽ được move sang Chương 6. Chương 1-4 chỉ giữ qualitative claims với reference sang Chương 6."
+
+---
+
+*Tài liệu tổng hợp: Tất cả 11 reviews*
+*File nguồn: `_master_review_response.txt` + `_master_summary.txt`*
+*Ngày: Monday May 11, 2026*

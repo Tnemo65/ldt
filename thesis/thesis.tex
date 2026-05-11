@@ -160,7 +160,7 @@ This thesis presents \textbf{CA-DQStream}, a framework for real-time streaming d
 
 Together, the pipeline processes incoming records in real time while the monitoring layer provides full observability into pipeline health, data quality metrics, and drift events.
 
-\textbf{Case Study.} The framework is evaluated on the NYC Yellow Taxi dataset, where we identify and solve specific data quality problems: completeness violations, validity violations such as negative fares and impossible timestamps, multivariate anomalies including meter tampering and short-trip fraud, and concept drift over time. The four-stage pipeline demonstrates substantial improvements over fixed-threshold approaches. ADWIN detects gradual drift within one monitoring window, triggering automatic threshold recalculation and Isolation Forest retraining.
+\textbf{Case Study.} The framework is evaluated on the NYC Yellow Taxi dataset, where we identify and solve specific data quality problems: completeness violations, validity violations such as negative fares and impossible timestamps, multivariate anomalies including meter tampering and short-trip fraud, and concept drift over time. The four-stage pipeline demonstrates substantial improvements over fixed-threshold approaches. ADWIN detects gradual drift within 48 hours (within two 24-hour monitoring windows, where each monitoring window is defined as 1 hour of meta-stream data aggregated at 1-minute intervals), triggering automatic threshold recalculation and Isolation Forest retraining.
 
 \vspace{2cm}
 \noindent {\bf Keywords:} Data Quality, Streaming Data, Drift Detection, Anomaly Detection, Machine Learning, ADWIN, Isolation Forest, Apache Flink, Apache Kafka.
@@ -249,7 +249,7 @@ The primary objectives of this thesis are:
     \item Implement MLOps pipeline with Isolation Forest model training, MLflow tracking, and in-memory deployment via Flink Broadcast State.
 \end{enumerate}
 
-The thesis is organized as follows: Chapter 1 covers background and related works; Chapter 2 presents the problem definition and research questions; Chapter 3 details the CA-DQStream framework design; Chapter 4 presents experiments and evaluation results; and the final chapter concludes with contributions and future directions.
+The thesis is organized as follows: Chapter 1 covers background and related works; Chapter 2 presents the problem definition and research questions; Chapter 3 details the four core innovations of CA-DQStream; Chapter 4 describes the system architecture and implementation; Chapter 5 presents experiments and evaluation results; and the final chapter concludes with contributions and future directions.
 
 \section{Key Contributions}
 The key contributions of this thesis are:
@@ -263,7 +263,7 @@ The key contributions of this thesis are:
 
     \item \textbf{Intelligent Evolution Controller:} A multi-strategy self-adaptation mechanism that monitors the quality meta-stream via ADWIN and selects from four complementary adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking), resolving most drift events through lightweight incremental updates rather than expensive full retraining.
 
-    \item \textbf{Hybrid K-Means iForestASD Model:} The integration of K-Means clustering with Isolation Forest anomaly detection, where clustering provides context boundaries and Isolation Forest scores anomalies within each context cluster. This architecture detects multivariate anomalies that single-feature business rules cannot express, such as meter tampering and short-trip fraud.
+    \item \textbf{Hybrid K-Means sHST Model:} The integration of K-Means clustering with Isolation Forest anomaly detection, where clustering provides context boundaries and Isolation Forest scores anomalies within each context cluster. This architecture detects multivariate anomalies that single-feature business rules cannot express, such as meter tampering and short-trip fraud.
 \end{enumerate}
 
 \section{Thesis Organization}
@@ -272,7 +272,7 @@ The remainder of this thesis is organized as follows:
     \item \textbf{Chapter 1: Introduction} --- Provides an overview of streaming data processing challenges, introduces the CA-DQStream framework, and outlines the thesis structure.
     \item \textbf{Chapter 2: Background and Related Works} --- Reviews streaming data processing (Kafka, Flink), MLOps, DAMA-DMBOK DQ dimensions, and related works on context-aware DQ, Rendezvous/fork-join patterns, and drift detection.
     \item \textbf{Chapter 3: Problem Definition and Research Questions} --- Presents empirical analysis of the NYC Yellow Taxi dataset as a case study, research gaps, five research questions (RQ1-RQ5), and six hypotheses (H1-H6).
-    \item \textbf{Chapter 4: Core Innovations} --- Details the four scientific contributions: (1) 4D Context-Aware Thresholding, (2) Rendezvous Pipeline Architecture, (3) Intelligent Evolution Controller with 4 Adaptation Strategies, and (4) Hybrid K-Means iForestASD Model.
+    \item \textbf{Chapter 4: Core Innovations} --- Details the four scientific contributions: (1) 4D Context-Aware Thresholding, (2) Rendezvous Pipeline Architecture, (3) Intelligent Evolution Controller with 4 Adaptation Strategies, and (4) Hybrid K-Means sHST Model.
     \item \textbf{Chapter 5: System Architecture \& Implementation} --- Describes infrastructure (Kafka, Flink, PostgreSQL, Grafana), four-layer processing pipeline, optimization techniques (PyFlink Vectorized UDFs, PgBouncer), and MLOps integration.
     \item \textbf{Chapter 6: Experiments \& Evaluation} --- Presents 13 experiments organized by research question: RQ1 (multi-layer coverage), RQ2 (Hybrid model vs baselines), RQ3 (IEC drift adaptation), RQ4 (Rendezvous performance), RQ5 (4D thresholds vs global), plus additional validation experiments.
     \item \textbf{Chapter 7: Conclusion \& Future Work} --- Summarizes contributions, validates hypotheses, discusses limitations, and outlines future research directions (multi-domain validation, deep learning integration, federated learning, anomaly explanation via intrinsic structure).
