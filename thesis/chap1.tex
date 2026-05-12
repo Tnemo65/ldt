@@ -1,4 +1,4 @@
-\chapter{BACKGROUND AND RELATED WORKS}
+\chapter{BACKGROUND}
 
 % ================================================
 % 1.1 Overview
@@ -34,22 +34,27 @@ Kafka's retention mechanism stores events durably for as long as needed (configu
 
 The Kafka Streams API \citep{kafkastreams2024} enables implementing stream processing applications and microservices with higher-level functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Kafka Streams partitions data for processing using the same partitioning as Kafka's storage layer, enabling data locality, elasticity, scalability, high performance, and fault tolerance.
 
-In the context of the CA-DQStream framework, Kafka serves as the distributed event streaming backbone. NYC TLC Parquet files are ingested via Kafka Producer into the \texttt{taxi-nyc-raw} topic, and the six output/meta topics (\texttt{dq-schema-violations}, \texttt{dq-hard-rule-violations}, \texttt{dq-if-anomalies}, \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}, and \texttt{if-model-updates}) form the streaming pipeline.
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.75\textwidth]{figs/Thesis_Figures/kafka1.PNG}}
-\caption{CA-DQStream Kafka topics and consumer groups in the Flink Web UI. The seven topics (taxi-nyc-raw, dq-schema-violations, dq-hard-rule-violations, dq-if-anomalies, dq-anomaly-scores, dq-meta-stream, if-model-updates) with 12 partitions each enable parallel processing across the streaming pipeline.}
-\label{fig:kafka_topics_ui}
-\end{figure}
-
-The generic Kafka Streams architecture is illustrated in Figure~\ref{fig:kafka_streams_overview} for reference. In production, CA-DQStream deploys the Kafka layer with seven topics as shown in Figure~\ref{fig:kafka_topics_ui}.
+In the context of the CA-DQStream framework, Kafka serves as the distributed event streaming backbone. NYC TLC Parquet files are ingested via Kafka Producer into the \texttt{taxi-nyc-raw} topic, and the six output/meta topics (\texttt{dq-schema-violations}, \texttt{dq-hard-rule-violations}, \texttt{dq-if-anomalies}, \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}, and \texttt{if-model-updates}) form the streaming pipeline. The Kafka topics and consumer groups configuration is illustrated in Chapter 5, Figure~\ref{fig:kafka_topics_ui_architect}.
 
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.7\linewidth]{figs/kafka-streams-overview-v26.jpg}}
 \caption{Kafka Streams architecture overview. Producers write events to topics, consumers subscribe and process events, and Kafka Streams provides higher-level stream processing functions. Source: Apache Kafka Documentation \citep{kafkaintro2024}.}
 \label{fig:kafka_streams_overview}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.75\linewidth]{figs/Thesis_Figures/kafka1.PNG}}
+\caption{Kafka architecture: producers publish events to topics, each topic is partitioned across brokers, and consumer groups subscribe to consume events. Partitions enable parallel writes and reads across the cluster. Adapted from Apache Kafka documentation.}
+\label{fig:kafka_architecture}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.75\linewidth]{figs/Thesis_Figures/kafka2.PNG}}
+\caption{Kafka Streams API enables higher-level stream processing functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Source: Apache Kafka Documentation \citep{kafkaintro2024}.}
+\label{fig:kafka_streams_api}
 \end{figure}
 
 \subsection{Apache Flink: Stateful Stream Processing}
@@ -65,18 +70,27 @@ The Flink architecture is built around four critical concepts \citep{flinkdocs20
     \item \textbf{Stateful stream processing:} Flink operations can be stateful---how one event is handled can depend on the accumulated effect of all events that came before it. A Flink application running in parallel is effectively a sharded key-value store: each parallel instance of a stateful operator is responsible for handling events for a specific group of keys, with state kept locally for high throughput and low latency.
 \end{itemize}
 
-Flink provides exactly-once state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies.
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/flink1.PNG}}
-\caption{Apache Flink Web UI showing the CA-DQStream job execution. The dashboard displays running tasks, checkpoint status, and task manager metrics.}
-\label{fig:flink_ui}
-\end{figure}
+Flink provides exactly-once state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies. The Flink Web UI displaying the CA-DQStream job execution, task status, and task manager metrics is illustrated in Chapter 5, Figure~\ref{fig:flink_job_execution}.
 
 Flink supports both \textit{unbounded streams} (continuous, no defined end, must be continuously processed) and \textit{bounded streams} (batch processing with a defined start and end). Bounded streams are internally processed by algorithms and data structures specifically designed for fixed-size datasets, yielding excellent performance. This makes Flink a unified batch-stream processing engine.
 
 Flink's JobManager coordinates the execution of a Flink job, managing task scheduling, checkpoint coordination, and failure recovery. TaskManagers are worker nodes that execute tasks in parallel within processing slots. Each TaskManager provides a fixed number of processing slots (controlled by taskmanager.numberOfTaskSlots). State is maintained in memory or, if state size exceeds available memory, in access-efficient on-disk data structures (RocksDB state backend). Applications can leverage virtually unlimited amounts of CPUs, main memory, disk, and network I/O, with Flink reported to process multiple trillions of events per day and maintain multiple terabytes of state in production deployments.
+
+Flink's windowing mechanism enables aggregation over finite sets of events. Windows can be defined by time (tumbling, sliding, session) or count, and can be assigned based on event time or processing time. Figure~\ref{fig:flink_windows} illustrates how Flink partitions unbounded streams into bounded windows for stateful computation.
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.75\linewidth]{figs/flink-stateless-stateful-streaming.png}}
+\caption{Flink streaming architecture: stateless vs stateful stream processing. Flink applications are composed of streaming dataflows that may be transformed by user-defined operators. State is maintained in memory or in access-efficient on-disk data structures (RocksDB). Source: Apache Flink Documentation \citep{flinkdocs2024}.}
+\label{fig:flink_stateful}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.9\linewidth]{figs/Thesis_Figures/flink3.PNG}}
+\caption{Flink windowing on a data stream. An unbounded stream of events is partitioned into time-based windows (W1, W2, W3, ...) for aggregation and stateful computation. Each window maintains state and emits results independently. Source: Apache Flink Documentation \citep{flinkdocs2024}.}
+\label{fig:flink_windows}
+\end{figure}
 
 The distinction between batch and streaming DQ is fundamental. In batch processing, all records are available before validation, enabling complete statistical analysis. In streaming, records arrive incrementally, requiring online algorithms that update statistics incrementally and validate records with minimal latency.
 
@@ -142,6 +156,8 @@ CA-DQStream addresses all six dimensions through its layered architecture, as de
 
 \subsection{Context-Aware Data Quality}
 
+\textbf{Foundational Context-Aware Computing:} The concept of context-awareness originates from \citep{dey2001understanding}, which defines context as any information that can be used to characterize the situation of entities. This foundational work established that context includes not just the data itself, but the circumstances under which data was collected and will be used---a principle directly applicable to data quality thresholding.
+
 \textbf{Context Modeling:} Prior work on context-aware DQ includes systematic literature reviews \citep{contextdq2022} that identify context as a critical but under-defined concept in DQ management. While practitioners intuitively understand that data quality thresholds vary by context (e.g., ``a \$50 fare is high \emph{for a standard trip} but normal \emph{for an airport trip}''), formal mathematical models for context-aware thresholding in streaming systems are scarce.
 
 \textbf{Context Dimensions:} Research on multi-dimensional context modeling in data quality has explored spatial context (location-dependent thresholds), temporal context (time-of-day, seasonality), and categorical context (entity types, transaction categories). However, these approaches typically use \textbf{manual threshold specification} per context cell or \textbf{separate models per context}, leading to scalability and maintenance challenges. CA-DQStream's 4D threshold matrix ($7 \times 4 \times 3 \times 7 = 588$ cells) with automatic baseline computation and fallback strategy addresses these limitations.
@@ -171,7 +187,7 @@ Experiment 7 validates latency reduction and throughput improvement through earl
 
 \subsection{Drift Detection}
 
-Concept drift detection is well-studied in machine learning \citep{lu2018learning}. \textbf{ADWIN (Adaptive Windowing)} \citep{bifet2007learning, adwin2025} is a state-of-the-art drift detection algorithm. ADWIN maintains a variable-length window $W$ of recent observations and adaptively splits it into two sub-windows $W_0$ (older) and $W_1$ (newer). At each step, ADWIN tests whether the means of $W_0$ and $W_1$ differ by more than a threshold $\epsilon_{\text{cut}}$:
+Concept drift detection is well-studied in machine learning \citep{gama2014survey, lu2018learning}. \textbf{ADWIN (Adaptive Windowing)} \citep{bifet2007learning, adwin2025} is a state-of-the-art drift detection algorithm. ADWIN maintains a variable-length window $W$ of recent observations and adaptively splits it into two sub-windows $W_0$ (older) and $W_1$ (newer). At each step, ADWIN tests whether the means of $W_0$ and $W_1$ differ by more than a threshold $\epsilon_{\text{cut}}$:
 
 \begin{equation}
 |\hat{\mu}_{W_0} - \hat{\mu}_{W_1}| \geq \epsilon_{\text{cut}}, \quad \text{where } \epsilon_{\text{cut}} = \sqrt{\frac{1}{2m} \cdot \ln \frac{4n}{\delta}}
