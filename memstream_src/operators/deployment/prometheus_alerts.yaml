@@ -1,0 +1,199 @@
+# =============================================================================
+# CA-DQStream + MemStream v5 - Prometheus Alert Rules
+# =============================================================================
+
+groups:
+  - name: cadqstream_alerts
+    rules:
+      # High Scoring Latency Alert
+      - alert: HighScoringLatency
+        expr: histogram_quantile(0.99, rate(memstream_scoring_latency_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream
+        annotations:
+          summary: "High scoring latency detected"
+          description: "99th percentile scoring latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+          runbook_url: "https://wiki.example.com/runbooks/high-scoring-latency"
+
+      # Critical Scoring Latency
+      - alert: CriticalScoringLatency
+        expr: histogram_quantile(0.99, rate(memstream_scoring_latency_seconds_bucket[5m])) > 1.0
+        for: 2m
+        labels:
+          severity: critical
+          service: cadqstream
+        annotations:
+          summary: "Critical scoring latency detected"
+          description: "99th percentile scoring latency is {{ $value | humanizeDuration }} (threshold: 1s)"
+          runbook_url: "https://wiki.example.com/runbooks/critical-scoring-latency"
+
+      # Anomaly Rate Spike
+      - alert: AnomalyRateSpike
+        expr: |
+          (
+            rate(memstream_anomaly_detection_total{result="anomaly"}[5m]) /
+            rate(memstream_anomaly_detection_total[5m])
+          ) > 0.15
+        for: 10m
+        labels:
+          severity: warning
+          service: cadqstream
+        annotations:
+          summary: "Anomaly rate spike detected"
+          description: "Anomaly rate is {{ $value | humanizePercentage }} (expected: <15%)"
+          runbook_url: "https://wiki.example.com/runbooks/anomaly-rate-spike"
+
+      # Critical Anomaly Rate
+      - alert: CriticalAnomalyRate
+        expr: |
+          (
+            rate(memstream_anomaly_detection_total{result="anomaly"}[5m]) /
+            rate(memstream_anomaly_detection_total[5m])
+          ) > 0.30
+        for: 5m
+        labels:
+          severity: critical
+          service: cadqstream
+        annotations:
+          summary: "Critical anomaly rate - possible incident"
+          description: "Anomaly rate is {{ $value | humanizePercentage }} (threshold: 30%)"
+          runbook_url: "https://wiki.example.com/runbooks/critical-anomaly-rate"
+
+      # HMAC Verification Failures
+      - alert: HMACVerificationFailures
+        expr: rate(memstream_hmac_verification_total{result="failure"}[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream
+          security: "true"
+        annotations:
+          summary: "HMAC verification failures detected"
+          description: "HMAC verification failure rate is {{ $value | humanize }} per second"
+          runbook_url: "https://wiki.example.com/runbooks/hmac-failures"
+
+      # Critical HMAC Failures
+      - alert: CriticalHMACFailures
+        expr: rate(memstream_hmac_verification_total{result="failure"}[5m]) > 100
+        for: 2m
+        labels:
+          severity: critical
+          service: cadqstream
+          security: "true"
+        annotations:
+          summary: "Critical HMAC failure rate - possible attack"
+          description: "HMAC verification failure rate is {{ $value | humanize }} per second"
+          runbook_url: "https://wiki.example.com/runbooks/critical-hmac-failures"
+
+      # Redis Connectivity Lost
+      - alert: RedisConnectionLost
+        expr: memstream_redis_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cadqstream
+          dependency: redis
+        annotations:
+          summary: "Redis connection lost"
+          description: "MemStream has lost connection to Redis for more than 1 minute"
+          runbook_url: "https://wiki.example.com/runbooks/redis-connection-lost"
+
+      # Redis High Latency
+      - alert: RedisHighLatency
+        expr: histogram_quantile(0.99, rate(memstream_redis_operation_seconds_bucket{operation="get"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream
+          dependency: redis
+        annotations:
+          summary: "Redis high latency detected"
+          description: "Redis GET operation 99th percentile latency is {{ $value | humanizeDuration }}"
+          runbook_url: "https://wiki.example.com/runbooks/redis-high-latency"
+
+      # Model Version Mismatch
+      - alert: ModelVersionMismatch
+        expr: memstream_model_load_errors_total > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: cadqstream
+        annotations:
+          summary: "Model version mismatch detected"
+          description: "Model loading has failed with version mismatch errors"
+          runbook_url: "https://wiki.example.com/runbooks/model-version-mismatch"
+
+      # Low Service Availability
+      - alert: LowServiceAvailability
+        expr: memstream_service_availability < 0.99
+        for: 15m
+        labels:
+          severity: warning
+          service: cadqstream
+        annotations:
+          summary: "Service availability below SLA"
+          description: "Service availability is {{ $value | humanizePercentage }} (SLA: 99%)"
+          runbook_url: "https://wiki.example.com/runbooks/low-availability"
+
+      # Circuit Breaker Tripped
+      - alert: IECCircuitBreakerTripped
+        expr: memstream_iec_circuit_breaker_tripped_total > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: cadqstream
+          iec: "true"
+        annotations:
+          summary: "IEC circuit breaker tripped"
+          description: "The IEC feedback circuit breaker has been tripped and requires human review"
+          runbook_url: "https://wiki.example.com/runbooks/iec-circuit-breaker"
+
+      # Flink Job Health
+      - alert: FlinkJobNotRunning
+        expr: flink_jobmanager_job_status{status="FAILED"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          service: flink
+        annotations:
+          summary: "Flink job has failed"
+          description: "Flink job has entered FAILED state"
+          runbook_url: "https://wiki.example.com/runbooks/flink-job-failed"
+
+      # Checkpoint Failures
+      - alert: CheckpointFailures
+        expr: rate(flink_taskmanager_job_task_numCheckpointsCompleted[5m]) == 0 and rate(flink_taskmanager_job_task_numCheckpointsFailed[5m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+          service: flink
+        annotations:
+          summary: "Checkpoint failures detected"
+          description: "Checkpoint failures detected over the last 10 minutes"
+          runbook_url: "https://wiki.example.com/runbooks/checkpoint-failures"
+
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: (memstream_memory_usage_bytes / memstream_memory_limit_bytes) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is at {{ $value | humanizePercentage }} of limit"
+          runbook_url: "https://wiki.example.com/runbooks/high-memory"
+
+      # Traffic Routing Errors
+      - alert: TrafficRoutingErrors
+        expr: rate(memstream_traffic_routing_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream
+        annotations:
+          summary: "Traffic routing errors detected"
+          description: "Traffic routing errors occurring at {{ $value | humanize }} per second"
+          runbook_url: "https://wiki.example.com/runbooks/traffic-routing-errors"

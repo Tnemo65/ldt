@@ -30,30 +30,48 @@ try:
 except ImportError:
     PROMETHEUS_AVAILABLE = False
 
-# Pre-create all known cadqstream metrics so they always exist with correct type
-_KNOWN_COUNTERS = [
-    'cadqstream_records_input_total',
-    'cadqstream_records_valid_total',
-    'cadqstream_records_violation_total',
-    'cadqstream_anomalies_canary_total',
-    'cadqstream_anomalies_ml_total',
-    'cadqstream_iec_decisions_total',
-    'cadqstream_iec_drift_detected_total',
-]
-
-_KNOWN_GAUGES = [
-    'cadqstream_meta_volume',
-    'cadqstream_meta_anomaly_rate',
-    'cadqstream_meta_null_rate',
-    'cadqstream_meta_delta_score',
-    'cadqstream_iec_confidence',
-]
-
-# Register known metrics at startup so they always appear in /metrics output
-for name in _KNOWN_COUNTERS:
-    _counters_prom[name] = Counter(name, 'CA-DQStream counter metric', [], registry=_registry)
-for name in _KNOWN_GAUGES:
-    _gauges_prom[name] = Gauge(name, 'CA-DQStream gauge metric', [], registry=_registry)
+# Pre-create all cadqstream metrics so HELP/TYPE lines always appear in /metrics output,
+# with the correct label sets for each metric.
+if PROMETHEUS_AVAILABLE:
+    _counters_prom['cadqstream_records_input_total'] = Counter(
+        'cadqstream_records_input_total', 'CA-DQStream input record counter',
+        ['topic'], registry=_registry)
+    _counters_prom['cadqstream_records_valid_total'] = Counter(
+        'cadqstream_records_valid_total', 'CA-DQStream valid record counter',
+        ['layer'], registry=_registry)
+    _counters_prom['cadqstream_records_violation_total'] = Counter(
+        'cadqstream_records_violation_total', 'CA-DQStream violation counter',
+        ['layer', 'type'], registry=_registry)
+    _counters_prom['cadqstream_violation_records_total'] = Counter(
+        'cadqstream_violation_records_total', 'CA-DQStream records-with-violation counter',
+        ['layer', 'type'], registry=_registry)
+    _counters_prom['cadqstream_anomalies_canary_total'] = Counter(
+        'cadqstream_anomalies_canary_total', 'CA-DQStream canary rule anomaly counter',
+        ['layer', 'rule'], registry=_registry)
+    _counters_prom['cadqstream_anomalies_ml_total'] = Counter(
+        'cadqstream_anomalies_ml_total', 'CA-DQStream ML anomaly counter',
+        ['layer', 'neighborhood'], registry=_registry)
+    _counters_prom['cadqstream_iec_decisions_total'] = Counter(
+        'cadqstream_iec_decisions_total', 'CA-DQStream IEC decision counter',
+        ['strategy'], registry=_registry)
+    _counters_prom['cadqstream_iec_drift_detected_total'] = Counter(
+        'cadqstream_iec_drift_detected_total', 'CA-DQStream IEC drift counter',
+        ['neighborhood'], registry=_registry)
+    _gauges_prom['cadqstream_meta_volume'] = Gauge(
+        'cadqstream_meta_volume', 'CA-DQStream meta volume gauge',
+        ['neighborhood'], registry=_registry)
+    _gauges_prom['cadqstream_meta_anomaly_rate'] = Gauge(
+        'cadqstream_meta_anomaly_rate', 'CA-DQStream meta anomaly rate gauge',
+        ['neighborhood'], registry=_registry)
+    _gauges_prom['cadqstream_meta_null_rate'] = Gauge(
+        'cadqstream_meta_null_rate', 'CA-DQStream meta null rate gauge',
+        ['neighborhood'], registry=_registry)
+    _gauges_prom['cadqstream_meta_delta_score'] = Gauge(
+        'cadqstream_meta_delta_score', 'CA-DQStream meta delta score gauge',
+        ['neighborhood'], registry=_registry)
+    _gauges_prom['cadqstream_iec_confidence'] = Gauge(
+        'cadqstream_iec_confidence', 'CA-DQStream IEC confidence gauge',
+        ['neighborhood'], registry=_registry)
 
 def _hash_labels(labels):
     import json

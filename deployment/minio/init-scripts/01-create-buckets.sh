@@ -15,16 +15,41 @@ echo "[minio-init] MinIO alias set successfully!"
 
 echo "[minio-init] Creating buckets..."
 
+# ── Flink checkpoints + MLflow artifacts ──
+mc mb "${MC_ALIAS}/cadqstream-checkpoints" --ignore-existing
+
+# ── Flink StreamingFileSink buckets (must match minio_sink.py) ──
+# cadqstream-raw/        → valid taxi trips
+mc mb "${MC_ALIAS}/cadqstream-raw" --ignore-existing
+
+# cadqstream-violations/ → schema_violations + canary_violations
+mc mb "${MC_ALIAS}/cadqstream-violations" --ignore-existing
+
+# cadqstream-anomalies/  → anomaly_scores
+mc mb "${MC_ALIAS}/cadqstream-anomalies" --ignore-existing
+
+# cadqstream-metrics/   → meta_metrics + pipeline_stats
+mc mb "${MC_ALIAS}/cadqstream-metrics" --ignore-existing
+
+# cadqstream-drift/     → drift_events + alerts
+mc mb "${MC_ALIAS}/cadqstream-drift" --ignore-existing
+
+# DLQ bucket for action-replay-worker
+mc mb "${MC_ALIAS}/cadqstream-dlq" --ignore-existing
+
+# ── Legacy zone buckets (stats-writer, etc.) ──
+mc mb "${MC_ALIAS}/raw-zone" --ignore-existing
+mc mb "${MC_ALIAS}/quarantine-zone" --ignore-existing
+mc mb "${MC_ALIAS}/clean-zone" --ignore-existing
+
+# ── ML platform ──
 mc mb "${MC_ALIAS}/ml-models" --ignore-existing
-mc mb "${MC_ALIAS}/checkpoints" --ignore-existing
-mc mb "${MC_ALIAS}/artifacts" --ignore-existing
 mc mb "${MC_ALIAS}/mlflow-artifacts" --ignore-existing
 
-echo "[minio-init] Setting bucket policies..."
-mc anonymous set download "${MC_ALIAS}/ml-models"
-mc anonymous set download "${MC_ALIAS}/checkpoints"
-mc anonymous set download "${MC_ALIAS}/artifacts"
-mc anonymous set download "${MC_ALIAS}/mlflow-artifacts"
+echo "[minio-init] Setting bucket policies (public download)..."
+for bucket in cadqstream-checkpoints cadqstream-raw cadqstream-violations cadqstream-anomalies cadqstream-metrics cadqstream-drift cadqstream-dlq raw-zone quarantine-zone clean-zone ml-models mlflow-artifacts; do
+    mc anonymous set download "${MC_ALIAS}/${bucket}" 2>/dev/null || true
+done
 
 echo "[minio-init] Verifying buckets..."
 mc ls "${MC_ALIAS}/"

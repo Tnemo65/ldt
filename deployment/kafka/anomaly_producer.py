@@ -4,7 +4,7 @@ Anomaly Simulation Producer for CA-DQStream.
 
 Injects synthetic anomalies into Kafka topics to simulate real-world data quality
 issues. This populates the dq-hard-rule-violations topic, triggers canary rule
-detections, fires Prometheus alerts, and populates PostgreSQL output tables.
+detections, fires Prometheus alerts, and populates MinIO output buckets.
 
 Anomaly Types:
   INVALID_ZONE        PULocationID/DOLocationID outside 1-263

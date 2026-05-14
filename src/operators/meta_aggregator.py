@@ -234,23 +234,15 @@ class MetaAggregateFunction(AggregateFunction):
 class MetaWindowProcessFunction(ProcessWindowFunction):
     """Add window metadata and compute delta_score.
 
-    Computes delta_score (change from previous window) using ValueState.
+    Delta_score per thesis equation (5.18): normalized divergence between
+    violation_rate and anomaly_rate, NOT temporal change.
+    delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + epsilon)
     """
 
     def __init__(self):
         """Initialize process function."""
-        self.prev_anomaly_rate_state = None
-
-    def open(self, runtime_context):
-        """Initialize state for tracking previous window."""
-        from pyflink.datastream.state import ValueStateDescriptor
-
-        descriptor = ValueStateDescriptor(
-            "prev_anomaly_rate",
-            Types.DOUBLE()
-        )
-
-        self.prev_anomaly_rate_state = runtime_context.get_state(descriptor)
+        # No state needed - delta_score is computed from current window only
+        pass
 
     def process(self, key, context, elements):
         """Process window results.
@@ -269,17 +261,14 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
         if metrics is None:
             return
 
-        # Compute delta_score
-        current_anomaly_rate = metrics['anomaly_rate']
-        prev_anomaly_rate = self.prev_anomaly_rate_state.value()
+        # Compute delta_score per thesis equation (5.18)
+        # delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + epsilon)
+        # This measures the divergence between Canary (rule-based) and Complex (ML-based) detection
+        violation_rate = metrics.get('violation_rate', 0.0)
+        anomaly_rate = metrics.get('anomaly_rate', 0.0)
+        epsilon = 1e-6  # Prevent division by zero
 
-        if prev_anomaly_rate is None:
-            delta_score = 0.0
-        else:
-            delta_score = current_anomaly_rate - prev_anomaly_rate
-
-        # Update state for next window
-        self.prev_anomaly_rate_state.update(current_anomaly_rate)
+        delta_score = abs(violation_rate - anomaly_rate) / (violation_rate + anomaly_rate + epsilon)
 
         # Add delta_score
         metrics['delta_score'] = delta_score

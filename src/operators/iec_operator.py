@@ -68,8 +68,8 @@ class IECOperator(MapFunction):
             'strategies_executed': {
                 'do_nothing': 0,
                 'adjust_threshold': 0,
-                'retrain_model': 0,
-                'switch_model': 0
+                'lock_memory': 0,
+                'canary_only': 0
             }
         }
 
@@ -95,6 +95,9 @@ class IECOperator(MapFunction):
             self.meter_model = None
 
         # Initialize ADWIN-U
+        # GLOBAL ADWIN-U: Monitors 6 meta-metrics for system-wide drift detection
+        # See module docstring for scope separation details
+        # NOTE: This is INDEPENDENT from LOCAL ADWIN in MemStreamCore
         self.adwin_u = MultiInstanceADWIN(
             delta_config=self.adwin_delta_config
         )
@@ -141,6 +144,9 @@ class IECOperator(MapFunction):
 
         # Update stats
         self.stats['strategies_executed'][strategy] += 1
+
+        # Emit IEC metrics to cadqstream-metrics for Prometheus
+        self._emit_iec_metrics(meta_metrics, drifts, strategy, confidence)
 
         # Construct IEC decision
         iec_decision = {
@@ -190,8 +196,8 @@ class IECOperator(MapFunction):
         strategy_names = {
             0: 'do_nothing',
             1: 'adjust_threshold',
-            2: 'retrain_model',
-            3: 'switch_model'
+            2: 'lock_memory',
+            3: 'canary_only'
         }
 
         strategy_name = strategy_names[strategy_id]
@@ -215,9 +221,9 @@ class IECOperator(MapFunction):
         elif severity == 'low':
             return 'adjust_threshold', 0.7
         elif severity == 'moderate':
-            return 'retrain_model', 0.8
+            return 'lock_memory', 0.8
         else:  # high
-            return 'switch_model', 0.9
+            return 'canary_only', 0.9
 
     def _execute_strategy(self, strategy: str, meta_metrics: dict, drift_assessment: dict):
         """Execute adaptation strategy.
@@ -243,20 +249,19 @@ class IECOperator(MapFunction):
                 'message': 'Anomaly threshold adjusted'
             }
 
-        elif strategy == 'retrain_model':
-            # In production: Trigger async model retraining
-            # For now, emit signal to dq-meta-stream
+        elif strategy == 'lock_memory':
             return {
-                'action': 'retrain_triggered',
-                'message': 'Model retraining initiated',
+                'action': 'memory_locked',
+                'message': 'Memory updates frozen to prevent poisoning',
+                'emit_topic': 'memstream-control',
                 'neighborhood': meta_metrics.get('neighborhood_id')
             }
 
-        elif strategy == 'switch_model':
-            # In production: Switch to backup/alternative model
+        elif strategy == 'canary_only':
             return {
-                'action': 'model_switched',
-                'message': 'Switched to alternative model',
+                'action': 'canary_fallback',
+                'message': 'Switched to Canary-only mode due to severe drift',
+                'emit_topic': 'memstream-control',
                 'neighborhood': meta_metrics.get('neighborhood_id')
             }
 
@@ -284,6 +289,137 @@ class IECOperator(MapFunction):
         else:
             # Normal - keep default
             return 0.50
+
+    def _emit_iec_metrics(self, meta_metrics: dict, drifts: list, strategy: str, confidence: float):
+        """Emit IEC metrics to cadqstream-metrics for Prometheus scraping.
+
+        Sends these metrics:
+          - cadqstream_iec_decisions_total{strategy}  (counter)
+          - cadqstream_iec_drift_detected_total{neighborhood}  (counter)
+          - cadqstream_iec_confidence{neighborhood}  (gauge)
+          - cadqstream_meta_anomaly_rate{neighborhood}  (gauge)
+
+        Args:
+            meta_metrics: Current window meta-metrics
+            drifts: List of detected drifts
+            strategy: Selected IEC strategy
+            confidence: Strategy confidence score
+        """
+        try:
+            import urllib.request
+            import json
+
+            neighborhood = str(meta_metrics.get('neighborhood_id', 'global'))
+
+            # IEC decision counter
+            payload_decision = json.dumps({
+                'name': 'iec_decisions_total',
+                'value': 1,
+                'labels': {'strategy': strategy, 'neighborhood': neighborhood},
+                'type': 'counter'
+            }).encode('utf-8')
+            req = urllib.request.Request(
+                'http://cadqstream-metrics:9250/internal/metrics',
+                data=payload_decision,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            try:
+                urllib.request.urlopen(req, timeout=2)
+            except Exception:
+                pass
+
+            # Drift detected counter (once per window with drift)
+            if drifts:
+                payload_drift = json.dumps({
+                    'name': 'iec_drift_detected_total',
+                    'value': len(drifts),
+                    'labels': {'neighborhood': neighborhood},
+                    'type': 'counter'
+                }).encode('utf-8')
+                req2 = urllib.request.Request(
+                    'http://cadqstream-metrics:9250/internal/metrics',
+                    data=payload_drift,
+                    headers={'Content-Type': 'application/json'},
+                    method='POST'
+                )
+                try:
+                    urllib.request.urlopen(req2, timeout=2)
+                except Exception:
+                    pass
+
+            # IEC confidence gauge
+            payload_conf = json.dumps({
+                'name': 'iec_confidence',
+                'value': confidence,
+                'labels': {'neighborhood': neighborhood},
+                'type': 'gauge'
+            }).encode('utf-8')
+            req3 = urllib.request.Request(
+                'http://cadqstream-metrics:9250/internal/metrics',
+                data=payload_conf,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            try:
+                urllib.request.urlopen(req3, timeout=2)
+            except Exception:
+                pass
+
+            # Meta-metric gauges (anomaly_rate, null_rate)
+            payload_anomaly = json.dumps({
+                'name': 'meta_anomaly_rate',
+                'value': float(meta_metrics.get('anomaly_rate', 0.0)),
+                'labels': {'neighborhood': neighborhood},
+                'type': 'gauge'
+            }).encode('utf-8')
+            req4 = urllib.request.Request(
+                'http://cadqstream-metrics:9250/internal/metrics',
+                data=payload_anomaly,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            try:
+                urllib.request.urlopen(req4, timeout=2)
+            except Exception:
+                pass
+
+            payload_null = json.dumps({
+                'name': 'meta_null_rate',
+                'value': float(meta_metrics.get('null_rate', 0.0)),
+                'labels': {'neighborhood': neighborhood},
+                'type': 'gauge'
+            }).encode('utf-8')
+            req5 = urllib.request.Request(
+                'http://cadqstream-metrics:9250/internal/metrics',
+                data=payload_null,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            try:
+                urllib.request.urlopen(req5, timeout=2)
+            except Exception:
+                pass
+
+            payload_delta = json.dumps({
+                'name': 'meta_delta_score',
+                'value': float(meta_metrics.get('delta_score', 0.0)),
+                'labels': {'neighborhood': neighborhood},
+                'type': 'gauge'
+            }).encode('utf-8')
+            req6 = urllib.request.Request(
+                'http://cadqstream-metrics:9250/internal/metrics',
+                data=payload_delta,
+                headers={'Content-Type': 'application/json'},
+                method='POST'
+            )
+            try:
+                urllib.request.urlopen(req6, timeout=2)
+            except Exception:
+                pass
+
+        except Exception:
+            pass
 
     def _log_stats(self):
         """Log IEC statistics."""

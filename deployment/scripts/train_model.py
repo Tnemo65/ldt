@@ -12,7 +12,7 @@ Pipeline:
   4. Train IsolationForest on clean data
   5. Compute per-cluster thresholds (baseline stats)
   6. Register in MLflow with params, metrics, and artifacts
-  7. Upload to MinIO: ml-models/anomaly_detector_<version>.pkl
+  7. Upload to MinIO: cadqstream-checkpoints/ml-models/anomaly_detector_<version>.pkl
 
 Usage:
   python train_model.py --version v1 --n-samples 100000
@@ -23,7 +23,7 @@ Environment Variables:
   MINIO_ENDPOINT         MinIO endpoint (default: minio:9000)
   MINIO_ACCESS_KEY       MinIO access key (default: minioadmin)
   MINIO_SECRET_KEY       MinIO secret key (default: minioadmin123)
-  MODEL_BUCKET           MinIO bucket for models (default: ml-models)
+  MODEL_BUCKET           MinIO bucket for models (default: cadqstream-checkpoints)
 """
 
 import os
@@ -303,8 +303,8 @@ def main():
     parser.add_argument('--n-estimators', type=int, default=200,
                         help='IsolationForest n_estimators (default: 200)')
     parser.add_argument('--seed', type=int, default=42, help='Random seed (default: 42)')
-    parser.add_argument('--model-bucket', default='ml-models',
-                        help='MinIO model bucket (default: ml-models)')
+    parser.add_argument('--model-bucket', default='cadqstream-checkpoints',
+                        help='MinIO model bucket (default: cadqstream-checkpoints)')
     parser.add_argument('--test-size', type=float, default=0.2,
                         help='Test set fraction (default: 0.2)')
     parser.add_argument('--no-upload', action='store_true',

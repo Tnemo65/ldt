@@ -1,0 +1,25 @@
+{
+  "version": "4.0-Lite",
+  "timestamp": "2026-05-12T11:34:35.831309",
+  "python": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "cpu_cores": 18,
+  "gpu_available": true,
+  "gpu_device": "NVIDIA GeForce RTX 3090 Ti",
+  "total_minutes": 58.5,
+  "n_seeds": 5,
+  "batch_algos": [
+    "sklearn_IF",
+    "sklearn_LOF",
+    "LOF-50",
+    "CA-DIF-EIA",
+    "METER-SCD",
+    "HBOS",
+    "LSTM-AE"
+  ],
+  "stream_algos": [
+    "sHST-River",
+    "MemStream",
+    "IForestASD",
+    "sHST-Mem-Ens"
+  ]
+}

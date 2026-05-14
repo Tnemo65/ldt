@@ -31,19 +31,15 @@ if [ "$EXISTING" -gt 0 ]; then
 import sys,json
 d=json.load(sys.stdin)
 for j in d.get('jobs',[]):
-    print(f\"  - {j['id'][:16]}... [{j['state']}]\")
-"
+    state = j.get('state', 'UNKNOWN')
+    print(f\"  - {j['id'][:16]}... [{state}]\")
+" || echo "[flink-init] WARNING: Could not parse jobs response"
     exit 0
 fi
 
-echo "[flink-init] Submitting Flink job via REST API..."
+echo "[flink-init] Setting up environment variables..."
 export PYTHONPATH="${PYTHON_PATH}"
 export KAFKA_BOOTSTRAP_SERVERS="kafka:9092"
-export PGBOUNCER_HOST="pgbouncer"
-export PGBOUNCER_PORT="5432"
-export POSTGRES_DB="dq_pipeline"
-export POSTGRES_USER="cadqstream"
-export POSTGRES_PASSWORD="cadqstream123"
 export MINIO_ENDPOINT="minio:9000"
 export MINIO_ACCESS_KEY="minioadmin"
 export MINIO_SECRET_KEY="minioadmin123"
@@ -51,29 +47,26 @@ export FLINK_ENV="production"
 
 cd /opt/flink/e2e
 
-RESPONSE=$(curl -s -X POST "${FLINK_REST}/jobs" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"programArgs\": \"\",
-    \"entryClass\": \"\",
-    \"savepointPath\": null,
-    \"allowNonRestoredState\": false
-  }")
+echo "[flink-init] Activating Python venv and verifying dependencies..."
+source /opt/venv/bin/activate
 
-JOB_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('id',''))" 2>/dev/null || echo "")
+# Verify critical dependencies are installed
+python -c "import mmh3; print('mmh3 OK')" 2>&1 || echo "WARNING: mmh3 not found"
+python -c "import kafka; print('kafka-python OK')" 2>&1 || echo "WARNING: kafka-python not found"
+python -c "import pandas; print('pandas OK')" 2>&1 || echo "WARNING: pandas not found"
+python -c "import river; print('river OK')" 2>&1 || echo "WARNING: river not found"
+python -c "import boto3; print('boto3 OK')" 2>&1 || echo "WARNING: boto3 not found"
+python -c "import minio; print('minio OK')" 2>&1 || echo "WARNING: minio not found"
 
-if [ -z "$JOB_ID" ]; then
-    echo "[flink-init] REST submission may have failed. Response: $RESPONSE"
-    echo "[flink-init] Trying flink run command..."
+echo "[flink-init] PYTHONPATH: $PYTHONPATH"
+echo "[flink-init] Python: $(which python)"
+echo "[flink-init] Submitting Flink job via flink CLI..."
 
-    flink run -d \
-        -py /opt/flink/e2e/src/flink_job_complete.py \
-        2>&1 || true
-
-    sleep 5
-else
-    echo "[flink-init] Job submitted with ID: ${JOB_ID}"
-fi
+# Submit with explicit -m flag to specify JobManager address
+# This fixes the "Connection refused: /0.0.0.0:8081" error
+flink run -m flink-jobmanager:8081 -d \
+    -py /opt/flink/e2e/src/flink_job_complete.py \
+    2>&1 || true
 
 echo "[flink-init] Monitoring for 90 seconds..."
 sleep 90
@@ -87,8 +80,9 @@ if [ "$NEW_JOBS" -gt 0 ]; then
 import sys,json
 d=json.load(sys.stdin)
 for j in d.get('jobs',[]):
-    print(f\"  - {j['id']} [{j['state']}]\")
-"
+    state = j.get('state', 'UNKNOWN')
+    print(f\"  - {j['id']} [{state}]\")
+" || echo "[flink-init] WARNING: Could not parse jobs response"
 else
     echo "[flink-init] WARNING: No jobs found after submission. Check Flink UI logs."
 fi

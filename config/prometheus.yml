@@ -13,11 +13,6 @@ scrape_configs:
     static_configs:
       - targets: ['node-exporter:9100']
 
-  # PostgreSQL Exporter - Database metrics
-  - job_name: 'postgres-exporter'
-    static_configs:
-      - targets: ['postgres-exporter:9187']
-
   # Kafka Exporter - Kafka metrics (consumer groups, topics, partitions)
   - job_name: 'kafka-exporter'
     static_configs:

@@ -34,7 +34,7 @@ echo.
 
 :: ─── Step 0b: Check Ports ────────────────────────────────────────
 echo [STEP 0b] Checking required ports...
-set PORTS=2181 9092 8081 8080 8082 5432 6432 3000 9090 9100 9187 9308 9000 9001 5000
+set PORTS=2181 9092 8081 8080 8082 3000 9090 9100 9308 9000 9001 5000
 for %%p in (%PORTS%) do (
     netstat -ano 2^>nul | findstr ":%%p " >nul 2>&1
     if errorlevel 1 (
@@ -52,19 +52,11 @@ if not exist "%DEPLOYMENT_DIR%\flink\flink-connector-kafka-1.17.1.jar" (
     echo [ERROR] flink-connector-kafka-1.17.1.jar NOT FOUND
     exit /b 1
 )
-if not exist "%DEPLOYMENT_DIR%\flink\flink-connector-jdbc-3.1.1-1.17.jar" (
-    echo [ERROR] flink-connector-jdbc-3.1.1-1.17.jar NOT FOUND
-    exit /b 1
-)
 if not exist "%DEPLOYMENT_DIR%\flink\kafka-clients-3.5.1.jar" (
     echo [ERROR] kafka-clients-3.5.1.jar NOT FOUND
     exit /b 1
 )
-if not exist "%DEPLOYMENT_DIR%\flink\postgresql-42.6.0.jar" (
-    echo [ERROR] postgresql-42.6.0.jar NOT FOUND
-    exit /b 1
-)
-echo [OK] All JAR files found.
+echo [OK] All required JAR files found.
 
 echo Building image...
 docker build -t ldt-flink:1.17.1-py "%DEPLOYMENT_DIR%" -f "%DEPLOYMENT_DIR%\flink\Dockerfile"
@@ -80,9 +72,9 @@ echo [STEP 2] Starting infrastructure services...
 docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d zookeeper kafka schema-registry
 echo.
 
-:: ─── Step 3: Start Database and Storage ───────────────────────────
-echo [STEP 3] Starting database and storage services...
-docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d postgres pgbouncer minio mlflow
+:: ─── Step 3: Start Storage ────────────────────────────────────────
+echo [STEP 3] Starting storage services (MinIO + MLflow)...
+docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d minio mlflow
 echo.
 
 :: ─── Step 4: Wait for Services ──────────────────────────────────
@@ -98,17 +90,6 @@ if errorlevel 1 (
     docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>nul
 )
 echo [OK] Kafka ready or checked.
-
-:: PostgreSQL: wait 15s then check
-echo Waiting 15s for PostgreSQL to initialize...
-timeout /t 15 /nobreak >nul
-docker exec ldt-postgres pg_isready -U cadqstream -d dq_pipeline 2>nul
-if errorlevel 1 (
-    echo [WARNING] PostgreSQL not ready yet, waiting 15s more...
-    timeout /t 15 /nobreak >nul
-    docker exec ldt-postgres pg_isready -U cadqstream -d dq_pipeline 2>nul
-)
-echo [OK] PostgreSQL ready or checked.
 
 :: MinIO: wait 15s then check
 echo Waiting 15s for MinIO to initialize...
@@ -159,7 +140,7 @@ echo.
 
 :: ─── Step 8: Start Monitoring ────────────────────────────────────
 echo [STEP 8] Starting monitoring stack...
-docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d prometheus grafana kafka-exporter postgres-exporter node-exporter
+docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d prometheus grafana kafka-exporter node-exporter
 timeout /t 20 /nobreak >nul
 
 :: ─── Final Status ────────────────────────────────────────────────
@@ -180,8 +161,8 @@ echo.
 echo   Kafka Topics:
 docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>nul
 echo.
-echo   PostgreSQL Tables (cadqstream schema):
-docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "\dt cadqstream." 2>nul
+echo   MinIO Buckets:
+docker exec ldt-minio mc ls local/ 2>nul
 echo.
 echo   Running Containers:
 docker ps --filter "name=ldt-" --format "  %%name %%status"
@@ -191,3 +172,4 @@ echo   To start data producer:  deployment\scripts\start-producer.bat
 echo   To check health:         deployment\scripts\check-health.bat
 echo   To stop stack:           deployment\scripts\stop.bat
 echo.
+

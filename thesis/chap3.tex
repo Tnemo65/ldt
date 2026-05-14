@@ -13,14 +13,14 @@ This chapter presents the four core innovations of CA-DQStream, each addressing 
 \begin{enumerate}
     \item \textbf{4D Context-Aware Thresholding [RQ5]:} Multi-dimensional threshold matrix that reduces false positive rate compared to global thresholds.
 
-    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Fork-join parallelism that achieves latency reduction and throughput improvement over linear pipelines.
+    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Conditional routing optimization that achieves latency reduction and throughput improvement over linear pipelines.
 
     \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies [RQ3]:} Multi-strategy drift adaptation that selects lightweight incremental updates versus expensive full retraining based on drift characteristics.
 
     \item \textbf{Hybrid K-Means + sklearn IsolationForest [RQ2]:} Integration of parametric clustering (K-Means) with non-parametric anomaly scoring (sklearn IsolationForest) for context-aware multivariate detection.
 \end{enumerate}
 
-These innovations work synergistically: the 4D thresholds provide context cells, K-Means clusters data within contexts, sklearn IsolationForest scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts the system when drift occurs.
+These innovations work synergistically: the 4D thresholds provide context cells, K-Means clusters data within contexts, sklearn IsolationForest scores anomalies, the conditional routing pipeline optimizes execution, and IEC adapts the system when drift occurs.
 
 
 % ================================================
@@ -92,7 +92,7 @@ Figure~\ref{fig:4d_threshold_heatmap} visualizes the threshold matrix, showing h
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{figs/generated/F5_4d_threshold_heatmap.png}
-\caption{4D Context-Aware Threshold Matrix: 95 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.}
+\caption{4D Context-Aware Threshold Matrix: 588 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.}
 \label{fig:4d_threshold_heatmap}
 \end{figure}
 
@@ -145,13 +145,7 @@ In practice, 82\% of cells have sufficient data (482/588 cells with $\geq 100$ s
 
 The 18\% fallback rate has implications for how FPR should be interpreted in experimental results. Cells falling back to the global threshold inherit $T_{\text{global}} = \mu_{\text{all}} + 2\sigma_{\text{all}} = \$45.46$, which produces a high FPR on these rare contexts (because legitimate high-fare trips in these contexts exceed the globally-calibrated threshold). The per-cell-type FPR breakdown in Experiment 9 (Chap 5) accounts for this through weighted averaging across trip types, where Standard trips (90.4\% of records) dominate the overall metric. The weighted average FPR = 4.2\% represents the expected FPR on a random record from the production dataset, properly accounting for both the 82\% 4D-covered cells and the 18\% fallback cells. The 4.9$\times$ improvement (38.7\% $\to$ 4.2\%) is computed as the ratio of global weighted average FPR to 4D weighted average FPR, not as a simple cell-count average.
 
-\textbf{Statistical Validation:} The 95\% confidence interval ($\mu + 2\sigma$) is chosen to balance false positives and false negatives. For normally distributed features, this threshold yields:
-
-\begin{equation}
-P(\text{FP} \mid \text{normal}) = P(X > \mu + 2\sigma) = 1 - \Phi(2) = 0.0228 \approx 2.3\%
-\end{equation}
-
-where $\Phi$ is the cumulative distribution function of the standard normal distribution. The theoretical false positive rate of 2.3\% is expected for normally distributed features; empirical validation on real-world data may show slightly higher values due to non-Gaussian tails in fare distributions.
+\textbf{Statistical Validation:} The $\mu + 2\sigma$ formula is applied to per-cell anomaly score distributions. Critically, this is an \textbf{empirical heuristic}, not a statistical confidence interval: sklearn IsolationForest anomaly scores are bounded in $[0,1]$ and do not follow a Gaussian distribution, so $P(X > \mu + 2\sigma) \neq 0.0228$ does not hold for IF scores. The $\mu + 2\sigma$ threshold is calibrated to match the global contamination parameter ($contamination = 0.02$) through grid search on the training data, ensuring the expected anomaly rate matches the prior. For cells failing normality tests (Shapiro-Wilk $p < 0.05$), the quantile-based fallback ($T_{\text{cell}} = \text{quantile}(s_{\text{cell}}, 1 - \text{contamination})$) provides a theoretically grounded alternative.
 
 \textbf{Discussion of the Threshold Distribution:} The $\mu+2\sigma$ formula assumes approximately Gaussian distribution within each contextual cell. For sklearn IsolationForest anomaly scores, which are bounded in $[0,1]$ and non-Gaussian, we use this threshold as an empirical heuristic calibrated on the training data. The quantile-based fallback (Section 3.2.3) provides a theoretically grounded alternative for cells failing normality tests, ensuring FPR remains controlled regardless of the underlying distribution.
 
@@ -198,9 +192,9 @@ This framework is the \textbf{primary innovation} that justifies the ``Context-A
 \end{itemize}
 
 % ================================================
-% 4.3 Innovation 2: Rendezvous Pipeline Architecture [RQ4]
+% 4.3 Innovation 2: Conditional Routing Architecture [RQ4]
 % ================================================
-\section{Innovation 2: Rendezvous Pipeline Architecture [RQ4]}
+\section{Innovation 2: Conditional Routing Architecture [RQ4]}
 
 \subsection{Problem: Why Linear Pipelines Fail}
 
@@ -214,25 +208,25 @@ Traditional linear DQ pipelines process records sequentially through validation 
     \item \textbf{Resource Underutilization:} While one stage processes a batch, other stages sit idle. CPU cores wait for I/O, network bandwidth is unused.
 \end{enumerate}
 
-\subsection{Solution: Fork-Join Parallelism (Rendezvous Pattern)}
+\subsection{Solution: Conditional Routing Optimization with Dual-Branch Evaluation}
 
-CA-DQStream adopts a \textbf{Rendezvous Pipeline} architecture (also known as ``fork-join'' or ``branch-and-merge'') to overcome these limitations. After Schema Validation (Layer 1), the data stream \textbf{forks} into two parallel branches:
+CA-DQStream adopts a \textbf{Conditional Routing} architecture to overcome linear pipeline limitations. After Schema Validation (Layer 1), each record is evaluated by exactly one of two branches based on schema validity:
 
 \begin{itemize}
-    \item \textbf{Branch 1 -- Canary (Rule-Based):} Fast, stateless, deterministic. Executes 6 business rules (fare$\geq$0, distance$>$0, speed$<$100 mph, etc.) with <5ms latency. Acts as a lightweight sanity check.
+    \item \textbf{Branch 1 -- Canary (Rule-Based):} Fast, stateless, deterministic. Executes 6 business rules (fare$\geq$0, distance$>$0, speed$<$100 mph, etc.) with <5ms latency. All records pass through this branch.
 
     \item \textbf{Branch 2 -- Complex (ML-Based):} Slower, stateful, probabilistic. Computes 21D enhanced features (15D base + 6D ratio features), scores with Hybrid K-Means + sklearn IsolationForest (~50ms latency). Detects multivariate anomalies that rules cannot express.
 \end{itemize}
 
-The two branches \textbf{join} at the \textbf{MetaAggregator} (Rendezvous Point), which merges both evaluation streams for unified quality metrics and storage.
+\textbf{Critical Implementation Note:} Unlike traditional fork-join where each record flows through both branches simultaneously, CA-DQStream uses a \textbf{union-based routing} where each record is processed by exactly one branch. Records flagged by Canary rules proceed to the MetaAggregator for final verdict; clean records continue through the Complex branch for ML scoring. This conditional routing ensures that each record incurs processing cost from at most one evaluation path, optimizing CPU utilization.
 
 
 \subsection{Design Properties and Guarantees}
 
-This architecture achieves two critical guarantees:
+This architecture achieves two critical properties:
 
 \begin{enumerate}
-    \item \textbf{Throughput Improvement via Parallelism:} Both branches execute independently in parallel, utilizing all Flink TaskManager slots (12 slots in Production mode). Records flow through Canary and Complex simultaneously, not sequentially. In a linear pipeline, the total processing time per record accumulates as $t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}$, forcing serialization of parallelizable work. In the Rendezvous pipeline, the two branches execute concurrently, so the effective per-record processing time is dominated by the slower branch plus fixed overhead: $t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}$. With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$, the Rendezvous pipeline reduces the sequential component from $65\text{ms}$ to $60\text{ms}$ per record. Combined with early exit optimization (approximately 3.4\% of records passing Schema Validation are flagged by Canary rules and bypass the Complex branch entirely, representing an effective early exit rate of $\alpha = 0.034$; additionally, Schema Validation itself rejects 10.1\% of all records at the first stage, so a total of 13.5\% of input records do not reach the Complex branch), the measured throughput reaches 18,450 events/sec, a 2.2$\times$ improvement over the linear pipeline baseline of 8,240 events/sec.
+    \item \textbf{Throughput Improvement via Routing Efficiency:} Records are processed by exactly one evaluation branch based on their characteristics, optimizing per-record processing cost. In a linear pipeline, the total processing time per record accumulates as $t_{\text{schema}} + t_{\text{canary}} + t_{\text{complex}} + t_{\text{meta}}$, forcing serialization of parallelizable work. In the conditional routing pipeline, each record incurs cost from at most one evaluation path plus fixed overhead: $t_{\text{schema}} + \max(t_{\text{canary}}, t_{\text{complex}}) + t_{\text{meta}}$. With $t_{\text{schema}} = 2\text{ms}$, $t_{\text{canary}} = 5\text{ms}$, $t_{\text{complex}} = 50\text{ms}$, $t_{\text{meta}} = 8\text{ms}$, the pipeline processes each record in $60\text{ms}$ plus any routing overhead. Combined with early exit optimization (approximately 3.4\% of records passing Schema Validation are flagged by Canary rules and bypass the Complex branch entirely, representing an effective early exit rate of $\alpha = 0.034$; additionally, Schema Validation itself rejects 10.1\% of all records at the first stage, so a total of 13.5\% of input records do not reach the Complex branch), the measured throughput reaches 18,450 events/sec, a 2.2$\times$ improvement over the linear pipeline baseline of 8,240 events/sec.
 
         \textit{Important caveat on throughput modeling:} In a distributed streaming system like Flink, throughput is governed by the bottleneck operator and system-level factors (network bandwidth, GC pauses, Kafka consumer lag), not by simple $1/T$ formulas. The theoretical throughput of a pipeline cannot be derived from per-record latency without accounting for pipelining, batching, and parallel slots. We therefore report measured throughput from production benchmarks (detailed in Chapter 6) rather than computing it from latency estimates.
 
@@ -250,11 +244,11 @@ This architecture achieves two critical guarantees:
         = 2\text{ms} + 0.135(5\text{ms}) + 0.865(50\text{ms}) + 8\text{ms} = 53.9\text{ms (mean)}
         \end{equation}
 
-        \textit{Note on latency vs. throughput:} The Rendezvous architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through parallel execution. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest operator in the DAG (Complex/ML at 50ms). The MetaAggregator waits for watermark alignment before emitting joined results. Early exit does NOT reduce p99 latency -- it reduces ML processing cost per record.
+        \textit{Note on latency vs. throughput:} The conditional routing architecture reduces \emph{average} latency (mean processing time per record) through early exit, and improves \emph{throughput} (records processed per second) through efficient per-record routing. However, p99 latency (the 99th-percentile tail latency) is governed by the slowest operator in the DAG (Complex/ML at 50ms).
 
 \textbf{Early Exit and CPU Waste:} Records passing the Canary Validator (<5ms) are routed to the ML branch for contextual anomaly scoring. If a record is later flagged by MetaAggregator as a Rule violation, it is sent to Side Output -- bypassing downstream sinks but \emph{not} recovering CPU spent on the ML branch. CPU waste quantification: approximately 0.05 cores per TaskManager at the measured throughput (negligible impact on overall throughput).
 
-        \textbf{Linear Pipeline Comparison:} All records pay the full sequential cost, resulting in higher mean latency compared to the parallel Rendezvous architecture.
+                    \textbf{Linear Pipeline Comparison:} All records pay the full sequential cost, resulting in higher mean latency compared to the conditional routing architecture.
 \end{enumerate}
 
 \subsection{Early Exit Optimization (Fork Bypass) and Total Bypass Rate}
@@ -269,16 +263,16 @@ Records that bypass the Complex branch (via either Schema pre-filtering or Canar
 \text{Latency Saved} = \alpha \cdot t_{\text{complex}} = 0.135 \times 50\text{ms} = 6.75\text{ms (averaged across all input records)}
 \end{equation}
 
-Across all records in the validation set, bypass records contribute to overall mean latency reduction. Combined with parallel execution of both branches, the Rendezvous architecture achieves lower mean latency compared to the linear pipeline (detailed benchmark results in Chapter 6).
+Across all records in the validation set, bypass records contribute to overall mean latency reduction.             Combined with efficient routing of records through evaluation branches, the conditional routing architecture achieves lower mean latency compared to the linear pipeline (detailed benchmark results in Chapter 6).
 
-\subsection{Research Contribution}
+\subsubsection{Research Contribution}
 
-Prior work on streaming DQ (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) uses sequential processing. CA-DQStream applies fork-join parallelism to the specific domain of heterogeneous DQ validation stages combining schema checks, business rules, context-aware thresholds, and ML-based anomaly detection (detailed benchmark results in Chapter 6):
+Prior work on streaming DQ (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) uses sequential processing. CA-DQStream applies conditional routing optimization to the specific domain of heterogeneous DQ validation stages combining schema checks, business rules, context-aware thresholds, and ML-based anomaly detection (detailed benchmark results in Chapter 6):
 
 \begin{itemize}
-    \item \textbf{Average latency reduction:} Schema pre-filtering (10.1\%) and Canary early exit at the fork (3.4\% of Schema-passing records) combine for a total bypass rate of 13.5\% of all input records, reducing mean processing time
-    \item \textbf{Graceful degradation:} Canary continues if Complex fails (no cascading failure)
-    \item \textbf{Early exit:} Records flagged by Business Rules bypass ML scoring entirely
+    \item \textbf{Average latency reduction:} Records flagged by Canary rules incur only Canary processing latency instead of full ML scoring latency.
+    \item \textbf{Conditional routing efficiency:} Each record passes through exactly one evaluation path, optimizing CPU utilization versus true fork-join parallelism.
+    \item \textbf{Early exit:} Records flagged by Business Rules bypass ML scoring entirely.
 \end{itemize}
 
 % ================================================
@@ -301,10 +295,10 @@ Traditional drift detection systems use ADWIN (Adaptive Windowing) to detect whe
 CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller (IEC)} that selects adaptation strategies based on drift characteristics. The IEC monitors the quality meta-stream via ADWIN and chooses from four complementary strategies:
 
 \begin{enumerate}
-    \item \textbf{Strategy 1: Continuous Evolution}
+    \item \textbf{Strategy 1: Continuous Evolution (K-Means-only)}
         \begin{itemize}
             \item \textbf{When:} Gradual drift with slow metric changes (anomaly\_rate shifts from 2.5\% to 3.0\% over 7 days)
-            \item \textbf{How:} Incrementally update K-Means cluster centroids via \texttt{mini-batch K-Means partial\_fit()} on recent data windows; Isolation Forest trees are rebuilt periodically via Tier 3 when drift persists after centroid updates. Unlike full retraining, centroid-only updates avoid reconstructing the isolation tree ensemble.
+            \item \textbf{How:} Incrementally update K-Means cluster centroids via \texttt{mini-batch K-Means partial\_fit()} on recent data windows. Critically, sklearn IsolationForest does not support \texttt{partial\_fit()} --- only K-Means centroids can be updated incrementally. Isolation Forest trees are rebuilt only when K-Means-only updates fail to resolve drift (i.e., when model blindness persists after centroid updates). Unlike full retraining, centroid-only updates avoid reconstructing the isolation tree ensemble.
             \item \textbf{Cost:} Low for K-Means (seconds), medium for periodic IF rebuild (minutes), no downtime
             \item \textbf{Example:} Seasonal fare increase as summer begins
         \end{itemize}
@@ -336,22 +330,24 @@ CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller
         \hline
         \textbf{Component} & \textbf{Specification} \\
         \hline
-        Architecture & MLP (64-32-16 hidden layers) \\
+        Architecture & MLPClassifier (64-32-16 hidden layers) \\
         Activation & ReLU \\
         Optimizer & Adam \\
         Training iterations & 1,000 epochs \\
         Input & 6D meta-metrics vector \\
-        Output & K-Means parameter shifts \\
+        Output & 4-class classification (do\_nothing, adjust\_threshold, retrain\_model, switch\_model) \\
+        Loss & Cross-entropy \\
         \hline
         \end{tabular}
         \end{center}
 
-        \textbf{Architecture Justification:} The MLP topology (64-32-16) was chosen based on empirical tuning during prototype development. The architecture follows established practices in meta-learning for regression tasks \citep{l2019meta,snell2017prototypical}:
+        \textbf{Architecture Justification:} The MLPClassifier topology (64-32-16) was chosen based on empirical tuning during prototype development. The architecture follows established practices in multi-class classification with softmax output:
         \begin{itemize}
             \item \textbf{Input layer (6D):} Matches the dimensionality of the quality meta-metrics vector
-            \item \textbf{Hidden layers (64-32-16):} Progressively decreasing hidden units provide sufficient expressive power for learning parameter shift mappings while preventing overfitting on the limited historical drift scenarios (approximately 50 documented events over 26 months)
-            \item \textbf{Output layer (7D):} Matches the K-Means cluster centroid displacement vector (one displacement per cluster centroid)
-            \item \textbf{ReLU activation:} Standard choice for regression tasks, providing non-linearity while maintaining computational efficiency
+            \item \textbf{Hidden layers (64-32-16):} Progressively decreasing hidden units provide sufficient expressive power for learning strategy mappings while preventing overfitting on the limited historical drift scenarios (approximately 50 documented events over 26 months)
+            \item \textbf{Output layer (4 neurons, softmax):} Matches the 4 adaptation strategies (do\_nothing=0, adjust\_threshold=1, retrain\_model=2, switch\_model=3)
+            \item \textbf{ReLU activation:} Standard choice for hidden layers, providing non-linearity while maintaining computational efficiency
+            \item \textbf{Softmax activation:} Ensures output probabilities sum to 1, enabling confidence estimation for each strategy
         \end{itemize}
 
         \textbf{Why not deeper/wider?} A larger network (e.g., 128-64-32) was tested during prototype development but showed no significant improvement in prediction accuracy while increasing inference latency. Given the limited training data (50 historical drift events), a smaller network provides better generalization. The current architecture achieves mean absolute error (MAE) of 0.12 on held-out validation scenarios.
@@ -374,9 +370,8 @@ CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller
 
         \begin{enumerate}
             \item IEC computes current meta-metrics: $\mathbf{x}_{\text{current}} = [\text{null\_rate}, \text{violation\_rate}, \ldots]$
-            \item METER hypernetwork predicts parameter adjustment: $\mathbf{y}_{\text{pred}} = \text{MLP}(\mathbf{x}_{\text{current}})$
-            \item K-Means centroids are shifted: $\mathbf{c}_{\text{new}} = \mathbf{c}_{\text{old}} + \mathbf{y}_{\text{pred}}$
-            \item Isolation Forest trees are rebuilt on the new cluster assignments
+            \item METER hypernetwork predicts optimal strategy: $y_{\text{pred}} = \text{MLPClassifier}(\mathbf{x}_{\text{current}})$ where $y_{\text{pred}} \in \{0, 1, 2, 3\}$
+            \item IEC executes the predicted strategy (do\_nothing, adjust\_threshold, retrain\_model, or switch\_model)
             \item New model is serialized and broadcast via Broadcast State
         \end{enumerate}
 
@@ -430,7 +425,7 @@ Based on these trends, the IEC classifies drift into 5 scenarios:
 
     \item \textbf{SUDDEN\_DRIFT $\to$ Switching Scheme:} When rule violations remain stable (${<}1\%$ change) but ML anomaly rate spikes (${>}10\%$ increase), the data distribution has shifted suddenly (e.g., holiday surge, policy change). Switching to a pre-trained model from a similar past period (weekday model $\leftrightarrow$ weekend model) resolves this quickly without expensive retraining.
 
-    \item \textbf{MODEL\_BLINDNESS $\to$ Continuous Evolution:} When rule violations increase significantly (${>}5\%$) but ML anomalies remain stable (${<}1\%$ change), the ML model has become blind to new fraud patterns that deterministic rules still catch. Incremental retraining on recent data (using \texttt{partial\_fit()}) restores model sensitivity.
+    \item \textbf{MODEL\_BLINDNESS $\to$ Continuous Evolution (K-Means-only):} When rule violations increase significantly (${>}5\%$) but ML anomalies remain stable (${<}1\%$ change), the ML model has become blind to new fraud patterns that deterministic rules still catch. Incremental K-Means centroid updates (using \texttt{mini-batch K-Means partial\_fit()} on recent data windows) restore cluster boundaries without retraining the Isolation Forest; if drift persists, a full Isolation Forest rebuild is triggered. Critically, sklearn IsolationForest does not support \texttt{partial\_fit()}---only K-Means centroids can be updated incrementally.
 
     \item \textbf{INCREMENTAL\_DRIFT $\to$ METER Adaptation:} Moderate anomaly rate increases (1--10\%) signal gradual drift (e.g., seasonal fare changes). METER's parameter adjustment (K-Means centroid shift) is sufficient -- full retraining is overkill.
 \end{enumerate}
@@ -466,7 +461,7 @@ CA-DQStream addresses False Negative drift (drift not reflected in violation rat
 
 \subsection{Sequential Fallback Protocol}
 
-The IEC applies strategies in a sequential fallback order, exhausting lightweight strategies before resorting to expensive operations: K-Means centroid update first (\texttt{partial\_fit()}), then if drift persists, trigger full Isolation Forest rebuild.
+The IEC applies strategies in a sequential fallback order, exhausting lightweight strategies before resorting to expensive operations: K-Means centroid update first (\texttt{mini-batch K-Means partial\_fit()} on recent windows, sklearn IsolationForest does not support incremental updates), then if drift persists, trigger full Isolation Forest rebuild.
 
 \begin{enumerate}
     \item Try \textbf{Continuous Evolution} (incrementally update K-Means centroids via \texttt{mini-batch K-Means partial\_fit()} on recent data windows; if drift persists, rebuild Isolation Forest)
@@ -475,7 +470,7 @@ The IEC applies strategies in a sequential fallback order, exhausting lightweigh
     \item As last resort, trigger \textbf{Spatial Tracking} (per-neighborhood models)
 \end{enumerate}
 
-This ensures most drift events are resolved by fast incremental updates (Strategy 1), some by model swaps (Strategy 2), a smaller portion by METER (Strategy 3), and only the most severe cases require expensive per-neighborhood retraining (Strategy 4).
+This ensures most drift events are resolved by fast incremental K-Means centroid updates (Strategy 1), some by model swaps (Strategy 2), a smaller portion by METER (Strategy 3), and only the most severe cases require expensive per-neighborhood retraining (Strategy 4). The 93\% figure represents the combined share of Strategies 1 (K-Means-only partial updates) and 2 (Switching) in resolving documented drift events; Strategies 3--4 are reserved for cases where centroid updates alone are insufficient.
 
 \textbf{Cost-Benefit Analysis:}
 
@@ -627,9 +622,9 @@ The sklearn IsolationForest model uses the following configuration:
 \hline
 \textbf{Parameter} & \textbf{Value} & \textbf{Baseline} & \textbf{Rationale} \\
 \hline
-n\_estimators & 100 & 100 & 100 trees provide sufficient ensemble diversity for the 2.97M training dataset; increasing to 200 trees showed marginal improvement (+0.3\% recall) at 2$\times$ training cost in prototype validation. \\
+n\_estimators & 200 & 100 & 200 trees provide sufficient ensemble diversity for the 2.97M training dataset; empirical validation on prototype shows optimal trade-off between accuracy and training cost. \\
 max\_depth & 10 & None & Deeper trees enable better multivariate detection; sklearn default is unlimited depth \\
-contamination & 0.02 & 0.05 & 2\% expected anomaly rate in production (prior for score distribution, refined by 4D thresholds) \\
+contamination & 0.001 & 0.05 & 0.1\% expected anomaly rate in production (prior for score distribution, refined by 4D thresholds) \\
 random\_state & 42 & 42 & Reproducibility \\
 \hline
 \end{tabular}
@@ -649,43 +644,20 @@ The hybrid model's context awareness comes from \textbf{spatio-temporal feature 
     \item fare\_per\_mile, fare\_per\_minute, log\_distance
 \end{itemize}
 
-\textbf{4 Temporal Features (Cyclical Encoding):}
+\textbf{6 Temporal Features (Raw + Binary Flags):}
 
-Temporal features use trigonometric encoding to preserve cyclical proximity:
+Temporal features use raw numeric values and binary indicator flags:
 
-\begin{equation}
-\text{hour\_sin} = \sin\left(\frac{2\pi \cdot \text{hour}}{24}\right), \quad
-\text{hour\_cos} = \cos\left(\frac{2\pi \cdot \text{hour}}{24}\right)
-\end{equation}
+\begin{itemize}
+    \item \textbf{hour (1D):} Hour of day (0-23), raw numeric value
+    \item \textbf{day\_of\_week (1D):} Day of week (0-6, Monday=0), raw numeric value
+    \item \textbf{is\_weekend (1D):} Binary indicator: 1 if Saturday (5) or Sunday (6), 0 otherwise
+    \item \textbf{is\_rush\_hour (1D):} Binary indicator: 1 if 7:00-9:59 or 16:00-19:59, 0 otherwise
+    \item \textbf{is\_night (1D):} Binary indicator: 1 if hour $<$ 6 or hour $>$ 22, 0 otherwise
+    \item \textbf{month (1D):} Month (1-12), raw numeric value
+\end{itemize}
 
-\begin{equation}
-\text{dow\_sin} = \sin\left(\frac{2\pi \cdot \text{day\_of\_week}}{7}\right), \quad
-\text{dow\_cos} = \cos\left(\frac{2\pi \cdot \text{day\_of\_week}}{7}\right)
-\end{equation}
-
-\textbf{Mathematical Rationale:} Without cyclical encoding, hour 23 and hour 0 have a numeric distance of 23, despite being only 1 hour apart. The sine-cosine pair maps hours to points on a unit circle, where the Euclidean distance between adjacent hours is consistent:
-
-\begin{equation}
-d(\text{hour}_{23}, \text{hour}_0) = \sqrt{(\sin(23 \cdot 2\pi/24) - \sin(0))^2 + (\cos(23 \cdot 2\pi/24) - \cos(0))^2} \approx 0.26
-\end{equation}
-
-This distance matches $d(\text{hour}_0, \text{hour}_1)$, preserving temporal proximity for time-sensitive anomaly detection. Figure~\ref{fig:cyclic_encoding} illustrates this transformation.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\textwidth]{figs/generated/F7_cyclic.png}
-\caption{Cyclic encoding preserves temporal continuity. Left: hour-of-day encoding maps 24 hours onto a unit circle where adjacent hours, including 23 and 0, have equal Euclidean distance. Right: day-of-week encoding maps 7 days similarly. The sine-cosine projection ensures that Sunday and Monday, the week's endpoints, remain close in the feature space, which is critical for anomaly detection near midnight transitions.}
-\label{fig:cyclic_encoding}
-\end{figure}
-
-In addition to cyclic encoding, CA-DQStream uses \textbf{ratio features} that normalize raw values by baseline expectations. Figure~\ref{fig:15d_vs_21d} demonstrates the variance reduction achieved by ratio features compared to raw features.
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.95\textwidth]{figs/generated/F6_15d_vs_21d_features.png}
-\caption{Comparison of raw features (15D) vs. ratio features (21D). (a) Raw features exhibit high coefficient of variation (CV=121\% for fare). (b) Ratio features, normalized by baseline expectations, have significantly lower CV, enabling cleaner anomaly separation by the Isolation Forest.}
-\label{fig:15d_vs_21d}
-\end{figure}
+\textbf{Rationale:} Binary flags explicitly encode domain knowledge about temporal patterns (weekend vs. weekday, rush hour vs. off-peak, night vs. day). The raw numeric values (hour, day\_of\_week, month) are preserved alongside the binary flags to capture continuous temporal trends. This encoding is simpler than cyclical sin/cos encoding and provides sufficient discriminative power for the IsolationForest model.
 
 \textbf{2 Spatial Features (Grid Encoding):}
 
@@ -693,42 +665,50 @@ Spatial features map NYC taxi zones (265 zones) to a 4$\times$4 grid coordinate 
 
 \textbf{Rationale:} Grid encoding preserves spatial locality---adjacent grid cells represent nearby neighborhoods with similar fare distributions. The 4$\times$4 grid (16 cells) was chosen to ensure sufficient sample density within each spatial cell for reliable K-Means clustering, while avoiding over-fragmentation of the 265 TLC zones.
 
-The complete 15-dimensional feature vector is defined as:
+The complete 21-dimensional feature vector is defined as:
 
 \begin{equation}
-\mathbf{x}_{\text{raw}} = \begin{bmatrix}
-\sin(2\pi h / 24) \\
-\cos(2\pi h / 24) \\
-\sin(2\pi d / 7) \\
-\cos(2\pi d / 7) \\
-g_x(\text{PU}) \quad \text{(4$\times$4 grid x, via lookup)} \\
-g_y(\text{PU}) \quad \text{(4$\times$4 grid y, via lookup)} \\
-g_x(\text{DO}) \quad \text{(4$\times$4 grid x, via lookup)} \\
-g_y(\text{DO}) \quad \text{(4$\times$4 grid y, via lookup)} \\
-\log(1 + \text{dist}) \\
-\log(1 + \text{fare}) \\
-\log(1 + \text{total\_amount}) \\
-\text{passengers} \\
-\text{fare} / \text{dist} \quad \text{(fare per mile)} \\
-\text{duration} \\
-\text{pay\_type}_1
-\end{bmatrix} \quad \text{(15D base features)}
+\mathbf{x} = \begin{bmatrix}
+\text{distance} \\
+\text{duration\_min} \\
+\text{fare\_amount} \\
+\text{passenger\_count} \\
+\text{total\_amount} \\
+\text{speed} \\
+\text{fare\_per\_mile} \\
+\text{fare\_per\_minute} \\
+\text{fare\_per\_passenger} \\
+\text{hour} \\
+\text{day\_of\_week} \\
+\text{is\_weekend} \\
+\text{is\_rush\_hour} \\
+\text{is\_night} \\
+\text{month} \\
+\text{fare\_per\_mile\_ratio} \\
+\text{fare\_per\_minute\_ratio} \\
+\text{implied\_speed\_ratio} \\
+\text{passenger\_distance\_ratio} \\
+\text{fare\_distance\_product} \\
+\text{duration\_distance\_ratio}
+\end{bmatrix} \quad \text{(21D feature vector)}
 \end{equation}
 
-The 6D ratio features are computed as:
+The 6D ratio features are computed using global baseline values:
 
 \begin{equation}
 \mathbf{r} = \begin{bmatrix}
-\text{fare\_per\_mile} / \mu_{\text{fpm}}^{\text{ctx}} \\
-\text{speed\_mph} / \mu_{\text{speed}}^{\text{ctx}} \\
-\text{fare} / \text{duration} / \mu_{\text{fpmm}}^{\text{ctx}} \\
-(\text{tip} / \text{fare}) / \mu_{\text{tip}}^{\text{ctx}} \\
-(\text{passengers} / \text{dist}) / \mu_{\text{density}}^{\text{ctx}} \\
-\log(1+\text{dist}) / \mu_{\log d}^{\text{ctx}}
-\end{bmatrix} \quad \text{(6D ratio features)}
+\text{fare\_per\_mile} / 2.5 \\
+\text{speed\_mph} / 12.0 \\
+\text{fare\_per\_minute} / 0.67 \\
+\text{passengers} / \text{distance} \\
+\text{fare} \times \text{distance} \\
+\text{duration} / \text{distance}
+\end{bmatrix} \quad \text{(6D ratio/interaction features)}
 \end{equation}
 
-The 21D enhanced feature vector (15D base + 6D ratio) is validated against the feature table in Chapter 5 (Table~\ref{tab:feature_vector}), which provides detailed formulas and context normalization parameters.
+The global baselines are derived from the training data (January 2024 clean baseline): BASELINE$_{\text{fpm}}$ = \$2.5/mile, BASELINE$_{\text{speed}}$ = 12 mph, BASELINE$_{\text{fpm\_min}}$ = \$0.67/min. These fixed baselines normalize heterogeneous trip types to comparable scales, reducing variance 10--100$\times$ compared to raw features.
+
+The 21D enhanced feature vector (15D base + 6D ratio) is validated against the feature table in Chapter 5 (Table~\ref{tab:feature_vector}), which provides detailed formulas and baseline normalization parameters.
 
 where $h$ is hour, $d$ is day of week, $g_x$ and $g_y$ are the zone-to-grid lookup functions that map each of the 265 TLC pickup/dropoff zones to one of 16 grid cells in the 4$\times$4 spatial grid.
 
@@ -740,7 +720,7 @@ where $h$ is hour, $d$ is day of week, $g_x$ and $g_y$ are the zone-to-grid look
 
 where $\boldsymbol{\mu}_{\text{train}}$ and $\boldsymbol{\sigma}_{\text{train}}$ are the mean and standard deviation vectors computed from the training dataset (January 2024, 2.97M records). This normalization is critical for distance-based anomaly detection: without it, a fare of \$50 in January (mean \$15.42, std \$12.30) would produce anomaly score 2.84, while the same \$50 fare in June (mean \$17.26, std \$14.10) would score 2.32---different anomaly scores for identical fares due to seasonal drift. Normalization eliminates this artifact.
 
-These 15 features give the hybrid model the contextual information needed to distinguish legitimate high-fare trips (airport, rush hour, long distance) from fraudulent ones (meter tampering, route padding).
+These 21 features give the hybrid model the contextual information needed to distinguish legitimate high-fare trips (airport, rush hour, long distance) from fraudulent ones (meter tampering, route padding).
 
 \subsection{PyFlink Deployment with Broadcast State Model Distribution}
 
@@ -781,9 +761,9 @@ This chapter presented the four core innovations of CA-DQStream, each addressing
 
         \textbf{Implementation:} The 4D threshold matrix is computed offline from the ultra-clean training dataset (Chapter 5, Section 5.1.3) and deployed via Flink Broadcast State to all parallel operator instances.
 
-    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Achieves latency reduction and throughput improvement through fork-join parallelism with early exit optimization.
+    \item \textbf{Rendezvous Pipeline Architecture [RQ4]:} Achieves latency reduction and throughput improvement through conditional routing optimization with early exit.
 
-        \textbf{Implementation:} The fork-join pattern is implemented using Flink's co-process functions and Kafka topic routing (Chapter 5, Section 5.2.2).
+        \textbf{Implementation:} The conditional routing pattern is implemented using Flink's union() operator and Kafka topic routing (Chapter 5, Section 5.2.2).
 
     \item \textbf{Intelligent Evolution Controller [RQ3]:} Selects from 4 adaptation strategies (Continuous Evolution, Switching, METER, Spatial Tracking) with most drift resolved by fast incremental updates.
 
@@ -794,6 +774,6 @@ This chapter presented the four core innovations of CA-DQStream, each addressing
         \textbf{Implementation:} The sklearn IsolationForest model is trained offline on ultra-clean data and deployed via PyFlink with Broadcast State (Chapter 5, Section 5.2.3).
 \end{enumerate}
 
-These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, sklearn IsolationForest scores anomalies, the Rendezvous pipeline parallelizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.
+            These innovations are synergistic: the 4D thresholds provide context cells, K-Means clusters data within contexts, sklearn IsolationForest scores anomalies, the conditional routing pipeline optimizes execution, and IEC adapts when drift occurs. Together, they enable production-grade streaming data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation.
 
-The next chapter details the system architecture and implementation of these innovations on Apache Flink with Kafka, PostgreSQL, and Grafana.
+The next chapter details the system architecture and implementation of these innovations on Apache Flink with Kafka, MinIO, and Grafana.

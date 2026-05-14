@@ -2,6 +2,7 @@
 # =============================================================================
 # CA-DQStream - Health Check Script
 # Verifies all services are running and healthy
+# Storage: MinIO only
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,7 +49,7 @@ check_service() {
 
 echo ""
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════${NC}"
-echo -e "${BLUE}  CA-DQStream Health Check${NC}"
+echo -e "${BLUE}  CA-DQStream Health Check (MinIO-only storage)${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -60,16 +61,9 @@ check_service "ldt-schema-registry" "schema-registry:8081" "curl -sf http://loca
 check_service "ldt-kafka-ui" "kafka-ui:8080" "curl -sf http://localhost:8080"
 check_service "ldt-kafka-exporter" "kafka-exporter:9308" "curl -sf http://localhost:9308/metrics"
 
-# Database
+# Storage (MinIO only)
 echo ""
-echo -e "${BLUE}[Database]${NC}"
-check_service "ldt-postgres" "postgres:5432" "docker exec ldt-postgres pg_isready -U cadqstream -d dq_pipeline"
-check_service "ldt-pgbouncer" "pgbouncer:6432" ""
-check_service "ldt-postgres-exporter" "postgres-exporter:9187" "curl -sf http://localhost:9187/metrics"
-
-# Storage
-echo ""
-echo -e "${BLUE}[Storage]${NC}"
+echo -e "${BLUE}[Storage - MinIO Only]${NC}"
 check_service "ldt-minio" "minio:9000" "docker exec ldt-minio mc ready local"
 
 # Streaming
@@ -99,6 +93,15 @@ else
     echo -e "  ${YELLOW}(no topics found)${NC}"
 fi
 
+# MinIO buckets check
+echo ""
+echo -e "${BLUE}[MinIO Buckets]${NC}"
+if docker exec ldt-minio mc ls local/ 2>/dev/null | grep -q .; then
+    docker exec ldt-minio mc ls local/ 2>/dev/null | sed 's/^/  /'
+else
+    echo -e "  ${YELLOW}(could not list MinIO buckets)${NC}"
+fi
+
 # Flink jobs check
 echo ""
 echo -e "${BLUE}[Flink Jobs]${NC}"
@@ -106,15 +109,6 @@ if curl -sf http://localhost:8081/jobs 2>/dev/null | python3 -c "import sys,json
     :
 else
     echo -e "  ${YELLOW}(could not query Flink jobs)${NC}"
-fi
-
-# PostgreSQL tables check
-echo ""
-echo -e "${BLUE}[PostgreSQL Tables]${NC}"
-if docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c '\dt' 2>/dev/null | grep -q .; then
-    docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c '\dt' 2>/dev/null | grep "^ " | head -10 | sed 's/^/  /'
-else
-    echo -e "  ${YELLOW}(could not query PostgreSQL tables)${NC}"
 fi
 
 # Summary

@@ -155,7 +155,7 @@ def format_violation_record(record: dict) -> dict:
         record: Record with violations
 
     Returns:
-        Violation record dict for PostgreSQL sink
+        Violation record dict for MinIO sink
     """
     return {
         'trip_id': record.get('trip_id', 'UNKNOWN'),

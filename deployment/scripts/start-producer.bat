@@ -40,4 +40,4 @@ echo.
 echo Now the Flink pipeline should be consuming data.
 echo Check Grafana at http://localhost:3000 to see pipeline metrics.
 echo Check Flink UI at http://localhost:8081 to see job status.
-echo Check PostgreSQL data: docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) FROM taxi_trips_raw;"
+echo Check MinIO data: docker exec ldt-minio mc ls local/raw-zone/

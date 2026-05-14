@@ -85,7 +85,7 @@
 \contentsline {section}{\numberline {5.3}Infrastructure}{32}{section.5.3}%
 \contentsline {subsection}{\numberline {5.3.1}Apache Flink Runtime}{32}{subsection.5.3.1}%
 \contentsline {subsection}{\numberline {5.3.2}Apache Kafka Topics}{34}{subsection.5.3.2}%
-\contentsline {subsection}{\numberline {5.3.3}PostgreSQL Data Storage}{34}{subsection.5.3.3}%
+\contentsline {subsection}{\numberline {5.3.3}MinIO Data Storage}{34}{subsection.5.3.3}%
 \contentsline {subsection}{\numberline {5.3.4}Prometheus \& Grafana Monitoring}{35}{subsection.5.3.4}%
 \contentsline {subsection}{\numberline {5.3.5}Object Storage (MinIO) for Checkpointing}{35}{subsection.5.3.5}%
 \contentsline {subsection}{\numberline {5.3.6}Control Plane (FastAPI \& MLflow)}{36}{subsection.5.3.6}%
@@ -118,7 +118,7 @@
 \contentsline {section}{\numberline {6.8}Additional Validation Experiments [Exp 5, 11, 12, 13]}{53}{section.6.8}%
 \contentsline {subsection}{\numberline {6.8.1}Experiment 5: Business Rules Effectiveness}{53}{subsection.6.8.1}%
 \contentsline {subsection}{\numberline {6.8.2}Experiment 11: Fixed-Rule Baseline Comparison}{53}{subsection.6.8.2}%
-\contentsline {subsection}{\numberline {6.8.3}Experiment 12: PostgreSQL Write Performance}{53}{subsection.6.8.3}%
+\contentsline {subsection}{\numberline {6.8.3}Experiment 12: MinIO Write Performance}{53}{subsection.6.8.3}%
 \contentsline {subsection}{\numberline {6.8.4}Experiment 13: Grafana Dashboard Usability}{53}{subsection.6.8.4}%
 \contentsline {section}{\numberline {6.9}Chapter Summary}{54}{section.6.9}%
 \contentsline {chapter}{\numberline {7}EXPERIMENTS \& EVALUATION}{55}{chapter.7}%

@@ -1,0 +1,62 @@
+
+=== Batch ===
+Friedman: stat=87.714, p=0.0000
+  SIGNIFICANT -- proceeding to Holm-Bonferroni post-hoc.
+
+  Average ranks (lower = better):
+    2                        : 1.00
+    0                        : 2.00
+    1                        : 3.40
+    6                        : 3.60
+    4                        : 5.00
+    5                        : 6.13
+    3                        : 6.87
+
+  Pairwise comparisons (Wilcoxon, Holm-corrected):
+  Comparison                             p_raw   p_holm    alpha  sig
+  CA-DIF-EIA vs sklearn_IF              0.0000   0.0002   0.0100  YES
+  CA-DIF-EIA vs sklearn_OCSVM           0.0000   0.0001   0.0125  YES
+  CA-DIF-EIA vs IF-baseline             0.0000   0.0001   0.0167  YES
+  CA-DIF-EIA vs DenoisingAE             1.0000   1.0000   0.0250   no
+  CA-DIF-EIA vs AE+IF                   1.0000   1.0000   0.0500   no
+
+  Bootstrap 95% Confidence Intervals:
+    AE+IF                    : [0.9977, 0.9990]
+    CA-DIF-EIA               : [0.9117, 0.9376]
+    DenoisingAE              : [0.9992, 0.9998]
+    IF-baseline              : [0.7701, 0.8348]
+    Random                   : [0.0459, 0.0477]
+    sklearn_IF               : [0.7518, 0.8261]
+    sklearn_OCSVM            : [0.0239, 0.0240]
+
+=== Streaming_500 ===
+Friedman: stat=41.554, p=0.0000
+  SIGNIFICANT -- proceeding to Holm-Bonferroni post-hoc.
+
+  Average ranks (lower = better):
+    0                        : 1.00
+    1                        : 2.00
+    3                        : 3.33
+    2                        : 3.67
+
+  Pairwise comparisons (Wilcoxon, Holm-corrected):
+  Comparison                             p_raw   p_holm    alpha  sig
+
+  Bootstrap 95% Confidence Intervals:
+    (not computed)
+
+=== All_Streaming ===
+Friedman: stat=41.554, p=0.0000
+  SIGNIFICANT -- proceeding to Holm-Bonferroni post-hoc.
+
+  Average ranks (lower = better):
+    0                        : 1.00
+    1                        : 2.00
+    3                        : 3.33
+    2                        : 3.67
+
+  Pairwise comparisons (Wilcoxon, Holm-corrected):
+  Comparison                             p_raw   p_holm    alpha  sig
+
+  Bootstrap 95% Confidence Intervals:
+    (not computed)

@@ -105,32 +105,32 @@ def load_monthly_summaries():
 
 
 def fig1_monthly_volume(stats):
-    """Figure 1: Monthly Record Volume - bar chart."""
+    """Figure 1: Monthly Record Volume - line chart."""
     fig, ax = plt.subplots(figsize=(10, 5))
     x = np.arange(12)
     counts = stats['n'].values
     total = counts.sum()
 
-    colors = ['#3498db'] * 12
-    bars = ax.bar(x, counts / 1e6, color=colors, alpha=0.85, width=0.7,
-                  edgecolor='#2980b9', linewidth=0.6)
+    ax.plot(x, counts / 1e6, color='#3498db', linewidth=2.5, marker='o',
+            markersize=7, markerfacecolor='#ffffff', markeredgecolor='#3498db',
+            markeredgewidth=2, zorder=3)
 
-    for i, (bar, c) in enumerate(zip(bars, counts)):
-        ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.03,
-                '{:.0f}K'.format(c / 1e3), ha='center', va='bottom', fontsize=8.5,
-                fontweight='bold', color='#2c3e50')
-        pct = c / total * 100
-        ax.text(bar.get_x() + bar.get_width() / 2, 0.08,
-                '{:.1f}%'.format(pct), ha='center', va='bottom', fontsize=7.5,
-                color='#7f8c8d')
+    for xi, c in zip(x, counts):
+        ax.annotate('{:.0f}K'.format(c / 1e3),
+                   xy=(xi, c / 1e6), xytext=(0, 8),
+                   textcoords='offset points', ha='center', va='bottom',
+                   fontsize=8.5, fontweight='bold', color='#2c3e50')
 
     ax.set_xticks(x)
     ax.set_xticklabels(MONTHS)
-    ax.set_xlabel('Month')
-    ax.set_ylabel('Records (Million)')
+    ax.set_xlabel('Month', fontweight='bold')
+    ax.set_ylabel('Records (Million)', fontweight='bold')
     ax.set_title('Monthly Record Volume | NYC Yellow Taxi 2024\nTotal: {:,} records'.format(total),
                  fontweight='bold')
-    ax.set_ylim(0, max(counts / 1e6) * 1.15)
+    ax.set_ylim(0, max(counts / 1e6) * 1.20)
+    ax.set_xlim(-0.5, 11.5)
+    ax.yaxis.set_major_formatter(mticker.FormatStrFormatter('%.1fM'))
+    ax.fill_between(x, 0, counts / 1e6, alpha=0.08, color='#3498db')
 
     plt.tight_layout()
     out = OUTPUT_DIR / '1_Monthly_Record_Volume.png'

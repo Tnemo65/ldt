@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fast Kafka producer using synthetic NYC taxi data."""
+"""Continuous Kafka producer using synthetic NYC taxi data."""
 import json
 import time
 import sys
@@ -83,7 +83,7 @@ def gen_trip(hour):
     }
 
 if __name__ == "__main__":
-    total = int(sys.argv[1]) if len(sys.argv) > 1 else 100000
+    rate = int(sys.argv[1]) if len(sys.argv) > 1 else 100  # messages per second
     bootstrap = sys.argv[2] if len(sys.argv) > 2 else "kafka:9092"
     topic = sys.argv[3] if len(sys.argv) > 3 else "taxi-nyc-raw"
 
@@ -103,22 +103,34 @@ if __name__ == "__main__":
         LOGGER.error("Error connecting: %s", e)
         sys.exit(1)
 
-    LOGGER.info("Sending %d messages to topic '%s'...", total, topic)
+    interval = 1.0 / rate if rate > 0 else 0.01
+    LOGGER.info("Starting continuous producer at ~%d msg/sec to topic '%s'...", rate, topic)
+    
+    hour = 0
     sent = 0
     start = time.time()
-    hours = [(i % 24) for i in range((total // 100) + 48)]
-
-    for i in range(total):
-        trip = gen_trip(hours[i % len(hours)])
-        producer.send(topic, trip)
-        sent += 1
-        if sent % 5000 == 0:
-            elapsed = time.time() - start
-            rate = float(sent) / max(elapsed, 0.1)
-            LOGGER.info("Sent %d/%d (%.0f/sec)", sent, total, rate)
-
-    producer.flush()
-    producer.close()
-    elapsed = time.time() - start
-    rate = float(sent) / max(elapsed, 0.1)
-    LOGGER.info("DONE: %d messages sent in %.1fs (%.0f/sec avg)", sent, elapsed, rate)
+    last_log = start
+    
+    try:
+        while True:
+            trip = gen_trip(hour)
+            producer.send(topic, trip)
+            sent += 1
+            
+            # Log every 10 seconds
+            now = time.time()
+            if now - last_log >= 10:
+                elapsed = now - start
+                actual_rate = sent / elapsed
+                LOGGER.info("Sent %d messages total, avg rate: %.0f/sec", sent, actual_rate)
+                last_log = now
+            
+            hour += 1
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        LOGGER.info("Shutting down...")
+    finally:
+        producer.flush()
+        producer.close()
+        elapsed = time.time() - start
+        LOGGER.info("DONE: %d messages sent in %.1fs (%.0f/sec avg)", sent, elapsed, sent / max(elapsed, 0.1))

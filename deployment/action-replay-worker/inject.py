@@ -1,0 +1,29 @@
+#!/usr/bin/env python3
+import json, sys, os
+sys.path.insert(0, '/app')
+os.chdir('/app')
+
+# Use the same kafka-python from the requirements
+import kafka
+from kafka import KafkaProducer
+
+records = [
+    {"VendorID": 1, "tpep_pickup_datetime": "2024-01-15T12:00:00", "tpep_dropoff_datetime": "2024-01-15T12:30:00", "passenger_count": 2.0, "trip_distance": 5.5, "RatecodeID": 1.0, "store_and_fwd_flag": "N", "PULocationID": 138.0, "DOLocationID": 64.0, "payment_type": 1.0, "fare_amount": 25.0, "extra": 2.5, "mta_tax": 0.5, "tip_amount": 5.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": 36.5, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 0.5, "speed_mph": 11.0},
+    {"VendorID": 1, "tpep_pickup_datetime": "2024-01-15T12:15:00", "tpep_dropoff_datetime": "2024-01-15T12:45:00", "passenger_count": 1.0, "trip_distance": 3.2, "RatecodeID": 1.0, "store_and_fwd_flag": "N", "PULocationID": 161.0, "DOLocationID": 237.0, "payment_type": 1.0, "fare_amount": 15.5, "extra": 2.5, "mta_tax": 0.5, "tip_amount": 3.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": 25.0, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 0.5, "speed_mph": 6.4},
+    {"VendorID": 2, "tpep_pickup_datetime": "2024-01-15T12:30:00", "tpep_dropoff_datetime": "2024-01-15T13:00:00", "passenger_count": 3.0, "trip_distance": 99.0, "RatecodeID": 99.0, "store_and_fwd_flag": "N", "PULocationID": 999.0, "DOLocationID": 999.0, "payment_type": 5.0, "fare_amount": -10.0, "extra": 2.5, "mta_tax": 0.5, "tip_amount": 0.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": -5.0, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 0.5, "speed_mph": 198.0},
+    {"VendorID": 1, "tpep_pickup_datetime": "2024-01-15T13:00:00", "tpep_dropoff_datetime": "2024-01-15T13:30:00", "passenger_count": 2.0, "trip_distance": 8.0, "RatecodeID": 1.0, "store_and_fwd_flag": "N", "PULocationID": 100.0, "DOLocationID": 200.0, "payment_type": 1.0, "fare_amount": 30.0, "extra": 2.5, "mta_tax": 0.5, "tip_amount": 6.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": 42.0, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 0.5, "speed_mph": 16.0},
+    {"VendorID": 2, "tpep_pickup_datetime": "2024-01-15T13:15:00", "tpep_dropoff_datetime": "2024-01-15T13:45:00", "passenger_count": 1.0, "trip_distance": 0.1, "RatecodeID": 1.0, "store_and_fwd_flag": "N", "PULocationID": 50.0, "DOLocationID": 50.0, "payment_type": 1.0, "fare_amount": 3.0, "extra": 2.5, "mta_tax": 0.5, "tip_amount": 0.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": 9.0, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 0.5, "speed_mph": 0.2},
+]
+anomaly = [
+    {"VendorID": 2, "tpep_pickup_datetime": "2024-01-15T12:00:00", "tpep_dropoff_datetime": "2024-01-15T13:00:00", "passenger_count": 2.0, "trip_distance": 15.5, "RatecodeID": 99.0, "store_and_fwd_flag": "N", "PULocationID": 138.0, "DOLocationID": 64.0, "payment_type": 1.0, "fare_amount": 85.0, "extra": 3.5, "mta_tax": 0.5, "tip_amount": 20.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": 113.0, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 1.0, "speed_mph": 15.5, "trip_id": "test_001", "anomaly_score": 0.8, "threshold": 0.5, "is_anomaly": True, "context_key": "manhattan", "anomaly_reasons": ["high_fare"], "ml_model": "memstream_v1", "final_decision": "ANOMALY", "decision_source": "both_agree", "confidence": 0.9, "voting_timestamp": "2024-01-15T12:05:00", "drifts_detected": [], "drift_assessment": {"severity": "none", "drift_count": 0, "affected_neighborhoods": [], "affected_metrics": [], "threshold": 3}, "iec_strategy": "do_nothing", "iec_confidence": 1.0, "action_result": {"action": "none", "message": "Test"}, "iec_timestamp": "2024-01-15T12:05:01", "retry_count": 0, "last_attempt": "2024-01-15T12:05:01"},
+    {"VendorID": 1, "tpep_pickup_datetime": "2024-01-15T12:00:00", "tpep_dropoff_datetime": "2024-01-15T13:00:00", "passenger_count": 1.0, "trip_distance": 50.0, "RatecodeID": 99.0, "store_and_fwd_flag": "N", "PULocationID": 200.0, "DOLocationID": 50.0, "payment_type": 3.0, "fare_amount": 300.0, "extra": 5.0, "mta_tax": 0.5, "tip_amount": 0.0, "tolls_amount": 0.0, "improvement_surcharge": 1.0, "total_amount": 310.0, "congestion_surcharge": 2.5, "Airport_fee": 0.0, "trip_duration": 1.5, "speed_mph": 33.3, "trip_id": "test_002", "anomaly_score": 1.2, "threshold": 0.5, "is_anomaly": True, "context_key": "brooklyn", "anomaly_reasons": ["extreme_fare", "speed"], "ml_model": "memstream_v1", "final_decision": "ANOMALY", "decision_source": "both_agree", "confidence": 0.95, "voting_timestamp": "2024-01-15T12:05:00", "drifts_detected": [], "drift_assessment": {"severity": "low", "drift_count": 1, "affected_neighborhoods": ["brooklyn"], "affected_metrics": ["fare_amount"], "threshold": 3}, "iec_strategy": "adjust_threshold", "iec_confidence": 0.8, "action_result": {"action": "adjust", "message": "Test"}, "iec_timestamp": "2024-01-15T12:05:01", "retry_count": 0, "last_attempt": "2024-01-15T12:05:01"},
+]
+
+p = KafkaProducer(bootstrap_servers="kafka:9092", value_serializer=lambda x: json.dumps(x).encode("utf-8"), acks="all")
+for r in records:
+    p.send("taxi-nyc-raw", r)
+for a in anomaly:
+    p.send("iec-action-replay", a)
+p.flush()
+p.close()
+print("Injected", len(records), "raw +", len(anomaly), "anomaly records")

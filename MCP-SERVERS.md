@@ -1,6 +1,6 @@
 # MCP Servers Setup Guide for CA-DQStream
 
-This document describes how to set up and use MCP (Model Context Protocol) servers in the CA-DQStream project. MCP servers enable AI assistants (Cursor, Claude Desktop, VS Code, etc.) to interact with your streaming infrastructure components: Kafka, PostgreSQL, MinIO, Grafana, Prometheus, and Confluent Cloud.
+This document describes how to set up and use MCP (Model Context Protocol) servers in the CA-DQStream project. MCP servers enable AI assistants (Cursor, Claude Desktop, VS Code, etc.) to interact with your streaming infrastructure components: Kafka, MinIO, Grafana, Prometheus, and Confluent Cloud.
 
 ---
 
@@ -12,10 +12,9 @@ This document describes how to set up and use MCP (Model Context Protocol) serve
 - [Per-Server Setup](#per-server-setup)
   - [1. Confluent MCP Server](#1-confluent-mcp-server)
   - [2. Kafka MCP Server](#2-kafka-mcp-server)
-  - [3. PostgreSQL MCP Server](#3-postgresql-mcp-server)
-  - [4. MinIO MCP Server](#4-minio-mcp-server)
-  - [5. Grafana MCP Server](#5-grafana-mcp-server)
-  - [6. Prometheus MCP Server](#6-prometheus-mcp-server)
+  - [3. MinIO MCP Server](#3-minio-mcp-server)
+  - [4. Grafana MCP Server](#4-grafana-mcp-server)
+  - [5. Prometheus MCP Server](#5-prometheus-mcp-server)
 - [AI Client Configuration](#ai-client-configuration)
   - [Cursor](#cursor)
   - [Claude Desktop](#claude-desktop)
@@ -55,7 +54,7 @@ irm https://astral.sh/uv/install.ps1 | iex
 #   docker pull quay.io/minio/aistor/mcp-server-aistor:latest
 # Note: uv/pip installation NOT available for this server
 
-# All uvx-based servers (postgres-mcp, mcp-grafana, prometheus-mcp-server)
+# All uvx-based servers (mcp-grafana, prometheus-mcp-server)
 # auto-install on first use via uvx (part of uv package)
 ```
 
@@ -66,8 +65,6 @@ irm https://astral.sh/uv/install.ps1 | iex
 | Server | Purpose | Connection | Auth |
 |--------|---------|-----------|------|
 | **Confluent** | Flink, Kafka, Schema Registry, Connectors (Confluent Cloud) | Confluent Cloud REST API | API Key |
-| **Kafka** | Local Kafka broker operations | localhost:9092 | SASL/TLS (optional) |
-| **PostgreSQL** | Database health, index tuning, query optimization | localhost:5432 | Password |
 | **MinIO** | Object storage operations | localhost:9000 | Access/Secret Key |
 | **Grafana** | Dashboards, alerts, datasources | localhost:3000 | Service Account Token |
 | **Prometheus** | Metrics querying via PromQL | localhost:9090 | None (local) |
@@ -90,7 +87,7 @@ irm https://astral.sh/uv/install.ps1 | iex
    # Download from https://go.dev/dl/
    ```
 
-3. **Docker** (optional, for postgres-mcp Docker method)
+3. **Docker**
    ```bash
    docker --version
    ```
@@ -110,7 +107,7 @@ Verify services are running:
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 ```
 
-Expected containers: `ldt-kafka`, `ldt-postgres`, `ldt-minio`, `ldt-grafana`, `ldt-prometheus`, `ldt-schema-registry`, `ldt-pgbouncer`.
+Expected containers: `ldt-kafka`, `ldt-minio`, `ldt-grafana`, `ldt-prometheus`, `ldt-schema-registry`.
 
 ---
 
@@ -203,77 +200,8 @@ kafka-mcp-server.exe --help
 
 ---
 
-### 3. PostgreSQL MCP Server
-
-**Purpose**: Database health analysis, index tuning with industrial-strength algorithms, EXPLAIN plan analysis, hypothetical index simulation, schema intelligence, and safe SQL execution.
-
-**Package**: [crystaldba/postgres-mcp](https://github.com/crystaldba/postgres-mcp) (Python, 2.7K stars)
-
-**Setup**:
-
-**Option A: uvx (recommended)**
-```bash
-uv tool install crystaldba/postgres-mcp
-```
-
-**Option B: pipx**
-```bash
-pipx install postgres-mcp
-```
-
-**Option C: Docker**
-```bash
-docker pull crystaldba/postgres-mcp
-```
-
-**Access Modes**:
-
-| Mode | Description | Use Case |
-|------|-------------|----------|
-| `--access-mode=unrestricted` | Full read/write, schema changes | Development |
-| `--access-mode=restricted` | Read-only, query time limits | Production |
-
-**Recommended Extension Installation** (for full functionality):
-```sql
--- Run in your PostgreSQL database
-CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-CREATE EXTENSION IF NOT EXISTS hypopg;
-```
-- `pg_stat_statements`: Enables query execution statistics analysis
-- `hypopg`: Enables hypothetical index simulation
-
-**Connection URI**: Uses the same connection as the pipeline — through pgbouncer at `localhost:6432` or direct at `localhost:5432`:
-
-```
-# Through pgbouncer (transaction mode, recommended for pipeline)
-postgresql://cadqstream:cadqstream123@localhost:6432/dq_pipeline
-
-# Direct to postgres
-postgresql://cadqstream:cadqstream123@localhost:5432/dq_pipeline
-```
-
-**Tools Available**:
-| Tool | Description |
-|------|-------------|
-| `list_schemas` | List all database schemas |
-| `list_objects` | List tables, views, sequences, extensions in a schema |
-| `get_object_details` | Table columns, constraints, indexes |
-| `execute_sql` | Run SQL (guarded by access mode) |
-| `explain_query` | Get execution plan with hypothetical indexes |
-| `get_top_queries` | Slowest queries from pg_stat_statements |
-| `analyze_workload_indexes` | Workload-based index recommendations |
-| `analyze_query_indexes` | Index recommendations for specific queries |
-| `analyze_db_health` | Comprehensive health checks |
-
-**Example AI Prompts**:
-- "Check the health of my database and identify any issues"
-- "What are the slowest queries in my database? How can I speed them up?"
-- "Analyze my database workload and suggest indexes to improve performance"
-- "Help me optimize this query: SELECT * FROM orders JOIN customers ON orders.customer_id = customers.id WHERE orders.created_at > '2023-01-01'"
-
 ---
-
-### 4. MinIO MCP Server
+### 3. MinIO MCP Server
 
 **Purpose**: Object storage operations — bucket management, object upload/download, presigned URLs, metadata retrieval. Useful for managing ML model artifacts, checkpoint data, and pipeline outputs stored in MinIO.
 
@@ -305,7 +233,7 @@ docker pull quay.io/minio/aistor/mcp-server-aistor:latest
 - `list_multipart_uploads`, `abort_multipart_upload`
 
 **AI Prompts for MLOps**:
-- "List all model artifacts in the ml-models bucket"
+- "List all model artifacts in the cadqstream-checkpoints/ml-models prefix"
 - "Upload the trained model to MinIO and generate a presigned download URL"
 - "Check if checkpoint files exist for run_id XYZ"
 
@@ -463,12 +391,10 @@ User: "Check if the Flink job is running and show me the latest consumer lag"
 AI (via Confluent MCP): → Queries Flink statements API
                       → Checks Kafka consumer group lag
 
-User: "The pipeline seems slow. Can you analyze the database performance?"
+User: "The pipeline seems slow. Can you analyze MinIO storage and Kafka throughput?"
 
-AI (via PostgreSQL MCP): → Runs health checks on postgres
-                      → Identifies slow queries via pg_stat_statements
-                      → Suggests indexes using hypopg simulation
-
+AI (via MinIO MCP): -> Checks bucket usage and object counts
+                  -> Retrieves bucket policies and lifecycle rules
 User: "Show me the Grafana dashboard for the Kafka metrics"
 
 AI (via Grafana MCP): → Lists dashboards containing "Kafka"
@@ -491,15 +417,12 @@ AI (via MinIO MCP): → Uploads model artifact to MinIO
 "Consume the last 10 messages from dq-stream-raw topic"
 ```
 
-### Database Performance Analysis
+### MinIO Performance Analysis
 
 ```bash
-# Via postgres-mcp, ask AI:
-"Run analyze_db_health and identify any critical issues"
-
-"Analyze the top 10 slowest queries and suggest indexes"
-
-"Help me write an EXPLAIN plan for this join query and suggest optimizations"
+# Via minio-mcp or mc CLI, ask AI:
+"List all buckets and check their size and object count"
+"Analyze bucket lifecycle policies and data retention"
 ```
 
 ---
@@ -524,13 +447,6 @@ uv --version
 docker ps ldt-kafka
 # Check broker is listening
 docker exec ldt-kafka kafka-broker-api-versions --bootstrap-server localhost:9092
-```
-
-#### PostgreSQL MCP: connection timeout through pgbouncer
-
-```bash
-# Try direct connection to postgres (bypass pgbouncer)
-# Change DATABASE_URI to: postgresql://cadqstream:cadqstream123@localhost:5432/dq_pipeline
 ```
 
 #### Grafana MCP: 401 Unauthorized
@@ -574,8 +490,6 @@ For debugging, set `FASTMCP_LOG_LEVEL=DEBUG` in the server's environment variabl
 # kafka-mcp-server (Go)
 go install github.com/tuannvm/kafka-mcp-server@latest
 
-# postgres-mcp
-uv tool upgrade postgres-mcp
 ```
 
 ---
@@ -609,7 +523,6 @@ This allows Flink Agents to use MCP tools as native agent capabilities.
 - [Flink Agents MCP](https://nightlies.apache.org/flink/flink-agents-docs-main/docs/development/mcp/) — MCP in Flink Agents (Python/Java)
 - [Confluent Streaming Agents](https://github.com/confluentinc/quickstart-streaming-agents) — Event-driven agents on Flink & Kafka
 - [Kafka MCP Server](https://github.com/tuannvm/kafka-mcp-server) — Native Kafka MCP (Go/franz-go)
-- [PostgreSQL MCP](https://github.com/crystaldba/postgres-mcp) — Postgres with index tuning
 - [MinIO MCP Server](https://github.com/miniohq/mcp-server-aistor) — Object storage MCP
 - [Grafana MCP](https://grafana.com/docs/grafana/latest/developer-resources/mcp/) — Grafana integration
 - [Prometheus MCP](https://awslabs.github.io/mcp/servers/prometheus-mcp-server) — AWS Managed Prometheus

@@ -23,7 +23,7 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "panels": [],
-      "title": "Flink Cluster Overview",
+      "title": "Flink Cluster Status",
       "type": "row"
     },
     {
@@ -35,14 +35,13 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              { "color": "green", "value": null }
             ]
           },
           "unit": "short"
         }
       },
-      "gridPos": { "h": 3, "w": 3, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -59,7 +58,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers)",
+          "expr": "count(up{job=\"flink-taskmanager\"})",
           "legendFormat": "TMs",
           "refId": "A"
         }
@@ -73,9 +72,8 @@
         "defaults": {
           "color": { "mode": "thresholds" },
           "mappings": [
-            { "options": { "0": { "color": "red", "index": 1, "text": "FAILED" } }, "type": "value" },
-            { "options": { "1": { "color": "yellow", "index": 2, "text": "RUNNING" } }, "type": "value" },
-            { "options": { "2": { "color": "green", "index": 0, "text": "CREATED" } }, "type": "value" }
+            { "options": { "0": { "color": "red", "index": 1, "text": "DOWN" } }, "type": "value" },
+            { "options": { "1": { "color": "green", "index": 0, "text": "UP" } }, "type": "value" }
           ],
           "thresholds": {
             "mode": "absolute",
@@ -86,7 +84,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 3, "w": 4, "x": 3, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
       "id": 3,
       "options": {
         "colorMode": "background",
@@ -103,12 +101,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_jobmanager_job_status{status=\"RUNNING\"})",
-          "legendFormat": "Jobs",
+          "expr": "up{job=\"flink-jobmanager\"}",
+          "legendFormat": "JobManager",
           "refId": "A"
         }
       ],
-      "title": "Running Flink Jobs",
+      "title": "JobManager Status",
       "type": "stat"
     },
     {
@@ -120,15 +118,13 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 10 },
-              { "color": "red", "value": 30 }
+              { "color": "green", "value": null }
             ]
           },
           "unit": "s"
         }
       },
-      "gridPos": { "h": 3, "w": 4, "x": 7, "y": 1 },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 1 },
       "id": 4,
       "options": {
         "colorMode": "value",
@@ -145,12 +141,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointDuration / 1000",
-          "legendFormat": "Last Checkpoint Duration",
+          "expr": "flink_jobmanager_job_uptime / 1000",
+          "legendFormat": "Job Uptime (s)",
           "refId": "A"
         }
       ],
-      "title": "Last Checkpoint Duration",
+      "title": "Job Uptime",
       "type": "stat"
     },
     {
@@ -158,23 +154,24 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "mappings": [],
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 1, "text": "DOWN" } }, "type": "value" },
+            { "options": { "1": { "color": "green", "index": 0, "text": "UP" } }, "type": "value" }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 10000000 },
-              { "color": "red", "value": 100000000 }
+              { "color": "red", "value": null }
             ]
           },
-          "unit": "bytes"
+          "unit": "short"
         }
       },
-      "gridPos": { "h": 3, "w": 4, "x": 11, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
       "id": 5,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
+        "colorMode": "background",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -187,12 +184,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointSize",
-          "legendFormat": "Checkpoint Size",
+          "expr": "up{job=\"kafka-exporter\"}",
+          "legendFormat": "Kafka Exporter",
           "refId": "A"
         }
       ],
-      "title": "Last Checkpoint Size",
+      "title": "Kafka Exporter",
       "type": "stat"
     },
     {
@@ -200,21 +197,24 @@
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
-          "mappings": [],
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 1, "text": "DOWN" } }, "type": "value" },
+            { "options": { "1": { "color": "green", "index": 0, "text": "UP" } }, "type": "value" }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              { "color": "red", "value": null }
             ]
           },
           "unit": "short"
         }
       },
-      "gridPos": { "h": 3, "w": 4, "x": 15, "y": 1 },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
       "id": 6,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
+        "colorMode": "background",
+        "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
@@ -227,131 +227,21 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Restarting_NumberOfRestarts",
-          "legendFormat": "Restarts",
+          "expr": "up{job=\"cadqstream-app\"}",
+          "legendFormat": "Cadqstream App",
           "refId": "A"
         }
       ],
-      "title": "Job Restarts",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 3, "w": 5, "x": 19, "y": 1 },
-      "id": 7,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers) * 4",
-          "legendFormat": "Total Slots",
-          "refId": "A"
-        }
-      ],
-      "title": "Available Task Slots",
+      "title": "Cadqstream App",
       "type": "stat"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 4 },
-      "id": 8,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 7,
       "panels": [],
-      "title": "Checkpointing",
+      "title": "Flink Memory",
       "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "line" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
-      "id": 9,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfCompletedCheckpoints[5m]) * 60",
-          "legendFormat": "Completed /min",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfFailedCheckpoints[5m]) * 60",
-          "legendFormat": "Failed /min",
-          "refId": "B"
-        },
-        {
-          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfInProgressCheckpoints[5m])",
-          "legendFormat": "In Progress",
-          "refId": "C"
-        }
-      ],
-      "title": "Checkpoint Operations",
-      "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
@@ -387,8 +277,8 @@
           "unit": "bytes"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-      "id": 10,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 8,
       "options": {
         "legend": {
           "calcs": ["mean", "max", "last"],
@@ -404,25 +294,86 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointSize",
-          "legendFormat": "Checkpoint Size",
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Used",
+          "legendFormat": "TM Heap Used",
           "refId": "A"
         },
         {
-          "expr": "\"Checkpointing enabled\"",
-          "legendFormat": "External Path",
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Max",
+          "legendFormat": "TM Heap Max",
           "refId": "B"
         }
       ],
-      "title": "Checkpoint Size Over Time",
+      "title": "TaskManager Heap Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "percent",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 9,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.1.0",
+      "targets": [
+        {
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Used / flink_taskmanager_Status_JVM_Memory_Heap_Max * 100",
+          "legendFormat": "TM Heap Usage %",
+          "refId": "A"
+        }
+      ],
+      "title": "TaskManager Heap Usage %",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 13 },
-      "id": 11,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 10,
       "panels": [],
-      "title": "Processing Throughput",
+      "title": "Pipeline Metrics",
       "type": "row"
     },
     {
@@ -459,7 +410,71 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.1.0",
+      "targets": [
+        {
+          "expr": "sum(rate(cadqstream_records_valid_total{layer=\"L1\"}[5m]))",
+          "legendFormat": "L1 Valid",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(cadqstream_records_valid_total{layer=\"L2\"}[5m]))",
+          "legendFormat": "L2 Valid",
+          "refId": "B"
+        }
+      ],
+      "title": "Valid Records by Layer",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "anomalies/sec",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 12,
       "options": {
         "legend": {
@@ -476,12 +491,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m])) by (task_name)",
-          "legendFormat": "{{task_name}}",
+          "expr": "sum(rate(cadqstream_anomalies_canary_total[5m])) by (rule)",
+          "legendFormat": "{{rule}}",
           "refId": "A"
         }
       ],
-      "title": "Records Out Per Second (by Task)",
+      "title": "Canary Anomalies by Rule",
       "type": "timeseries"
     },
     {
@@ -492,7 +507,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "records/sec",
+            "axisLabel": "anomalies/sec",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -518,7 +533,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
       "id": 13,
       "options": {
         "legend": {
@@ -535,21 +550,13 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsInPerSecond_sum[5m])) by (task_name)",
-          "legendFormat": "{{task_name}}",
+          "expr": "sum(rate(cadqstream_anomalies_ml_total[5m])) by (neighborhood)",
+          "legendFormat": "{{neighborhood}}",
           "refId": "A"
         }
       ],
-      "title": "Records In Per Second (by Task)",
+      "title": "ML Anomalies by Neighborhood",
       "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
-      "id": 14,
-      "panels": [],
-      "title": "TaskManager Health",
-      "type": "row"
     },
     {
       "datasource": "Prometheus",
@@ -559,7 +566,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "heap",
+            "axisLabel": "violations/sec",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -582,14 +589,14 @@
               { "color": "green", "value": null }
             ]
           },
-          "unit": "bytes"
+          "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
-      "id": 15,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "id": 14,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["mean", "max", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -602,27 +609,155 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_JobManager_Memory_Heap_Used",
-          "legendFormat": "JM Heap Used",
+          "expr": "sum(rate(cadqstream_violation_records_total[5m])) by (layer, type)",
+          "legendFormat": "{{layer}} - {{type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Violation Records by Layer and Type",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "id": 15,
+      "panels": [],
+      "title": "IEC (Intelligent Evolution Controller)",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.1.0",
+      "targets": [
+        {
+          "expr": "cadqstream_iec_decisions_total{strategy=\"retrain_model\"}",
+          "legendFormat": "retrain_model",
           "refId": "A"
         },
         {
-          "expr": "flink_jobmanager_JobManager_Memory_Heap_Max",
-          "legendFormat": "JM Heap Max",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"adjust_threshold\"}",
+          "legendFormat": "adjust_threshold",
           "refId": "B"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_Memory_Heap_Used",
-          "legendFormat": "TM Heap Used",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"switch_model\"}",
+          "legendFormat": "switch_model",
           "refId": "C"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_Memory_Heap_Max",
-          "legendFormat": "TM Heap Max",
+          "expr": "cadqstream_iec_decisions_total{strategy=\"do_nothing\"}",
+          "legendFormat": "do_nothing",
           "refId": "D"
         }
       ],
-      "title": "JVM Heap Memory",
+      "title": "IEC Decisions by Strategy",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "confidence",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "line" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "green", "value": 0.7 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "id": 17,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.1.0",
+      "targets": [
+        {
+          "expr": "cadqstream_iec_confidence",
+          "legendFormat": "{{neighborhood}}",
+          "refId": "A"
+        }
+      ],
+      "title": "IEC Confidence by Neighborhood",
       "type": "timeseries"
     },
     {
@@ -659,11 +794,11 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
-      "id": 16,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "id": 18,
       "options": {
         "legend": {
-          "calcs": ["mean", "max"],
+          "calcs": ["mean", "max", "last"],
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true
@@ -676,26 +811,13 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_taskmanager_TaskManager_NumberOfRunningTasks",
-          "legendFormat": "Running Tasks",
+          "expr": "cadqstream_meta_anomaly_rate",
+          "legendFormat": "{{neighborhood}}",
           "refId": "A"
-        },
-        {
-          "expr": "flink_taskmanager_TaskManager_NumberOfSlots",
-          "legendFormat": "Available Slots",
-          "refId": "B"
         }
       ],
-      "title": "TaskManager Slots & Tasks",
+      "title": "Meta Anomaly Rate by Neighborhood",
       "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
-      "id": 17,
-      "panels": [],
-      "title": "Latency",
-      "type": "row"
     },
     {
       "datasource": "Prometheus",
@@ -705,7 +827,68 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "ms",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "id": 19,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max", "last"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "10.1.0",
+      "targets": [
+        {
+          "expr": "cadqstream_meta_null_rate",
+          "legendFormat": "{{neighborhood}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Meta Null Rate by Neighborhood",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -731,8 +914,8 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
-      "id": 18,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "id": 20,
       "options": {
         "legend": {
           "calcs": ["mean", "max", "last"],
@@ -748,19 +931,19 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m])) by (task_name)",
-          "legendFormat": "{{task_name}} records/sec",
+          "expr": "cadqstream_meta_delta_score",
+          "legendFormat": "{{neighborhood}}",
           "refId": "A"
         }
       ],
-      "title": "Task Throughput",
+      "title": "Meta Delta Score by Neighborhood",
       "type": "timeseries"
     }
   ],
-  "refresh": "10s",
+  "refresh": "15s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["flink", "cadqstream", "streaming", "checkpointing"],
+  "tags": ["flink", "cadqstream", "streaming", "pipeline"],
   "templating": {
     "list": []
   },

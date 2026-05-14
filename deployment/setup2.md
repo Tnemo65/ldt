@@ -7,7 +7,7 @@
 
 ### 1.1 The Fundamental Problem
 
-The Flink pipeline in `src/flink_job_complete.py` only has **`.print()` sinks** — all output goes to stdout (container logs), NOT to Kafka output topics or PostgreSQL tables.
+The Flink pipeline in `src/flink_job_complete.py` only has **`.print()` sinks** — all output goes to stdout (container logs), NOT to Kafka output topics or MinIO buckets.
 
 From `flink_job_complete.py` lines 302-323:
 ```python
@@ -19,11 +19,10 @@ voting_stream.print()          # -> stdout only
 meta_stream.print()            # -> stdout only
 iec_stream.print()            # -> stdout only
 
-# TODO: Add PostgreSQL sinks when testing with real data
 # TODO: Add Kafka sinks for dq-meta-stream, iec-action-replay
 ```
 
-The sinks **already exist** in `src/sinks/postgres_sink.py` and Kafka sinks can be created via `FlinkKafkaProducer`, but **they are not wired into the pipeline**.
+The sinks **already exist** in `src/sinks/minio_sink.py` and Kafka sinks can be created via `FlinkKafkaProducer`, but **they are not wired into the pipeline**.
 
 ### 1.2 What Exists vs What's Missing
 
@@ -34,7 +33,7 @@ The sinks **already exist** in `src/sinks/postgres_sink.py` and Kafka sinks can 
 | Layer 2 operators | WORKING | CanaryRules, IFScoring |
 | Layer 3 operators | WORKING | VotingEnsemble, MetaAggregate |
 | Layer 4 operators | WORKING | IECOperator |
-| JDBC sink code | EXISTS (unused) | `sinks/postgres_sink.py` |
+| MinIO sink code | EXISTS | `sinks/minio_sink.py` |
 | Kafka output sinks | MISSING | Need to create |
 | Sink wiring | MISSING | `flink_job_complete.py` |
 | ML model training | MISSING | Phase 0 not executed |
@@ -88,7 +87,7 @@ MLflow (artifact storage)
             └── drift_report_latest.json
 
 Prometheus
-    └── scrape targets: kafka-exporter, postgres-exporter, node-exporter, flink-jobmanager:9248
+    └── scrape targets: kafka-exporter, node-exporter, flink-jobmanager:9248
             └── recording rules + custom cadqstream_pipeline_* metrics
 
 Grafana
@@ -103,7 +102,7 @@ Grafana
 
 | Priority | Task | Impact | Effort | Blocks |
 |----------|------|--------|--------|--------|
-| P0 | Wire JDBC + Kafka sinks into pipeline | Fills PostgreSQL + Kafka output topics | Medium | All downstream |
+| P0 | Wire MinIO + Kafka sinks into pipeline | Fills MinIO buckets + Kafka output topics | Medium | All downstream |
 | P1 | Create anomaly simulation producer | Fires Prometheus alerts, populates tables | Medium | Alerts, ML |
 | P2 | Add custom Prometheus metrics to pipeline | Powers Grafana dashboards | Medium | Dashboards |
 | P3 | Train & register ML models in MLflow | Provides anomaly scores, enables IEC | High | Layer 2 ML |
@@ -151,28 +150,27 @@ def create_kafka_sink(topic, bootstrap_servers):
 
 3. **Wire sinks to each stream:**
 ```python
-# Layer 1: Valid records -> PostgreSQL + Kafka
-BOOTSTRAP = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
-valid_stream.add_sink(create_jdbc_sink('taxi_trips_raw', ...))
+# Layer 1: Valid records -> MinIO + Kafka
+valid_stream.add_sink(create_minio_sink('cadqstream-raw'))
 valid_stream.add_sink(create_kafka_sink('dq-stream-processed', BOOTSTRAP))
 
-violation_stream.add_sink(create_jdbc_sink('schema_violations', ...))
+violation_stream.add_sink(create_minio_sink('cadqstream-violations'))
 violation_stream.add_sink(create_kafka_sink('dq-hard-rule-violations', BOOTSTRAP))
 
-# Layer 2: Canary violations -> PostgreSQL + Kafka
-canary_stream.add_sink(create_jdbc_sink('canary_violations', ...))
+# Layer 2: Canary violations -> MinIO + Kafka
+canary_stream.add_sink(create_minio_sink('cadqstream-violations'))
 canary_stream.add_sink(create_kafka_sink('dq-stream-anomalies', BOOTSTRAP))
 
-# Complex ML scores -> PostgreSQL
-complex_stream.add_sink(create_jdbc_sink('anomaly_scores', ...))
+# Complex ML scores -> MinIO
+complex_stream.add_sink(create_minio_sink('cadqstream-anomalies'))
 
-# Layer 3: Meta-metrics -> Kafka
+# Layer 3: Meta-metrics -> MinIO + Kafka
+meta_stream.add_sink(create_minio_sink('cadqstream-metrics'))
 meta_stream.add_sink(create_kafka_sink('dq-meta-stream', BOOTSTRAP))
-meta_stream.add_sink(create_jdbc_sink('meta_metrics', ...))
 
-# Layer 4: IEC decisions -> Kafka + PostgreSQL
+# Layer 4: IEC decisions -> MinIO + Kafka
+iec_stream.add_sink(create_minio_sink('cadqstream-drift'))
 iec_stream.add_sink(create_kafka_sink('iec-action-replay', BOOTSTRAP))
-iec_stream.add_sink(create_jdbc_sink('drift_events', ...))
 ```
 
 4. **Fix `record_to_*_row` functions** - they need to extract proper fields from the pipeline's internal record format (which uses NYC taxi column names like `VendorID`, `tpep_pickup_datetime`, etc.)
@@ -269,12 +267,12 @@ This script trains the anomaly detection model using historical NYC taxi data (P
    - Parameters: contamination, n_estimators, features
    - Metrics: precision, recall, f1
    - Artifacts: model.pkl, threshold.json
-7. Upload to MinIO: ml-models/anomaly_detector_v1.pkl
+7. Upload to MinIO: cadqstream-checkpoints/ml-models/anomaly_detector_v1.pkl
 8. Update Flink pipeline env var: MODEL_VERSION=v1
 ```
 
 **Model storage:**
-- MinIO: `ml-models/anomaly_detector_v1.pkl`
+- MinIO: `cadqstream-checkpoints/ml-models/anomaly_detector_v1.pkl`
 - MLflow run with params, metrics, and artifacts
 
 ---
@@ -284,7 +282,7 @@ This script trains the anomaly detection model using historical NYC taxi data (P
 **Modify/Create:** `deployment/grafana/dashboards/*.json`
 
 **Dashboard 1: Pipeline Overview (CONSEIL DEMO)**
-- End-to-end flow: Kafka in -> Flink -> PostgreSQL out
+- End-to-end flow: Kafka in -> Flink -> MinIO out
 - Real-time throughput (records/sec) per layer
 - Latency histogram (p50, p95, p99)
 - Active alerts panel
@@ -313,7 +311,6 @@ This script trains the anomaly detection model using historical NYC taxi data (P
 - Container CPU/memory across all services
 - Disk usage
 - Network I/O
-- PostgreSQL connection pool
 - Kafka broker health
 
 ---
@@ -399,8 +396,8 @@ curl -X POST http://schema-registry:8081/subjects/taxi-nyc-raw-value/versions \
 
 | File | Changes | Priority |
 |------|---------|----------|
-| `src/flink_job_complete.py` | Wire JDBC + Kafka sinks, add metrics | P0 |
-| `src/sinks/postgres_sink.py` | Fix record mapping, add missing sinks | P0 |
+| `src/flink_job_complete.py` | Wire MinIO + Kafka sinks, add metrics | P0 |
+| `src/sinks/minio_sink.py` | Verify Parquet sink, add missing buckets | P0 |
 | `deployment/prometheus/alert-rules/cadqstream-alerts.yml` | Add pipeline alerts | P5 |
 | `deployment/grafana/dashboards/*.json` | Fix datasource, add real queries | P4 |
 | `deployment/kafka/init-scripts/01-create-topics.sh` | Add schema registry registration | P6 |
@@ -412,11 +409,11 @@ curl -X POST http://schema-registry:8081/subjects/taxi-nyc-raw-value/versions \
 
 ```
 Phase A: Quick Wins (30 min)
-├─ A1. Wire JDBC sinks into flink_job_complete.py
+├─ A1. Wire MinIO sinks into flink_job_complete.py
 ├─ A2. Wire Kafka output sinks into flink_job_complete.py
 ├─ A3. Create anomaly_producer.py
 └─ A4. Restart pipeline + run anomaly producer
-    -> PostgreSQL tables start filling
+    -> MinIO buckets start filling
     -> Kafka output topics populate
 
 Phase B: Monitoring (30 min)
@@ -431,7 +428,7 @@ Phase C: ML Integration (60 min)
 ├─ C2. Run training on synthetic data
 ├─ C3. Register model in MLflow + upload to MinIO
 ├─ C4. Update Flink pipeline to load model from MinIO
-└─ C5. Verify anomaly scores in PostgreSQL
+└─ C5. Verify anomaly scores in MinIO
 
 Phase D: Polish (30 min)
 ├─ D1. Create infrastructure dashboard
@@ -449,7 +446,6 @@ Phase D: Polish (30 min)
 |------|--------|--------|
 | Flink pipeline running | OK | Keep |
 | Kafka topics created | OK | Keep |
-| PostgreSQL schema | OK | Keep |
 | MinIO buckets | OK | Keep |
 | Prometheus/Grafana | OK | Update configs |
 | ML models | MISSING | Create training script |
@@ -464,8 +460,9 @@ Phase D: Polish (30 min)
 After Setup 2, ALL of these must return non-zero/non-empty:
 
 ```bash
-# PostgreSQL - tables have data
-docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) FROM taxi_trips_raw; SELECT COUNT(*) FROM schema_violations; SELECT COUNT(*) FROM canary_violations;"
+# MinIO - buckets have data
+docker exec ldt-minio mc ls local/cadqstream-raw/
+docker exec ldt-minio mc ls local/cadqstream-anomalies/
 
 # Kafka - output topics have messages
 docker exec ldt-kafka kafka-console-consumer --topic dq-stream-processed --from-beginning --max-messages 10 --bootstrap-server localhost:9092
@@ -474,7 +471,7 @@ docker exec ldt-kafka kafka-console-consumer --topic dq-stream-processed --from-
 docker exec ldt-kafka kafka-console-consumer --topic dq-hard-rule-violations --from-beginning --max-messages 5 --bootstrap-server localhost:9092
 
 # MinIO - ML model artifact exists
-docker exec ldt-minio mc ls local/ml-models/
+docker exec ldt-minio mc ls local/cadqstream-checkpoints/ml-models/
 
 # MLflow - model registered
 curl -s http://localhost:5000/api/2.0/preview/mlflow/runs/search -X POST -H "Content-Type: application/json" -d '{"experiment_ids":[]}'
@@ -496,7 +493,6 @@ curl -s http://localhost:9090/api/v1/query?query=cadqstream_records_input_total
 | What | Setup 1 (Done) | Setup 2 (Needed) |
 |------|-----------------|-------------------|
 | Kafka topics | Created | **Wire output sinks** |
-| PostgreSQL schema | Created | **Wire JDBC sinks** |
 | Flink job | RUNNING | **Add sink calls** |
 | MinIO buckets | Created | **Upload ML models** |
 | MLflow | Empty | **Train + register models** |

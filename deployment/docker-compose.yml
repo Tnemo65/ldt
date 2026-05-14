@@ -16,8 +16,6 @@ volumes:
     name: ldt-zookeeper-data
   kafka-data:
     name: ldt-kafka-data
-  postgres-data:
-    name: ldt-postgres-data
   minio-data:
     name: ldt-minio-data
 
@@ -28,6 +26,8 @@ volumes:
     name: ldt-grafana-data
   mlflow-data:
     name: ldt-mlflow-data
+  ml-models:
+    name: ldt-ml-models
 
   # Flink volumes
   flink-jobmanager-log:
@@ -38,6 +38,8 @@ volumes:
     name: ldt-flink-taskmanager-log
   flink-taskmanager-data:
     name: ldt-flink-taskmanager-data
+  flink-checkpoints:
+    name: ldt-flink-checkpoints
 
 services:
   # =============================================================================
@@ -127,7 +129,7 @@ services:
         condition: service_healthy
     networks:
       - cadqstream-net
-    restart: "no"
+    restart: "on-failure"
     entrypoint: ["/bin/bash", "/scripts/01-create-topics.sh"]
     volumes:
       - ./kafka/init-scripts:/scripts:ro
@@ -226,139 +228,7 @@ services:
           memory: 256M
 
   # =============================================================================
-  # LAYER 2: Database Services
-  # =============================================================================
-
-  postgres:
-    image: postgres:15
-    container_name: ldt-postgres
-    hostname: postgres
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cadqstream -d dq_pipeline"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
-    environment:
-      POSTGRES_USER: cadqstream
-      POSTGRES_PASSWORD: cadqstream123
-      POSTGRES_DB: dq_pipeline
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
-      POSTGRES_HOST_AUTH_METHOD: md5
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./postgres/init-scripts:/docker-entrypoint-initdb.d:ro
-    networks:
-      - cadqstream-net
-    restart: unless-stopped
-    mem_limit: 2g
-    shm_size: 128m
-    deploy:
-      resources:
-        limits:
-          cpus: "1.5"
-          memory: 2G
-
-  pgbouncer:
-    image: edoburu/pgbouncer:latest
-    container_name: ldt-pgbouncer
-    hostname: pgbouncer
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "ps aux | grep -v grep | grep pgbouncer || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    environment:
-      DATABASE_URL: "postgres://cadqstream:cadqstream123@postgres:5432/dq_pipeline"
-      POOL_MODE: transaction
-      MAX_CLIENT_CONN: "1000"
-      DEFAULT_POOL_SIZE: "25"
-      MIN_POOL_SIZE: "10"
-      RESERVE_POOL_SIZE: "5"
-      RESERVE_POOL_TIMEOUT: "3"
-      SERVER_RESET_QUERY: "DISCARD ALL"
-      SERVER_CHECK_DELAY: "0"
-      SERVER_LIFETIME: "3600"
-      SERVER_IDLE_TIMEOUT: "600"
-    ports:
-      - "6432:5432"
-    networks:
-      - cadqstream-net
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256M
-
-  pgbouncer-exporter:
-    image: prometheuscommunity/pgbouncer-exporter:v0.8.0
-    container_name: ldt-pgbouncer-exporter
-    hostname: pgbouncer-exporter
-    depends_on:
-      pgbouncer:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9637/metrics || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    environment:
-      DATA_SOURCE_NAME: "postgres://cadqstream:cadqstream123@pgbouncer:5432/dq_pipeline?sslmode=disable"
-    ports:
-      - "9637:9637"
-    networks:
-      - cadqstream-net
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.1"
-          memory: 64M
-
-  postgres-exporter:
-    image: prometheuscommunity/postgres-exporter:v0.15.0
-    container_name: ldt-postgres-exporter
-    hostname: postgres-exporter
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "wget --spider -q http://localhost:9187/metrics || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 15s
-    environment:
-      DATA_SOURCE_NAME: "postgresql://cadqstream:cadqstream123@postgres:5432/dq_pipeline?sslmode=disable"
-      PG_EXPORTER_AUTO_DISCOVER_DATABASES: "true"
-      PG_EXPORTER_CONSTANT_LABELS: "env=cadqstream"
-    command:
-      - --web.listen-address=:9187
-      - --web.telemetry-path=/metrics
-      - --extend.query-path=/etc/pg_exporter/queries.yml
-    ports:
-      - "9187:9187"
-    volumes:
-      - ./postgres/queries.yml:/etc/pg_exporter/queries.yml:ro
-    networks:
-      - cadqstream-net
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256M
-
-  # =============================================================================
-  # LAYER 3: Storage Services
+  # LAYER 2: Storage Services
   # =============================================================================
 
   minio:
@@ -378,6 +248,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_PROMETHEUS_AUTH_TYPE: public
     volumes:
       - minio-data:/data
     networks:
@@ -398,7 +269,7 @@ services:
         condition: service_healthy
     networks:
       - cadqstream-net
-    restart: "no"
+    restart: "on-failure"
     entrypoint: ["/bin/bash", "/scripts/01-create-buckets.sh"]
     volumes:
       - ./minio/init-scripts:/scripts:ro
@@ -428,14 +299,33 @@ services:
       JOB_MANAGER_REST_PORT: 8081
       TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
       FLINK_PROPERTIES: |
-        state.backend: filesystem
-        state.checkpoints.dir: file:///tmp/flink-checkpoints
-        state.savepoints.dir: file:///tmp/flink-savepoints
+        # ── State Backend: RocksDB with MinIO S3A checkpoint storage ───────────────
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: s3://cadqstream-checkpoints/flink/checkpoints
+        state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
         state.checkpoints.num-retained: 3
+        # ── S3A / MinIO credentials (Hadoop S3A filesystem) ──────────────────
+        s3.access-key: minioadmin
+        s3.secret-key: minioadmin123
+        s3.endpoint: http://minio:9000
+        s3.path.style.access: true
+        # ── Checkpointing (enabled for exactly-once) ────────────────────────────
+        execution.checkpointing.mode: EXACTLY_ONCE
+        execution.checkpointing.interval: 300000
         execution.checkpointing.max-concurrent-checkpoints: 1
-        execution.checkpointing.min-pause: 30000
-        execution.checkpointing.timeout: 300000
+        execution.checkpointing.min-pause: 150000
+        execution.checkpointing.timeout: 1200000
         execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+        execution.checkpointing.tolerable-failed-checkpoints: 10
+        execution.checkpointing.aligned-checkpoint-timeout: 180000
+        # ── RocksDB tuning ─────────────────────────────────────────────────────
+        state.backend.rocksdb.memory.managed: true
+        state.backend.rocksdb.block.cache-size: 512mb
+        state.backend.rocksdb.writebuffer.size: 64mb
+        state.backend.rocksdb.writebuffer.count: 3
+        state.backend.rocksdb.predefined-options: SPINNING_DISK_OPTIMIZED_HIGH_MEM
+        # ── Restart & observability ────────────────────────────────────────────
         restart-strategy: exponential-delay
         restart-strategy.exponential-delay.initial-backoff: 10000
         restart-strategy.exponential-delay.max-backoff: 300000
@@ -444,29 +334,27 @@ services:
         metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
         metrics.reporter.prom.port: 9248
         metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-        parallelism.default: 4
-        taskmanager.memory.process.size: 4096m
+        parallelism.default: 2
+        taskmanager.memory.process.size: 2048m
         taskmanager.memory.managed.fraction: 0.4
         kafka.bootstrap.servers: kafka:9092
-        jdbc.connection.max-retry-timeout: 60s
+        rest.address: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      PGBOUNCER_HOST: pgbouncer
-      PGBOUNCER_PORT: "5432"
-      POSTGRES_DB: dq_pipeline
-      POSTGRES_USER: cadqstream
-      POSTGRES_PASSWORD: cadqstream123
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_PATH_STYLE_ACCESS: "true"
       FLINK_ENV: production
-      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e
     ports:
       - "8081:8081"
     volumes:
       - flink-jobmanager-log:/opt/flink/log
-      - flink-jobmanager-data:/tmp
-      - C:/proj/ldt/src:/opt/flink/e2e/src:ro
-      - C:/proj/ldt/scripts:/opt/flink/e2e/scripts:ro
+      - flink-checkpoints:/opt/flink/checkpoints
     networks:
       - cadqstream-net
     restart: unless-stopped
@@ -494,35 +382,46 @@ services:
     environment:
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       JOB_MANAGER_RPC_PORT: 6123
-      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 4
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 2
       FLINK_PROPERTIES: |
-        state.backend: filesystem
-        state.checkpoints.dir: file:///tmp/flink-checkpoints
-        state.savepoints.dir: file:///tmp/flink-savepoints
-        taskmanager.memory.process.size: 4096m
-        taskmanager.memory.managed.fraction: 0.4
+        # ── State Backend: RocksDB with local checkpoint storage ──────────────────
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: s3://cadqstream-checkpoints/flink/checkpoints
+        state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
+        state.checkpoints.num-retained: 3
+        # ── S3A / MinIO credentials ──────────────────────────────────────────────
+        s3.access-key: minioadmin
+        s3.secret-key: minioadmin123
+        s3.endpoint: http://minio:9000
+        s3.path.style.access: true
+        state.backend.rocksdb.memory.managed: true
+        state.backend.rocksdb.block.cache-size: 512mb
+        state.backend.rocksdb.writebuffer.size: 64mb
+        state.backend.rocksdb.writebuffer.count: 3
+        # ── TaskManager resources ──────────────────────────────────────────────
+        taskmanager.memory.process.size: 6144m
+        taskmanager.memory.managed.fraction: 0.5
         metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
         metrics.reporter.prom.port: 9249
         metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
-        parallelism.default: 4
+        parallelism.default: 2
         kafka.bootstrap.servers: kafka:9092
-        jdbc.connection.max-retry-timeout: 60s
+        rest.address: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      PGBOUNCER_HOST: pgbouncer
-      PGBOUNCER_PORT: "5432"
-      POSTGRES_DB: dq_pipeline
-      POSTGRES_USER: cadqstream
-      POSTGRES_PASSWORD: cadqstream123
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_PATH_STYLE_ACCESS: "true"
       FLINK_ENV: production
-      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e
     volumes:
       - flink-taskmanager-log:/opt/flink/log
-      - flink-taskmanager-data:/tmp
-      - C:/proj/ldt/src:/opt/flink/e2e/src:ro
-      - C:/proj/ldt/scripts:/opt/flink/e2e/scripts:ro
+      - flink-checkpoints:/opt/flink/checkpoints
     networks:
       - cadqstream-net
     deploy:
@@ -534,7 +433,7 @@ services:
     restart: unless-stopped
     command: taskmanager
     mem_limit: 4g
-    shm_size: 512m
+    shm_size: 256m
 
   flink-init:
     image: ldt-flink:1.17.1-py
@@ -547,29 +446,87 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_started
-      postgres:
-        condition: service_healthy
     networks:
       - cadqstream-net
-    restart: "no"
+    restart: "on-failure"
     entrypoint: ["/bin/bash", "/scripts/flink-init.sh"]
     volumes:
       - ./flink/flink-init.sh:/scripts/flink-init.sh:ro
-      - C:/proj/ldt/src:/opt/flink/e2e/src:ro
-      - C:/proj/ldt/deployment/scripts:/opt/flink/e2e/scripts:ro
     environment:
       FLINK_REST: http://flink-jobmanager:8081
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      PGBOUNCER_HOST: pgbouncer
-      PGBOUNCER_PORT: "5432"
-      POSTGRES_DB: dq_pipeline
-      POSTGRES_USER: cadqstream
-      POSTGRES_PASSWORD: cadqstream123
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin123
       FLINK_ENV: production
-      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e
+
+  # =============================================================================
+  # LAYER 4b: ML Service — FastAPI for IEC strategy execution
+  # Executes IEC strategies from action-replay-worker:
+  #   POST /api/strategy/adjust_threshold
+  #   POST /api/strategy/retrain_model
+  #   POST /api/strategy/switch_model
+  # =============================================================================
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: ldt-ml-service
+    hostname: ml-service
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin123
+      AWS_DEFAULT_REGION: us-east-1
+      MINIO_ENDPOINT: minio:9000
+    volumes:
+      - ml-models:/models
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # =============================================================================
+  # LAYER 4c: Action Replay Worker — retries failed IEC actions
+  # Consumes from: iec-action-replay
+  # Executes via: ml-service:8000
+  # DLQ: iec-action-dlq after 10 retries
+  # =============================================================================
+
+  action-replay-worker:
+    build:
+      context: ./action-replay-worker
+      dockerfile: Dockerfile
+    container_name: ldt-action-replay-worker
+    hostname: action-replay-worker
+    depends_on:
+      kafka:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
 
   # =============================================================================
   # LAYER 5: ML Platform
@@ -591,7 +548,9 @@ services:
       AWS_ACCESS_KEY_ID: minioadmin
       AWS_SECRET_ACCESS_KEY: minioadmin123
       AWS_DEFAULT_REGION: us-east-1
-      MLFLOW_ARTIFACT_ROOT: s3://mlflow-artifacts/
+      AWS_S3_ENDPOINT_URL: http://minio:9000
+      AWS_S3_PATH_STYLE_ACCESS: "true"
+      MLFLOW_ARTIFACT_ROOT: s3://cadqstream-checkpoints/mlflow-artifacts/
       MLFLOW_SERVER_FILESYSTEM_S3_IGNORE_ENVVARS: "true"
     ports:
       - "5000:5000"
@@ -604,14 +563,46 @@ services:
       mlflow server
       --host 0.0.0.0
       --port 5000
-      --default-artifact-root s3://mlflow-artifacts/
-      --artifacts-destination s3://mlflow-artifacts/
+      --default-artifact-root s3://cadqstream-checkpoints/mlflow-artifacts/
+      --artifacts-destination s3://cadqstream-checkpoints/mlflow-artifacts/
       --workers 2
     deploy:
       resources:
         limits:
           cpus: "0.5"
-          memory: 1G
+          memory: 2G
+
+  # MLflow Prometheus Metrics Exporter
+  # MLflow doesn't expose /metrics natively, so we use a sidecar that:
+  # 1. Scrapes MLflow's tracking API to get experiment/run metrics
+  # 2. Exposes them in Prometheus format at :9251/metrics
+  mlflow-exporter:
+    build:
+      context: ./mlflow
+      dockerfile: Dockerfile.mlflow-exporter
+    container_name: ldt-mlflow-exporter
+    hostname: mlflow-exporter
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9251/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+    ports:
+      - "9251:9251"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.2"
+          memory: 256M
 
   # =============================================================================
   # LAYER 6: Observability
@@ -630,8 +621,9 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/alert-rules:/etc/prometheus/alert-rules:ro
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert-rules:/etc/prometheus/alert-rules
+      - ./prometheus/rules:/etc/prometheus/rules
       - prometheus-data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -675,9 +667,10 @@ services:
       - "3000:3000"
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/datasources:/etc/grafana/datasources:ro
-      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/dashboards:/etc/grafana/dashboards
+      - ./grafana/provisioning/datasources/prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
     depends_on:
       prometheus:
         condition: service_healthy
@@ -733,8 +726,8 @@ services:
 
   cadqstream-metrics:
     build:
-      context: .
-      dockerfile: cadqstream-metrics/Dockerfile
+      context: ./cadqstream-metrics
+      dockerfile: Dockerfile
     container_name: ldt-cadqstream-metrics
     hostname: cadqstream-metrics
     healthcheck:
@@ -758,6 +751,36 @@ services:
           memory: 128M
 
   # =============================================================================
+  # LAYER 6b: Stats Writer — aggregates metrics and writes pipeline_stats to MinIO
+  # =============================================================================
+
+  stats-writer:
+    build:
+      context: ./stats-writer
+      dockerfile: Dockerfile
+    container_name: ldt-stats-writer
+    hostname: stats-writer
+    depends_on:
+      cadqstream-metrics:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+      METRICS_URL: http://cadqstream-metrics:9250/metrics
+      INTERVAL_SECONDS: "60"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 128M
+
+  # =============================================================================
   # LAYER 7: Data Producer (for demo/testing)
   # =============================================================================
 
@@ -772,9 +795,9 @@ services:
         condition: service_healthy
     networks:
       - cadqstream-net
-    restart: "no"
-    entrypoint: ["python3", "/app/fast_producer.py"]
-    command: ["100000", "kafka:9092", "taxi-nyc-raw"]
-    volumes:
-      - ./kafka/fast_producer.py:/app/fast_producer.py:ro
-
+    restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M

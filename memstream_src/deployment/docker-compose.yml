@@ -1,0 +1,534 @@
+# =============================================================================
+# CA-DQStream + MemStream v5 - Complete Deployment
+#
+# Architecture: 4-Layer Streaming Pipeline
+# - Layer 1: Baseline Validation (Parse, Dedup, Schema)
+# - Layer 2A: Canary Rules (7 static rules)
+# - Layer 2B: MemStream ML (Autoencoder + Memory)
+# - Layer 3: Voting Ensemble
+# - Layer 4: IEC (Intelligent Evolution Controller)
+#
+# Storage: MinIO only
+# Message Queue: Kafka
+# Streaming: Apache Flink
+# Observability: Prometheus + Grafana
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # KAFKA CLUSTER
+  # ===========================================================================
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: cadqstream-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+    ports:
+      - "2181:2181"
+    networks:
+      - cadqstream-net
+    volumes:
+      - cadqstream-zookeeper-data:/var/lib/zookeeper/data
+    resource_limits:
+      cpus: "0.5"
+      memory: 512M
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: cadqstream-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 4
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_COMPRESSION_TYPE: lz4
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    networks:
+      - cadqstream-net
+    volumes:
+      - cadqstream-kafka-data:/var/lib/kafka/data
+    resource_limits:
+      cpus: "2"
+      memory: 4G
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    restart: unless-stopped
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container_name: cadqstream-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8082:8081"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: cadqstream-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    ports:
+      - "8080:8080"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: cadqstream-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '-c']
+    command: |
+      "
+      # Wait for Kafka to be ready
+      echo 'Waiting for Kafka...'
+      cub kafka-ready -b kafka:9092 1 40
+
+      # Create topics
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic taxi-nyc-raw --partitions 4 --replication-factor 1 --config retention.ms=604800000
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic dq-stream-processed --partitions 4 --replication-factor 1 --config retention.ms=604800000
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic dq-stream-anomalies --partitions 4 --replication-factor 1 --config retention.ms=2592000000 --config cleanup.policy=compact
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic dq-meta-stream --partitions 4 --replication-factor 1 --config retention.ms=604800000
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic dq-hard-rule-violations --partitions 4 --replication-factor 1 --config retention.ms=2592000000 --config cleanup.policy=compact
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic iec-action-replay --partitions 1 --replication-factor 1 --config retention.ms=86400000
+      /opt/kafka/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --topic dq-dlq --partitions 1 --replication-factor 1 --config retention.ms=604800000
+
+      echo 'Topics created successfully'
+      /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server kafka:9092
+      "
+    networks:
+      - cadqstream-net
+    restart: "no"
+
+  # ===========================================================================
+  # TAXI DATA PRODUCER
+  # ===========================================================================
+  taxi-producer:
+    image: python:3.12-slim
+    container_name: cadqstream-taxi-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: |
+      bash -c "
+        pip install kafka-python pandas pyarrow pyyaml && \
+        python /producer/producer.py
+      "
+    volumes:
+      - ${DATA_DIR:-./data}:/data:ro
+      - ./kafka/producer.py:/producer/producer.py:ro
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: taxi-nyc-raw
+      DATA_PATH: /data
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  # ===========================================================================
+  # FLINK CLUSTER
+  # ===========================================================================
+  flink-jobmanager:
+    image: flink:1.18.1-scala_2.12-java11
+    container_name: cadqstream-jobmanager
+    ports:
+      - "8081:8081"
+      - "6123:6123"
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      FLINK_PROPERTIES: |
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 4
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: s3://cadqstream-checkpoints/flink/checkpoints
+        state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
+        s3.access-key: minioadmin
+        s3.secret-key: ${MINIO_SECRET_KEY:-minioadmin}
+        s3.endpoint: http://minio:9000
+        s3.path.style.access: true
+        high-availability: org.apache.flink.kubernetes.highavailability.KubernetesHaServicesFactory
+        high-availability.storageDir: s3://cadqstream-checkpoints/flink/ha
+        execution.checkpointing.interval: 45s
+        execution.checkpointing.mode: EXACTLY_ONCE
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - cadqstream-flink-jm-data:/opt/flink/data
+      - ./models:/models:ro
+    networks:
+      - cadqstream-net
+    resource_limits:
+      cpus: "1.5"
+      memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/overview"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  flink-taskmanager:
+    image: flink:1.18.1-scala_2.12-java11
+    container_name: cadqstream-taskmanager
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    ports:
+      - "6122:6122"
+    environment:
+      TASK_MANAGER_RPC_ADDRESS: flink-taskmanager
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      FLINK_PROPERTIES: |
+        taskmanager.rpc.address: flink-taskmanager
+        taskmanager.numberOfTaskSlots: 4
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: s3://cadqstream-checkpoints/flink/checkpoints
+        s3.access-key: minioadmin
+        s3.secret-key: ${MINIO_SECRET_KEY:-minioadmin}
+        s3.endpoint: http://minio:9000
+        s3.path.style.access: true
+        execution.checkpointing.interval: 45s
+        restart-strategy: exponential-delay
+        restart-strategy.exponential-delay.initial-restart-delay: 1000
+        restart-strategy.exponential-delay.max-restart-delay: 60000
+        restart-strategy.exponential-delay.back-off-multiplier: 2.0
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    volumes:
+      - cadqstream-flink-tm-data:/opt/flink/data
+      - ./models:/models:ro
+    networks:
+      - cadqstream-net
+    resource_limits:
+      cpus: "4"
+      memory: 8G
+    shm_size: 1g
+    restart: unless-stopped
+
+  flink-init:
+    image: flink:1.18.1-scala_2.12-java11
+    container_name: cadqstream-flink-init
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '-c']
+    command: |
+      "
+      # Wait for JobManager REST API
+      echo 'Waiting for Flink JobManager...'
+      until curl -sf http://flink-jobmanager:8081/overview; do sleep 5; done
+
+      # Submit Flink job
+      echo 'Submitting Flink job...'
+      # kubectl apply -f /jobs/cadqstream-job.yaml
+      # HOAC: flink run -d /jobs/cadqstream.jar
+      echo 'Flink job submission placeholder'
+      echo 'JobManager is ready at http://flink-jobmanager:8081'
+      "
+    networks:
+      - cadqstream-net
+    restart: "no"
+
+  # ===========================================================================
+  # REDIS (for IEC beta communication)
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: cadqstream-redis
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
+    networks:
+      - cadqstream-net
+    volumes:
+      - cadqstream-redis-data:/data
+    resource_limits:
+      cpus: "0.5"
+      memory: 512M
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ===========================================================================
+  # OBJECT STORAGE (MinIO)
+  # ===========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: cadqstream-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - cadqstream-minio-data:/data
+    networks:
+      - cadqstream-net
+    resource_limits:
+      cpus: "1.5"
+      memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: cadqstream-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ['/bin/sh', '-c']
+    command: |
+      "
+      # Wait for MinIO to be ready
+      sleep 10
+
+      # Configure MinIO client
+      mc alias set local http://minio:9000 minioadmin ${MINIO_SECRET_KEY:-minioadmin}
+
+      # Create buckets if they don't exist
+      mc mb local/cadqstream-raw --ignore-existing
+      mc mb local/cadqstream-violations --ignore-existing
+      mc mb local/cadqstream-anomalies --ignore-existing
+      mc mb local/cadqstream-metrics --ignore-existing
+      mc mb local/cadqstream-drift --ignore-existing
+      mc mb local/cadqstream-checkpoints --ignore-existing
+      mc mb local/cadqstream-models --ignore-existing
+      mc mb local/cadqstream-dlq --ignore-existing
+
+      # Set lifecycle policies (30-day retention for metrics)
+      mc ilm import local/cadqstream-metrics --json '{"Rules":[{"ID":"metrics-retention","Status":"Enabled","Expiration":{"Days":30}}]}'
+      mc ilm import local/cadqstream-drift --json '{"Rules":[{"ID":"drift-retention","Status":"Enabled","Expiration":{"Days":30}}]}'
+
+      # Set public policy for models bucket
+      mc anonymous set download local/cadqstream-models
+
+      echo 'MinIO buckets created successfully'
+      mc ls local/
+      "
+    networks:
+      - cadqstream-net
+    restart: "no"
+
+  # ===========================================================================
+  # ML SERVICE
+  # ===========================================================================
+  ml-service:
+    image: cadqstream/ml-service:latest
+    container_name: cadqstream-ml-service
+    build:
+      context: ..
+      dockerfile: deployment/ml-service/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      MODEL_PATH: /models/memstream_ae.pt
+      MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    volumes:
+      - ./models:/models:ro
+    networks:
+      - cadqstream-net
+    resource_limits:
+      cpus: "1"
+      memory: 2G
+    restart: unless-stopped
+
+  # ===========================================================================
+  # OBSERVABILITY
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cadqstream-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/alert-rules:/etc/prometheus/rules:ro
+      - cadqstream-prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    networks:
+      - cadqstream-net
+    resource_limits:
+      cpus: "0.5"
+      memory: 2G
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cadqstream-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: publicDashboards
+    volumes:
+      - cadqstream-grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - cadqstream-net
+    resource_limits:
+      cpus: "0.5"
+      memory: 1G
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  cadqstream-metrics:
+    image: cadqstream/metrics:latest
+    container_name: cadqstream-metrics
+    build:
+      context: ..
+      dockerfile: deployment/cadqstream-metrics/Dockerfile
+    ports:
+      - "9250:9250"
+      - "9249:9249"
+    environment:
+      METRICS_PORT: 9250
+      PROMETHEUS_PORT: 9249
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: cadqstream-node-exporter
+    ports:
+      - "9100:9100"
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: cadqstream-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - cadqstream-alertmanager-data:/alertmanager
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:latest
+    container_name: cadqstream-kafka-exporter
+    ports:
+      - "9308:9308"
+    command:
+      - --kafka.server=kafka:9092
+      - --web.listen-address=:9308
+      - --log.level=info
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS & VOLUMES
+# =============================================================================
+
+networks:
+  cadqstream-net:
+    driver: bridge
+
+volumes:
+  cadqstream-zookeeper-data:
+  cadqstream-kafka-data:
+  cadqstream-flink-jm-data:
+  cadqstream-flink-tm-data:
+  cadqstream-redis-data:
+  cadqstream-minio-data:
+  cadqstream-prometheus-data:
+  cadqstream-alertmanager-data:
+  cadqstream-grafana-data:

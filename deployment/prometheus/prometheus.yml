@@ -17,6 +17,7 @@ alerting:
 
 rule_files:
   - "/etc/prometheus/alert-rules/*.yml"
+  - "/etc/prometheus/rules/*.yaml"
 
 scrape_configs:
   # ── Prometheus Self-Monitoring ──────────────────────────────────────────────
@@ -39,16 +40,6 @@ scrape_configs:
         target_label: instance
         replacement: 'cadqstream-host'
 
-  # ── PostgreSQL Exporter ────────────────────────────────────────────────────
-  - job_name: 'postgres-exporter'
-    static_configs:
-      - targets: ['postgres-exporter:9187']
-    metrics_path: /metrics
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'postgres'
-
   # ── Kafka Exporter ─────────────────────────────────────────────────────────
   - job_name: 'kafka-exporter'
     static_configs:
@@ -60,6 +51,8 @@ scrape_configs:
         replacement: 'kafka'
 
   # ── Flink JobManager ────────────────────────────────────────────────────────
+  # Exposes both built-in Flink metrics AND custom cadqstream_* counters
+  # registered via runtime_context.get_metrics_group() in MapFunctions.
   - job_name: 'flink-jobmanager'
     static_configs:
       - targets: ['flink-jobmanager:9248']
@@ -69,7 +62,9 @@ scrape_configs:
         target_label: instance
         replacement: 'flink-jobmanager'
 
-  # ── Flink TaskManager(s) ───────────────────────────────────────────────────
+  # ── Flink TaskManager ────────────────────────────────────────────────────────
+  # TaskManager metrics are on a separate port from the JobManager.
+  # Used by memstream-alerts.yaml rules (e.g. FlinkTaskManagerDown).
   - job_name: 'flink-taskmanager'
     static_configs:
       - targets: ['flink-taskmanager:9249']
@@ -80,37 +75,47 @@ scrape_configs:
         replacement: 'flink-taskmanager'
 
   # ── MinIO ──────────────────────────────────────────────────────────────────
+  # MinIO exposes Prometheus metrics on the main API port (9000)
   - job_name: 'minio'
     static_configs:
-      - targets: ['minio:9096']
-    metrics_path: /minio/v2/metrics/point
+      - targets: ['minio:9000']
+    metrics_path: /minio/v2/metrics/cluster
+    scrape_interval: 30s
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'minio'
 
-  # ── MLflow ─────────────────────────────────────────────────────────────────
+  # ── MLflow Exporter ─────────────────────────────────────────────────────────
+  # Note: MLflow doesn't expose /metrics natively, so we scrape the mlflow-exporter
+  # sidecar which aggregates MLflow metrics from the tracking API
   - job_name: 'mlflow'
     static_configs:
-      - targets: ['mlflow:5000']
+      - targets: ['mlflow-exporter:9251']
     metrics_path: /metrics
+    scrape_interval: 30s
+    scrape_timeout: 15s
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
         replacement: 'mlflow'
 
-  # ── PgBouncer Exporter ─────────────────────────────────────────────────────
-  - job_name: 'pgbouncer'
+  # ── ML Service (FastAPI) ───────────────────────────────────────────────────
+  # Custom ML service metrics (inference latency, request counts, model load time)
+  - job_name: 'ml-service'
     static_configs:
-      - targets: ['pgbouncer-exporter:9637']
+      - targets: ['ml-service:8000']
     metrics_path: /metrics
     scrape_interval: 30s
+    scrape_timeout: 15s
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
-        replacement: 'pgbouncer'
+        replacement: 'ml-service'
 
   # Cadqstream Pipeline Application Metrics (custom cadqstream_* metrics)
+  # Scraped from cadqstream-metrics service (port 9250) which aggregates
+  # HTTP POSTs from the Flink pipeline and exposes them for Prometheus.
   - job_name: 'cadqstream-app'
     static_configs:
       - targets: ['cadqstream-metrics:9250']

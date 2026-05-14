@@ -99,16 +99,16 @@ DRIFT_SCENARIOS = [
         optimal_strategy=3  # switch_model
     ),
 
-    # Scenario 5: Transient spike → do_nothing (wait for stabilization)
+    # Scenario 5: Transient spike → adjust_threshold (needs response even if temporary)
     DriftScenario(
         name='transient_spike',
         volume_range=(1100, 1300),         # Temporary volume spike
         null_rate_range=(0.00, 0.03),
         violation_rate_range=(0.02, 0.06),
-        anomaly_rate_range=(0.08, 0.15),   # Moderate spike
-        avg_score_range=(0.45, 0.55),
+        anomaly_rate_range=(0.08, 0.15),  # Moderate spike in anomaly rate
+        avg_score_range=(0.45, 0.55),    # avg_score > 0.5 means model uncertain
         delta_score_range=(0.05, 0.12),
-        optimal_strategy=0  # do_nothing (transient)
+        optimal_strategy=1  # adjust_threshold — system should respond even to temporary spikes
     ),
 
     # Scenario 6: Gradual degradation → adjust_threshold
@@ -122,6 +122,19 @@ DRIFT_SCENARIOS = [
         delta_score_range=(0.08, 0.18),
         optimal_strategy=1  # adjust_threshold
     ),
+
+    # Scenario 7: Abrupt severe drift → switch_model
+    # Extreme case: sudden change that makes model completely invalid
+    DriftScenario(
+        name='abrupt_severe_drift',
+        volume_range=(400, 700),           # Sharp volume drop
+        null_rate_range=(0.10, 0.25),    # Many nulls — data quality issue
+        violation_rate_range=(0.20, 0.40), # Severe violations
+        anomaly_rate_range=(0.40, 0.70),  # Very high anomaly rate
+        avg_score_range=(0.80, 0.99),    # Scores near maximum — model overwhelmed
+        delta_score_range=(0.40, 0.70),  # Very large delta
+        optimal_strategy=3  # switch_model — model cannot recover
+    ),
 ]
 
 
@@ -131,14 +144,24 @@ def generate_sample(scenario: DriftScenario) -> dict:
     Returns:
         dict with meta-features (6D) and strategy label
     """
+    # Generate base features
+    violation_rate = np.random.uniform(*scenario.violation_rate_range)
+    anomaly_rate = np.random.uniform(*scenario.anomaly_rate_range)
+    avg_score = np.random.uniform(*scenario.avg_score_range)
+
+    # Compute delta_score per thesis equation (5.18):
+    # delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + epsilon)
+    epsilon = 1e-6
+    delta_score = abs(violation_rate - anomaly_rate) / (violation_rate + anomaly_rate + epsilon)
+
     return {
         # Meta-features (6D)
         'volume': np.random.uniform(*scenario.volume_range),
         'null_rate': np.random.uniform(*scenario.null_rate_range),
-        'violation_rate': np.random.uniform(*scenario.violation_rate_range),
-        'anomaly_rate': np.random.uniform(*scenario.anomaly_rate_range),
-        'avg_score': np.random.uniform(*scenario.avg_score_range),
-        'delta_score': np.random.uniform(*scenario.delta_score_range),
+        'violation_rate': violation_rate,
+        'anomaly_rate': anomaly_rate,
+        'avg_anomaly_score': avg_score,
+        'delta_score': delta_score,  # Computed from violation_rate and anomaly_rate
 
         # Label
         'strategy': scenario.optimal_strategy,
@@ -180,7 +203,7 @@ def generate_meter_training_data(n_samples: int = 1000, output_path: Path = None
             scenario_samples += 1
             remainder -= 1
 
-        print(f"\n  {scenario.name:.<30} {scenario_samples:>4} samples → strategy={scenario.optimal_strategy}")
+        print(f"\n  {scenario.name:<30} {scenario_samples:>4} samples -> strategy={scenario.optimal_strategy}")
 
         for _ in range(scenario_samples):
             sample = generate_sample(scenario)
@@ -198,7 +221,7 @@ def generate_meter_training_data(n_samples: int = 1000, output_path: Path = None
     print("="*80)
 
     print("\nMeta-feature ranges:")
-    for col in ['volume', 'null_rate', 'violation_rate', 'anomaly_rate', 'avg_score', 'delta_score']:
+    for col in ['volume', 'null_rate', 'violation_rate', 'anomaly_rate', 'avg_anomaly_score', 'delta_score']:
         print(f"  {col:.<25} [{df[col].min():>8.4f}, {df[col].max():>8.4f}]")
 
     print("\nStrategy distribution:")
@@ -207,14 +230,15 @@ def generate_meter_training_data(n_samples: int = 1000, output_path: Path = None
         count = (df['strategy'] == strategy_id).sum()
         print(f"  {strategy_id}: {name:.<25} {count:>6} ({count/len(df)*100:>5.1f}%)")
 
-    # Save
+    # Save as CSV (compatible with train_meter.py loading from data/)
     if output_path:
         print(f"\nSaving to: {output_path}")
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        df.to_parquet(output_path, index=False)
+        output_path = output_path.with_suffix('.csv')
+        df.to_csv(output_path, index=False)
 
         print("\n" + "="*80)
-        print("✅ METER TRAINING DATA GENERATED")
+        print("[OK] METER TRAINING DATA GENERATED")
         print("="*80)
         print(f"Output: {output_path}")
         print(f"Samples: {len(df):,}")

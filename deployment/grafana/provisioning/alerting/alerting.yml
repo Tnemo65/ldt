@@ -10,9 +10,10 @@ contactPoints:
     name: "no-op"
     receivers:
       - uid: no-op-receiver
-        type: "direct"
+        type: "webhook"
         settings:
           url: "http://127.0.0.1:9999/noop"
+          httpMethod: POST
 
 policies:
   - orgId: 1

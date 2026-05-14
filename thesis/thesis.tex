@@ -157,7 +157,7 @@ This thesis presents \textbf{CA-DQStream}, a framework for real-time streaming d
 
 \begin{enumerate}
     \item \textbf{Four-stage processing pipeline:} (1) Schema Validation with deterministic NULL checks and Flink KeyedState deduplication; (2) Business Rules with six deterministic validity checks; (3) Isolation Forest anomaly detection for multivariate outliers that rules cannot express; and (4) ADWIN drift detection on quality meta-streams for self-monitoring.
-    \item \textbf{Monitoring and storage layer:} PostgreSQL persists cleaned data, dirty data, and alerts; Prometheus collects metrics from all pipeline components; Grafana provides real-time dashboards for operators to visualize violation rates, anomaly scores, and drift alerts.
+    \item \textbf{Monitoring and storage layer:} MinIO (S3-compatible object storage) persists cleaned data, dirty data, and alerts in Parquet format; Prometheus collects metrics from all pipeline components; Grafana provides real-time dashboards for operators to visualize violation rates, anomaly scores, and drift alerts.
 \end{enumerate}
 
 Together, the pipeline processes incoming records in real time while the monitoring layer provides full observability into pipeline health, data quality metrics, and drift events.

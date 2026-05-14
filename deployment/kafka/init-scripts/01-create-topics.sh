@@ -54,13 +54,29 @@ kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --config retention.ms=86400000 \
     --config cleanup.policy=delete
 
+# IEC Dead Letter Queue: failed IEC actions after max retries
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic iec-action-dlq \
+    --partitions 1 --replication-factor 1 \
+    --config retention.ms=604800000 \
+    --config cleanup.policy=compact
+
+# Clean canary records output topic
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic dq-stream-processed-clean \
+    --partitions 4 --replication-factor 1 \
+    --config retention.ms=604800000 \
+    --config cleanup.policy=delete
+
 # Pipeline metrics topic
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic dq-metrics \
     --partitions 1 --replication-factor 1 \
     --config retention.ms=2592000000 \
-    --config cleanup.policy=compact
+    --config cleanup.policy=delete
 
 # Schema violations topic
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
@@ -68,7 +84,7 @@ kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --topic dq-hard-rule-violations \
     --partitions 4 --replication-factor 1 \
     --config retention.ms=2592000000 \
-    --config cleanup.policy=compact
+    --config cleanup.policy=delete
 
 # ML model broadcast topic (compacted for hot-swappable model updates)
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \

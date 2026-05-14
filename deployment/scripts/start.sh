@@ -2,6 +2,7 @@
 # =============================================================================
 # CA-DQStream Production Deployment - Startup Script
 # Full reset, build, and deployment of the complete streaming pipeline
+# Storage: MinIO only
 # =============================================================================
 
 set -e
@@ -27,6 +28,7 @@ echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════════════${NC}"
 echo -e "${CYAN}  CA-DQStream Production Deployment${NC}"
 echo -e "${CYAN}  4-Layer Streaming Pipeline on Apache Flink 1.17.1${NC}"
+echo -e "${CYAN}  Storage: MinIO only${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════════════${NC}"
 echo ""
 
@@ -62,8 +64,8 @@ log_ok "Docker reset complete."
 # STEP 0b: Verify ports are free
 # ═══════════════════════════════════════════════════════════════════════════
 log_step "STEP 0b: Verifying required ports are available..."
-REQUIRED_PORTS=(2181 9092 8081 8080 8082 5432 6432 3000 9090 9100 9187 9308 9000 9001 5000)
-PORT_NAMES=("Zookeeper" "Kafka" "Flink UI" "Kafka UI" "Schema Registry" "PostgreSQL" "PgBouncer" "Grafana" "Prometheus" "Node Exporter" "Postgres Exporter" "Kafka Exporter" "MinIO API" "MinIO Console" "MLflow")
+REQUIRED_PORTS=(2181 9092 8081 8080 8082 3000 9090 9100 9308 9000 9001 5000)
+PORT_NAMES=("Zookeeper" "Kafka" "Flink UI" "Kafka UI" "Schema Registry" "Grafana" "Prometheus" "Node Exporter" "Kafka Exporter" "MinIO API" "MinIO Console" "MLflow")
 
 for i in "${!REQUIRED_PORTS[@]}"; do
     port="${REQUIRED_PORTS[$i]}"
@@ -111,13 +113,11 @@ log_step "STEP 2: Building custom Flink image (ldt-flink:1.17.1-py)"
 if [ -f "$DEPLOYMENT_DIR/flink/Dockerfile" ]; then
     log_info "Flink Dockerfile found at $DEPLOYMENT_DIR/flink/Dockerfile"
 
-    # Check if connector JARs exist
     FLINK_LIB="$DEPLOYMENT_DIR/flink"
     REQUIRED_JARS=(
         "flink-connector-kafka-1.17.1.jar"
         "flink-connector-jdbc-3.1.1-1.17.jar"
         "kafka-clients-3.5.1.jar"
-        "postgresql-42.6.0.jar"
     )
 
     for jar in "${REQUIRED_JARS[@]}"; do
@@ -156,12 +156,12 @@ docker compose -f "$DEPLOYMENT_DIR/docker-compose.yml" up -d zookeeper kafka sch
 log_info "Infrastructure services started (Zookeeper, Kafka, Schema Registry)"
 
 # ═══════════════════════════════════════════════════════════════════════════
-# STEP 5: Start Database & Storage Services
+# STEP 5: Start Storage Services (MinIO only)
 # ═══════════════════════════════════════════════════════════════════════════
-log_step "STEP 5: Starting database and storage services"
+log_step "STEP 5: Starting storage services (MinIO only)"
 
-docker compose -f "$DEPLOYMENT_DIR/docker-compose.yml" up -d postgres pgbouncer minio
-log_info "Database and storage services started (Postgres, PgBouncer, MinIO)"
+docker compose -f "$DEPLOYMENT_DIR/docker-compose.yml" up -d minio
+log_info "Storage services started (MinIO)"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 6: Wait for Services to be Healthy
@@ -185,21 +185,6 @@ while ! docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --l
 done
 echo ""
 log_ok "Kafka is ready"
-
-log_info "Waiting for PostgreSQL (postgres:5432)..."
-wait_for_elapsed=0
-while ! docker exec ldt-postgres pg_isready -U cadqstream -d dq_pipeline &>/dev/null; do
-    sleep $wait_for_interval
-    wait_for_elapsed=$((wait_for_elapsed + wait_for_interval))
-    echo -ne "\r${BLUE}[INFO]${NC}  PostgreSQL not ready (${wait_for_elapsed}s/${wait_for_timeout}s)... "
-    if [ $wait_for_elapsed -ge $wait_for_timeout ]; then
-        echo ""
-        log_err "PostgreSQL did not become ready within ${wait_for_timeout}s"
-        exit 1
-    fi
-done
-echo ""
-log_ok "PostgreSQL is ready"
 
 log_info "Waiting for MinIO (minio:9000)..."
 wait_for_elapsed=0
@@ -277,10 +262,9 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════
 log_step "STEP 10: Starting monitoring stack"
 
-docker compose -f "$DEPLOYMENT_DIR/docker-compose.yml" up -d prometheus grafana kafka-exporter postgres-exporter node-exporter
+docker compose -f "$DEPLOYMENT_DIR/docker-compose.yml" up -d prometheus grafana kafka-exporter node-exporter
 log_info "Monitoring services started (Prometheus, Grafana, exporters)"
 
-# Wait for monitoring to be ready
 log_info "Waiting for Prometheus..."
 wait_for_elapsed=0
 while ! curl -sf http://localhost:9090/-/healthy &>/dev/null; do
@@ -317,6 +301,7 @@ log_step "STEP 11: Deployment verification"
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}  CA-DQStream Deployment Complete!${NC}"
+echo -e "${GREEN}  MinIO-only storage${NC}"
 echo -e "${GREEN}═══════════════════════════════════════════════════════════════════════════════${NC}"
 echo ""
 echo "  ${CYAN}Service${NC}              ${CYAN}URL / Endpoint${NC}                              ${CYAN}Credentials${NC}"
@@ -332,13 +317,15 @@ echo "  ${CYAN}Data Connections${NC}"
 echo "  ─────────────────────────────────────────────────────────────────────────────────"
 echo "  Kafka PLAINTEXT      localhost:9092"
 echo "  Schema Registry      localhost:8082"
-echo "  PostgreSQL           localhost:5432 (cadqstream / cadqstream123)"
-echo "  PgBouncer           localhost:6432 (pooled connection)"
 echo "  MinIO API            localhost:9000"
 echo ""
 echo "  ${CYAN}Kafka Topics${NC}"
 echo "  ─────────────────────────────────────────────────────────────────────────────────"
 docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null | sed 's/^/  /' || echo "  (not available)"
+echo ""
+echo "  ${CYAN}MinIO Buckets${NC}"
+echo "  ─────────────────────────────────────────────────────────────────────────────────"
+docker exec ldt-minio mc ls local/ 2>/dev/null | sed 's/^/  /' || echo "  (not available)"
 echo ""
 echo "  ${CYAN}Running Containers${NC}"
 echo "  ─────────────────────────────────────────────────────────────────────────────────"

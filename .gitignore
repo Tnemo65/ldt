@@ -67,6 +67,7 @@ repo/
 figure/
 
 # Docker
+.env
 .env.local
 
 # Flink

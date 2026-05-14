@@ -5,7 +5,7 @@ set "DEPLOYMENT_DIR=%~dp0.."
 
 echo.
 echo ================================================================
-echo   CA-DQStream - Health Check
+echo   CA-DQStream - Health Check (MinIO-only storage)
 echo ================================================================
 echo.
 
@@ -59,15 +59,8 @@ call :check_container ldt-kafka-ui "" "curl -s http://localhost:8080"
 call :check_container ldt-kafka-exporter "" "curl -s http://localhost:9308/metrics"
 echo.
 
-:: Database
-echo [Database]
-call :check_container ldt-postgres "" "docker exec ldt-postgres pg_isready -U cadqstream -d dq_pipeline"
-call :check_container ldt-pgbouncer "" ""
-call :check_container ldt-postgres-exporter "" "curl -s http://localhost:9187/metrics"
-echo.
-
-:: Storage
-echo [Storage]
+:: Storage (MinIO only)
+echo [Storage - MinIO Only]
 call :check_container ldt-minio "" "docker exec ldt-minio mc ready local"
 echo.
 
@@ -96,22 +89,10 @@ docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>nu
 if errorlevel 1 echo   ^(no topics found^)
 echo.
 
-:: Flink Jobs
-echo [Flink Jobs]
-curl -s http://localhost:8081/jobs 2>nul | findstr /C:"jobs" >nul
-if not errorlevel 1 (
-    for /f "tokens=*" %%j in ('curl -s http://localhost:8081/jobs 2^>nul') do (
-        echo   %%j
-    )
-) else (
-    echo   ^(could not query Flink^)
-)
-echo.
-
-:: PostgreSQL Tables
-echo [PostgreSQL Tables]
-docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) as raw_records FROM taxi_trips_raw;" 2>nul | findstr /v "cnt ROW" | findstr /r "[0-9]"
-docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "SELECT COUNT(*) as violations FROM schema_violations;" 2>nul | findstr /v "cnt ROW" | findstr /r "[0-9]"
+:: MinIO Buckets
+echo [MinIO Buckets]
+docker exec ldt-minio mc ls local/ 2>nul
+if errorlevel 1 echo   ^(could not list buckets^)
 echo.
 
 :: Summary

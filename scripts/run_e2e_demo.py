@@ -64,11 +64,6 @@ import os, sys, signal
 sys.path.insert(0, '/tmp')
 sys.path.insert(0, '/tmp/src')
 os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'ldt-kafka:9092'
-os.environ['POSTGRES_HOST'] = 'ldt-postgres'
-os.environ['POSTGRES_PORT'] = '5432'
-os.environ['POSTGRES_DB'] = 'dq_pipeline'
-os.environ['POSTGRES_USER'] = 'cadqstream'
-os.environ['POSTGRES_PASSWORD'] = 'cadqstream123'
 os.environ['PYTHONPATH'] = '/tmp:/tmp/src'
 
 from pyflink.datastream import StreamExecutionEnvironment, MapFunction, CheckpointingMode

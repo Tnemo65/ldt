@@ -3,7 +3,7 @@
 CA-DQStream Model Loader - Loads trained model from MinIO and publishes to Kafka.
 
 This script:
-1. Downloads model artifacts from MinIO (ml-models bucket)
+1. Downloads model artifacts from MinIO (cadqstream-checkpoints bucket)
 2. Reads the trained IsolationForest model, scaler, thresholds, and feature names
 3. Creates a JSON message with base64-encoded model bytes
 4. Publishes to Kafka topic 'if-model-updates' (compacted)
@@ -14,7 +14,7 @@ Usage:
 
 Environment:
   MINIO_ENDPOINT, MINIO_ACCESS_KEY, MINIO_SECRET_KEY (default: minio:9000 / minioadmin / minioadmin123)
-  MODEL_BUCKET (default: ml-models)
+  MODEL_BUCKET (default: cadqstream-checkpoints)
 
 MinIO artifact keys (from train_model.py):
   anomaly_detector_<version>.pkl    - trained IsolationForest model
@@ -74,7 +74,7 @@ def main():
     endpoint = os.getenv('MINIO_ENDPOINT', 'minio:9000')
     access_key = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
     secret_key = os.getenv('MINIO_SECRET_KEY', 'minioadmin123')
-    bucket = os.getenv('MODEL_BUCKET', 'ml-models')
+    bucket = os.getenv('MODEL_BUCKET', 'cadqstream-checkpoints')
 
     # Artifact keys MUST match train_model.py upload keys
     model_key = f'anomaly_detector_{args.version}.pkl'

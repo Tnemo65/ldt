@@ -1,8 +1,8 @@
 FROM python:3.10-slim
-
-RUN pip install --no-cache-dir kafka-python==2.0.2
-
 WORKDIR /app
-COPY fast_producer.py /app/fast_producer.py
-
-CMD ["python3", "/app/fast_producer.py", "100000", "kafka:9092", "taxi-nyc-raw"]
+RUN pip install --no-cache-dir kafka-python==2.0.2
+COPY anomaly_producer.py /app/anomaly_producer.py
+# Default: continuous mode with 8% anomaly rate
+# For drift testing: python anomaly_producer.py --mode drift_inject
+# For burst testing: python anomaly_producer.py --mode burst
+CMD ["python3", "/app/anomaly_producer.py", "--mode", "continuous", "--rate", "0.08", "--bootstrap", "kafka:9092", "--raw-topic", "taxi-nyc-raw"]

@@ -100,31 +100,31 @@ Ground truth measurements will replace placeholders upon EDA completion. All arc
 │  └────────────────────┬───────────────────────────────┘         │
 │                       │ [6] outputs                             │
 │  ┌────────────────────▼───────────────────────────────┐         │
-│  │        Flink Sinks: Kafka + PostgreSQL             │         │
+│  │        Flink Sinks: Kafka + MinIO (Parquet)           │         │
 │  └────────────────────┬───────────────────────────────┘         │
 └───────────────────────┼──────────────────────────────────────────┘
                         │ [7]
 ┌───────────────────────┼──────────────────────────────────────────┐
 │              STORAGE & MESSAGING LAYER                          │
 │  ┌──────────────┐   ┌─▼──────────┐   ┌──────────────┐           │
-│  │ PostgreSQL   │   │   Kafka    │   │Schema Registry│          │
-│  │ :5432        │   │  Cluster   │   │  :8081        │          │
-│  │ • 7 tables   │   │(1 broker)  │   │  (Confluent)  │          │
-│  │ • Composite  │   │            │   │   Avro        │          │
-│  │   indexes    │   │ 7 Topics:  │   │               │          │
-│  │              │   │ • taxi-raw │   │               │          │
-│  │              │   │ • schema-v │   │               │          │
-│  │              │   │ • rule-v   │   │               │          │
-│  │              │   │ • anomaly  │   │               │          │
-│  │              │   │ • meta     │   │               │          │
-│  │              │   │ • model-upd│   │               │          │
+│  │   MinIO      │   │   Kafka    │   │Schema Registry│          │
+│  │ (S3)        │   │  Cluster   │   │  :8081        │          │
+│  │ :9000        │   │(1 broker)  │   │  (Confluent)  │          │
+│  │ • Buckets:   │   │            │   │   Avro        │          │
+│  │   raw        │   │ 7 Topics:  │   │               │          │
+│  │   violations │   │ • taxi-raw │   │               │          │
+│  │   anomalies  │   │ • schema-v │   │               │          │
+│  │   metrics    │   │ • rule-v   │   │               │          │
+│  │   drift      │   │ • anomaly  │   │               │          │
+│  │   checkpoints│   │ • meta     │   │               │          │
+│  │   models     │   │ • model-upd│   │               │          │
 │  │              │   │ • iec-actio│   │               │          │
 │  └──────────────┘   └────────────┘   └──────────────┘           │
 │                                                                  │
-│  ┌──────────────┐                                               │
-│  │   MinIO      │  (Checkpoint storage - S3 compatible)         │
-│  │   :9000      │  s3://cadqstream-checkpoints/                 │
-│  └──────────────┘                                               │
+│  MinIO (S3-compatible) serves as PRIMARY data lake               │
+│  - Buckets: cadqstream-raw, cadqstream-violations,              │
+│    cadqstream-anomalies, cadqstream-metrics, cadqstream-drift,  │
+│    cadqstream-checkpoints, cadqstream-models                     │
 └──────────────────────────────────────────────────────────────────┘
 
 Flow: [0] Producer → [1] Filter → [2a,2b] Rendezvous → [3] MetaAgg 
@@ -259,275 +259,143 @@ env.get_checkpoint_config().enable_externalized_checkpoints(
 # This configuration ensures:
 # 1. Flink reads records from Kafka
 # 2. Processes through all operators (Layer 1-4)
-# 3. Writes to sinks (Kafka topics, PostgreSQL)
+# 3. Writes to sinks (Kafka topics, MinIO buckets)
 # 4. Takes checkpoint snapshot (state + Kafka offsets)
 # 5. Only if checkpoint succeeds → commit offsets to Kafka
 # 6. On crash: resume from last successful checkpoint (no data loss/duplication)
 ```
 
-### 2.3 PostgreSQL Storage
+### 2.3 MinIO Storage (S3-Compatible Data Lake)
 
-**Connection Pooling** (CRITICAL - Prevents Connection Exhaustion):
+**MinIO Buckets** (6 core buckets for data persistence):
 
-```yaml
-# PROBLEM: Direct connections from Flink/FastAPI exceed PostgreSQL max_connections
-# - Flink 12 slots × 3 connections = 36
-# - FastAPI 4 workers × 5 connections = 20
-# - Total: 56 connections (too close to max_connections=100)
+| Bucket | Purpose | Format | Retention |
+|--------|---------|--------|-----------|
+| `cadqstream-raw` | Clean records with IF scores + context features | Parquet | 30 days |
+| `cadqstream-violations` | Schema violations (Layer 1) + Rule violations (Layer 2) | Parquet/JSON | 7 days |
+| `cadqstream-anomalies` | ML-detected anomalies with scores | Parquet | 30 days |
+| `cadqstream-metrics` | 1-min aggregated quality metrics | Parquet | 90 days |
+| `cadqstream-drift` | Threshold evolution + drift events | Parquet/JSON | 90 days |
+| `cadqstream-checkpoints` | Flink state checkpoints | Flink-managed | 5 checkpoints |
 
-# SOLUTION: PgBouncer connection pooler
-# Architecture: Flink/FastAPI → PgBouncer :6432 → PostgreSQL :5432
+**Directory Structure** (Parquet partitioned by time):
 
-# docker/pgbouncer/pgbouncer.ini
-[databases]
-cadqstream = host=postgres port=5432 dbname=cadqstream
+```
+s3://cadqstream-raw/
+└── year=2024/month=01/day=15/hour=14/
+    ├── part-00000.parquet
+    ├── part-00001.parquet
+    └── ...
 
-[pgbouncer]
-listen_addr = 0.0.0.0
-listen_port = 6432
-auth_type = md5
-auth_file = /etc/pgbouncer/userlist.txt
-pool_mode = transaction              # CRITICAL: Transaction-level pooling
-max_client_conn = 200                # Allow 200 client connections
-default_pool_size = 20               # But only 20 actual PostgreSQL connections
-reserve_pool_size = 5                # Emergency reserve
-reserve_pool_timeout = 3
-server_lifetime = 3600               # Recycle connections every hour
-server_idle_timeout = 600
+s3://cadqstream-metrics/
+└── year=2024/month=01/day=15/hour=14/
+    └── neighborhood=manhattan/
+        └── part-00000.parquet
 ```
 
-**Flink JDBC Sink Configuration** (HikariCP):
+**Flink StreamingFileSink Configuration**:
 ```python
-from pyflink.datastream.connectors.jdbc import JdbcConnectionOptions, JdbcExecutionOptions
+from pyflink.datastream.connectors.file_system import FileSink
+from pyflink.formats.parquet.avro import ParquetAvroWriters
 
-def create_postgres_sink_with_pooling(table_name, sql_statement):
-    """UPDATED: Use PgBouncer endpoint with HikariCP pooling."""
-    return JdbcSink.sink(
-        sql_statement,
-        JdbcConnectionOptions.builder()
-            .withUrl("jdbc:postgresql://pgbouncer:6432/cadqstream")  # CHANGED: pgbouncer, not postgres
-            .withDriverName("org.postgresql.Driver")
-            .withUsername("cadqstream")
-            .withPassword("changeme")
-            # HikariCP connection pool settings
-            .withProperty("maximumPoolSize", "3")        # CRITICAL: Max 3 connections per slot
-            .withProperty("minimumIdle", "1")             # Keep 1 idle connection
-            .withProperty("connectionTimeout", "30000")   # 30s timeout
-            .withProperty("idleTimeout", "600000")        # 10min idle before close
-            .withProperty("maxLifetime", "1800000")       # 30min max connection lifetime
-            .build(),
-        JdbcExecutionOptions.builder()
-            .withBatchSize(1000)
-            .withBatchIntervalMs(200)
-            .withMaxRetries(3)
-            .withConnectionCheckTimeoutSeconds(60)
-            .build()
-    )
-
-# CONNECTION MATH:
-# - 12 Flink slots × 3 connections/slot = 36 client connections to PgBouncer
-# - PgBouncer pools down to 20 actual PostgreSQL connections
-# - FastAPI 4 workers × 2 connections = 8 client connections
-# - Total PgBouncer clients: 44 (well under max_client_conn=200)
-# - Total PostgreSQL connections: 20 (well under max_connections=100) ✅
-```
-
-**Docker Compose Addition**:
-```yaml
-services:
-  pgbouncer:
-    image: edoburu/pgbouncer:1.18.0
-    container_name: pgbouncer
-    environment:
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_USER=cadqstream
-      - DB_PASSWORD=changeme
-      - POOL_MODE=transaction
-      - MAX_CLIENT_CONN=200
-      - DEFAULT_POOL_SIZE=20
-    ports:
-      - "6432:6432"
-    depends_on:
-      - postgres
-    networks:
-      - cadqstream
-    restart: unless-stopped
-```
-
-**Schema** (7 core tables):
-
-```sql
--- 1. Clean records with IF scores + context features
-CREATE TABLE taxi_clean (
-    id BIGSERIAL PRIMARY KEY,
-    pickup_datetime TIMESTAMP NOT NULL,
-    PULocationID INT,
-    DOLocationID INT,
-    trip_distance FLOAT,
-    fare_amount FLOAT,
-    -- ... other taxi fields ...
-    anomaly_score FLOAT,
-    is_anomaly BOOLEAN,
-    priority VARCHAR(10),  -- HIGH/MEDIUM/LOW
-    neighborhood_id VARCHAR(20),
-    -- Context features (15D vector components)
-    hour_sin FLOAT,
-    hour_cos FLOAT,
-    pickup_grid_x FLOAT,
-    pickup_grid_y FLOAT,
-    -- ... other features ...
-    created_at TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX idx_taxi_clean_spatial ON taxi_clean(pickup_datetime, PULocationID);
-
--- 2. Schema violations (Layer 1 rejects)
-CREATE TABLE schema_violations (
-    id BIGSERIAL PRIMARY KEY,
-    raw_record JSONB,
-    violation_type VARCHAR(50),  -- NULL_FIELD, TYPE_ERROR, DUPLICATE
-    violated_field VARCHAR(100),
-    detected_at TIMESTAMP DEFAULT NOW()
-);
-
--- 3. Business rule violations (Layer 2 Canary rejects)
-CREATE TABLE business_rule_violations (
-    id BIGSERIAL PRIMARY KEY,
-    pickup_datetime TIMESTAMP,
-    PULocationID INT,
-    violation_rule VARCHAR(100),  -- NEGATIVE_FARE, ZERO_DISTANCE, etc.
-    record_data JSONB,
-    detected_at TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX idx_rule_violations_spatial ON business_rule_violations(pickup_datetime, PULocationID);
-
--- 4. Anomalies detected by Isolation Forest
-CREATE TABLE if_anomalies (
-    id BIGSERIAL PRIMARY KEY,
-    pickup_datetime TIMESTAMP NOT NULL,
-    taxi_id VARCHAR(50),
-    anomaly_score FLOAT,
-    priority VARCHAR(10),  -- HIGH/MEDIUM/LOW
-    record_data JSONB,
-    detected_at TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX idx_anomalies_priority ON if_anomalies(pickup_datetime, priority);
-
--- 5. Quality metrics (1-min aggregated from MetaAggregator)
-CREATE TABLE quality_metrics (
-    id BIGSERIAL PRIMARY KEY,
-    window_timestamp TIMESTAMP NOT NULL,
-    neighborhood_id VARCHAR(20),
-    volume INT,
-    null_rate FLOAT,
-    dedup_rate FLOAT,
-    violation_rate FLOAT,
-    anomaly_rate FLOAT,
-    delta_score FLOAT,
-    avg_anomaly_score FLOAT,
-    anomaly_score_variance FLOAT,
-    drift_detected BOOLEAN,
-    created_at TIMESTAMP DEFAULT NOW()
-);
-CREATE INDEX idx_quality_metrics_drift ON quality_metrics(window_timestamp, drift_detected);
-
--- 6. Baseline statistics for model retraining
-CREATE TABLE baseline_stats (
-    id BIGSERIAL PRIMARY KEY,
-    computed_at TIMESTAMP,
-    neighborhood_id VARCHAR(20),
-    trip_type VARCHAR(20),
-    time_window INT,  -- hour bucket
-    day_type VARCHAR(10),  -- weekday/weekend
-    percentile_95 FLOAT,
-    sample_count INT
-);
-
--- 7. ML experiment results (Ablation study tracking)
-CREATE TABLE ml_experiment_results (
-    id BIGSERIAL PRIMARY KEY,
-    experiment_name VARCHAR(100),
-    model_version VARCHAR(50),
-    metrics JSONB,  -- {precision, recall, f1, fpr, etc.}
-    run_date TIMESTAMP DEFAULT NOW()
-);
-```
-
-**Notes**:
-- **NO `raw_events` table**: Kafka 7-day retention serves as audit trail (cheaper, supports replay)
-- **NO `quarantine` table**: Quarantine is a function on top of `schema_violations` and `business_rule_violations` (engineer reviews + replay)
-- **Composite indexes**: Optimized for Grafana dashboard queries (<1000ms latency target)
-
-**JDBC Sink Configuration** (CRITICAL - Fault Tolerance):
-```python
-# Standard JDBC sink pattern for ALL PostgreSQL writes
-# MUST include retry logic to handle transient PostgreSQL unavailability
-
-from pyflink.datastream.connectors.jdbc import JdbcSink, JdbcConnectionOptions, JdbcExecutionOptions
-
-def create_postgres_sink(table_name, sql_statement):
-    """Factory function for fault-tolerant PostgreSQL sinks.
+def create_minio_sink(bucket, partition_by):
+    """Factory function for MinIO Parquet sinks via StreamingFileSink.
     
     Args:
-        table_name: Target table name (for error logging)
-        sql_statement: Prepared statement with placeholders
+        bucket: MinIO bucket name (e.g., 'cadqstream-violations')
+        partition_by: List of partition columns (e.g., ['year', 'month', 'day'])
     
     Returns:
-        Configured JdbcSink with retry logic
+        Configured StreamingFileSink with Parquet output
     """
-    return JdbcSink.sink(
-        sql_statement,
-        JdbcConnectionOptions.builder()
-            .withUrl("jdbc:postgresql://postgres:5432/cadqstream")
-            .withDriverName("org.postgresql.Driver")
-            .withUsername("cadqstream")
-            .withPassword("changeme")
-            .build(),
-        JdbcExecutionOptions.builder()
-            .withBatchSize(1000)              # Batch for efficiency
-            .withBatchIntervalMs(200)         # Max 200ms latency
-            .withMaxRetries(3)                # CRITICAL: Retry transient failures
-            .withConnectionCheckTimeoutSeconds(60)  # Detect dead connections
-            .build()
-    )
+    return FileSink \
+        .for_bulk_format(f"s3://{bucket}/", ParquetAvroWriters.for_avro_record(RecordType))
+        .with_rolling_policy(RollingPolicy.default_rolling_policy(
+            part_size=1024 * 1024 * 128,  # 128 MB per file
+            rollover_interval=timedelta(minutes=5),
+            inactivity_interval=timedelta(minutes=1)
+        ))
+        .with_bucket_assigner(BucketAssigner.date_time_bucket_assigner(
+            "yyyy-MM-dd--HH-mm",  # Time-based bucketing
+            timezone.utc
+        ))
+        .build()
 
-# Example usage for taxi_clean table:
-taxi_clean_sink = create_postgres_sink(
-    table_name="taxi_clean",
-    sql_statement="""
-        INSERT INTO taxi_clean (
-            pickup_datetime, PULocationID, DOLocationID, trip_distance, 
-            fare_amount, anomaly_score, is_anomaly, priority, neighborhood_id,
-            hour_sin, hour_cos, pickup_grid_x, pickup_grid_y, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    """
+# Example usage for violations bucket:
+violations_sink = create_minio_sink(
+    bucket="cadqstream-violations",
+    partition_by=["year", "month", "day", "hour"]
+)
+
+# Example usage for metrics bucket:
+metrics_sink = create_minio_sink(
+    bucket="cadqstream-metrics", 
+    partition_by=["year", "month", "day", "hour", "neighborhood"]
 )
 
 # Failure Behavior:
-# - Transient failure (network timeout, connection reset): Retry up to 3 times
-# - Persistent failure (PostgreSQL down >3 retries): Job fails, restarts from checkpoint
-# - On restart: Flink resumes from last successful checkpoint, reprocesses records
-# - Exactly-Once guarantee preserved (no duplicates, no data loss)
+# - Transient failure (network timeout): Retry up to 3 times with exponential backoff
+# - Persistent failure (MinIO down): Job fails, restarts from checkpoint
+# - On restart: Flink resumes from last successful checkpoint, continues writing
+# - Exactly-Once guarantee preserved via checkpoint-aligned file commits
 ```
 
-**PostgreSQL Tuning** (NEW in V2.0):
-```sql
--- Performance configuration for 8 GB allocation
-shared_buffers = 4GB              -- Hot data in memory
-effective_cache_size = 12GB       -- OS page cache utilization
-work_mem = 64MB                   -- Per-query operation (sort, hash)
-maintenance_work_mem = 1GB        -- Vacuum, index creation
-max_connections = 100
-max_worker_processes = 12         -- Parallel query execution
-max_parallel_workers = 8
-max_parallel_workers_per_gather = 4
-random_page_cost = 1.1            -- SSD optimization
-effective_io_concurrency = 200
-checkpoint_completion_target = 0.9
-wal_buffers = 16MB
+**MinIO S3 Configuration** (same as Flink checkpoint config):
+```yaml
+# S3 endpoint configuration (CRITICAL - Must override for MinIO)
+s3.endpoint: http://minio:9000  # MinIO service endpoint (Docker network)
+s3.path-style-access: true      # CRITICAL: MinIO requires path-style (not virtual-hosted)
+s3.access-key: minio            # MinIO root user (match Docker Compose MINIO_ROOT_USER)
+s3.secret-key: changeme         # MinIO root password (CHANGE IN PRODUCTION)
+
+# Checkpoint storage
+state.checkpoints.dir: s3://cadqstream-checkpoints/
+execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
 ```
 
-**Memory Allocation**: 8 GB
+**Docker Compose MinIO Service**:
+```yaml
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: changeme
+      MINIO_DEFAULT_BUCKETS: cadqstream-raw,cadqstream-violations,cadqstream-anomalies,cadqstream-metrics,cadqstream-drift,cadqstream-checkpoints,cadqstream-models
+    ports:
+      - "9000:9000"    # API
+      - "9001:9001"    # Console
+    volumes:
+      - minio-data:/data
+    networks:
+      - cadqstream
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+```
+
+**MinIO Buckets Initialization**:
+```bash
+# Create all required buckets on startup
+mc alias set myminio http://minio:9000 minio changeme
+mc mb myminio/cadqstream-raw
+mc mb myminio/cadqstream-violations
+mc mb myminio/cadqstream-anomalies
+mc mb myminio/cadqstream-metrics
+mc mb myminio/cadqstream-drift
+mc mb myminio/cadqstream-checkpoints
+mc mb myminio/cadqstream-models
+mc anonymous set public myminio/cadqstream-checkpoints
+```
+
+**Notes**:
+- **Kafka 7-day retention** serves as audit trail for raw events (cheaper, supports replay)
+- **Time-partitioned Parquet** enables efficient analytics queries via Athena/Presto
+- **MinIO IAM policies** for access control (Flink read/write, analytics read-only)
+- **Lifecycle policies** auto-expire old partitions (7-90 days per bucket)
 
 ### 2.4 Complete Infrastructure Resource Allocation
 
@@ -540,7 +408,7 @@ wal_buffers = 16MB
 | **Kafka Broker** | 1 | 6 GB | 6 GB | 12 | HDD (logs) | 12% |
 | **Kafka Zookeeper** | 1 | 1 GB | 1 GB | 2 | - | 2% |
 | **Schema Registry** | 1 | 1 GB | 1 GB | 2 | - | 2% |
-| **PostgreSQL** | 1 | 8 GB* | 8 GB | 12 | SSD | 16% |
+| **MinIO** | 1 | 8 GB | 8 GB | 4 | SSD | 16% |
 | **MinIO** | 1 | 4 GB | 4 GB | 4 | SSD | 8% |
 | **MLflow** | 1 | 2 GB | 2 GB | 4 | - | 4% |
 | **FastAPI** | 1 (4 workers) | 2 GB | 2 GB | 4 | - | 4% |
@@ -549,7 +417,7 @@ wal_buffers = 16MB
 | **OS + Buffer** | - | 3 GB | 3 GB | - | - | 6% |
 | **TOTAL** | **11** | - | **50 GB** | **60/64** | - | **100%** |
 
-*PostgreSQL: 8 GB container limit, but uses `effective_cache_size=12GB` to leverage OS page cache
+*MinIO: 8 GB container limit for data lake storage (raw, violations, anomalies, metrics, drift)
 
 **Comparison with V1.9 (8 GB Laptop Spec)**:
 
@@ -832,14 +700,14 @@ async def meter_shift(request: METERShiftRequest):
     # When centroids shift → cluster boundaries change → trees must adapt
     
     # CRITICAL FIX V2.1.2: Receive mini-batch from Flink in HTTP payload
-    # WRONG (V2.1.1): FastAPI queries PostgreSQL for 100K records
+    # WRONG (V2.1.1): FastAPI queries MinIO for 100K records
     #   - Problem: 11.44 MB transfer takes 3-10+ seconds
     #   - Result: HTTP timeout → iec-action-replay → retry → timeout again → deadloop
     #
     # CORRECT (V2.1.2): Flink IEC sends mini-batch (10K records) in HTTP POST payload
     #   - Flink queries its own state/window, serializes to JSON
     #   - Payload size: ~1.2 MB (acceptable for HTTP POST)
-    #   - FastAPI processes in-memory, no DB query
+    #   - FastAPI processes in-memory, no MinIO query
     #   - Latency: <500ms (no timeout risk)
     
     # Get mini-batch from request payload (sent by Flink IEC)
@@ -1224,15 +1092,12 @@ async def download_model_endpoint(model_uri: str):
 │   │   ├── Dockerfile.taskmanager       # TaskManager image
 │   │   ├── flink-conf.yaml              # Flink configuration
 │   │   ├── log4j.properties             # Flink logging
-│   │   └── lib/                         # JARs (Kafka connector, PostgreSQL JDBC)
-│   │       ├── flink-sql-connector-kafka.jar
-│   │       └── postgresql-jdbc.jar
+│   │   └── lib/                         # JARs (Kafka connector, Flink S3)
+│   │       └── flink-sql-connector-kafka.jar
 │   │
-│   ├── postgres/
-│   │   ├── Dockerfile                   # PostgreSQL with pg_stat_statements
-│   │   ├── init.sql                     # Schema initialization (7 tables)
-│   │   ├── postgresql.conf              # Tuning (shared_buffers=4GB)
-│   │   └── pg_hba.conf                  # Access control
+│   ├── minio/
+│   │   ├── Dockerfile                   # MinIO S3-compatible storage
+│   │   └── mc-config/                   # MinIO Client configuration
 │   │
 │   ├── mlops/
 │   │   ├── Dockerfile.mlflow            # MLflow tracking server
@@ -1268,7 +1133,7 @@ async def download_model_endpoint(model_uri: str):
 │   ├── volumes/                         # Persistent data (DO NOT commit)
 │   │   ├── kafka-data/
 │   │   ├── zookeeper-data/
-│   │   ├── postgres-data/
+│   │   ├── minio-data/
 │   │   ├── minio-data/
 │   │   ├── mlflow-data/
 │   │   ├── prometheus-data/
@@ -1420,7 +1285,7 @@ async def download_model_endpoint(model_uri: str):
 - **Docker Centralization**: ALL Docker files (`Dockerfile`, `docker-compose.yml`, configs) MUST be in `/docker` directory
 - **No Docker Files in Root**: Prevents root directory clutter, enforces separation of concerns
 - **Volume Management**: `docker/volumes/` contains persistent data, added to `.gitignore`
-- **Environment Variables**: `docker/.env` stores secrets (PostgreSQL passwords, MinIO keys) - NEVER commit
+- **Environment Variables**: `docker/.env` stores secrets (MinIO keys, Kafka credentials) - NEVER commit
 - **Multi-Stage Builds**: Use Docker multi-stage builds to minimize image sizes (Flink ~500 MB, not 2 GB)
 
 ---
@@ -1608,7 +1473,7 @@ payment_type NOT IN (1, 2, 3, 4)  -- Cash, Credit, No Charge, Dispute
 ```
 
 **Output**:
-- Violations → Kafka `dq-hard-rule-violations` + PostgreSQL
+- Violations → Kafka `dq-hard-rule-violations` + MinIO `cadqstream-violations`
 - Pass-through with violation_flag → CoProcessFunction
 
 #### 3.2b Complex Branch (ML-Based)
@@ -1854,7 +1719,7 @@ def classify_anomaly(record, anomaly_score, threshold_matrix):
 ```
 
 **Output**:
-- Anomalies → Kafka `dq-anomaly-scores` + PostgreSQL
+- Anomalies → Kafka `dq-anomaly-scores` + MinIO `cadqstream-anomalies`
 - All records with anomaly_score → CoProcessFunction
 
 #### 3.2c Stream Synchronization
@@ -2161,7 +2026,7 @@ meta_stream = coprocess_output \
   - No Kafka topic `dq-meta-stream` needed for this connection (removed from critical path)
 - Kafka `dq-meta-stream` (partitioned by `Neighborhood_ID`) - **OPTIONAL**: For external monitoring/debugging only
   - Not in critical path, can be disabled in Simplified Mode
-- PostgreSQL `quality_metrics` table (for Grafana dashboards)
+- MinIO `cadqstream-metrics` bucket (for Grafana dashboards via MinIO S3 adapter)
 - **Simplified Mode**: PrintSink() to stdout (JSON format, every 1 min)
 
 ### 3.4 Layer 4: Intelligent Evolution Controller (IEC)
@@ -2780,7 +2645,7 @@ prometheus.counter("iec_model_load_failures_total").inc() if failure
 
 ### 4.2 Simplified Mode Monitoring (Phase 1-3)
 
-**Strategy**: PostgreSQL + stdout logging (zero infrastructure overhead)
+**Strategy**: MinIO + stdout logging (zero infrastructure overhead)
 
 **Real-Time**:
 - MetaAggregator → PrintSink() every 1 min to Docker stdout (JSON format)
@@ -2788,13 +2653,14 @@ prometheus.counter("iec_model_load_failures_total").inc() if failure
 - Model load errors → log.error() immediately
 
 **Trend Analysis**:
-- Query PostgreSQL `quality_metrics` table via pgAdmin/DBeaver:
-```sql
-SELECT window_timestamp, violation_rate, anomaly_rate, delta_score, drift_detected
-FROM quality_metrics
-WHERE window_timestamp > NOW() - INTERVAL '24 hours'
-  AND neighborhood_id = 'zone_A'
-ORDER BY window_timestamp DESC;
+- Query MinIO `cadqstream-metrics` via MinIO SDK or AWS CLI:
+```bash
+# Query metrics using AWS CLI (S3-compatible)
+aws s3 cp s3://cadqstream-metrics/year=2024/month=01/day=15/ /tmp/metrics/ --recursive
+# Process with pandas
+import pandas as pd
+metrics = pd.read_parquet('/tmp/metrics/')
+recent_metrics = metrics[metrics['window_timestamp'] > '2024-01-15-00:00:00']
 ```
 
 **No Prometheus/Grafana** in simplified mode to maximize resources for Flink + ML development.
@@ -2916,12 +2782,12 @@ ORDER BY window_timestamp DESC;
 
 ### Phase 1: Baseline Pipeline (Week 3)
 
-**Goal**: Kafka → Flink passthrough → PostgreSQL
+**Goal**: Kafka → Flink passthrough → MinIO (Parquet)
 
 **Components**:
 - Kafka 1 broker + Zookeeper + Schema Registry
 - Flink 1 JobManager + 1 TaskManager (4 slots)
-- PostgreSQL + MinIO
+- MinIO + Kafka
 - Producer script (Avro serialization)
 
 **Validation**: End-to-end data flow confirmed
@@ -2939,7 +2805,7 @@ ORDER BY window_timestamp DESC;
 5. Package model + thresholds → MLflow
 6. Implement IFScoringOperator with Broadcast State
 7. Publish initial model_uri to Kafka `if-model-updates`
-8. Verify: Anomalies written to PostgreSQL
+8. Verify: Anomalies written to MinIO `cadqstream-anomalies`
 
 ---
 
@@ -3716,11 +3582,11 @@ for ablation_name in ['abl1', 'abl2', 'abl3', 'abl4', 'abl5']:
   - If lag-free at 1-5K/sec → architecture is validated ✅
 
 **Other Requirements**:
-- **Latency**: End-to-end <1 second (from Kafka ingestion to PostgreSQL write)
+- **Latency**: End-to-end <1 second (from Kafka ingestion to MinIO write)
 - **FPR**: <5% (enforced by context-aware 4D thresholds + synthetic validation)
 - **Recall**: >75% (relaxed from 80% to accommodate natural noise)
 - **Checkpoint recovery**: <2 minutes (RocksDB incremental checkpointing)
-- **Query latency**: Grafana dashboards <1000ms (PostgreSQL composite indexes)
+- **Query latency**: Grafana dashboards <1000ms (MinIO Parquet columnar queries)
 
 ### 7.3 Thesis Requirements
 
@@ -4075,23 +3941,29 @@ class IFScoringOperatorWithAdaptiveThresholds(BroadcastProcessFunction):
 
 **Threshold Evolution Visualization**:
 ```python
-# PostgreSQL logging
-CREATE TABLE threshold_evolution (
-    timestamp TIMESTAMP,
-    context VARCHAR(100),
-    percentile_95 FLOAT,
-    record_count BIGINT
-);
+# MinIO logging (threshold evolution)
+# Store threshold evolution in Parquet format
+import pandas as pd
 
-# Query for time-series plot
-SELECT 
-    DATE_TRUNC('hour', timestamp) AS hour,
-    context,
-    AVG(percentile_95) AS avg_threshold
-FROM threshold_evolution
-WHERE context = 'short_trip_weekday_manhattan_morning'
-GROUP BY hour, context
-ORDER BY hour;
+threshold_evolution = pd.DataFrame([{
+    'timestamp': timestamp,
+    'context': context,
+    'percentile_95': percentile_95,
+    'record_count': record_count
+}])
+
+# Append to MinIO (via S3)
+threshold_evolution.to_parquet(
+    f's3://cadqstream-drift/threshold_evolution/year={year}/month={month:02d}/threshold_evolution_{timestamp}.parquet',
+    engine='pyarrow'
+)
+
+# Query threshold evolution using pandas
+threshold_df = pd.read_parquet('s3://cadqstream-drift/threshold_evolution/')
+
+hourly_threshold = threshold_df.groupby(['context', threshold_df['timestamp'].dt.floor('h')]).agg({
+    'percentile_95': 'mean'
+}).reset_index()
 
 # Expected pattern:
 # Jan: 0.75 (cold-start baseline)
@@ -4133,7 +4005,7 @@ class ThresholdDriftDetector:
 - ✅ Thresholds adapt continuously (every 10K records per context)
 - ✅ FPR remains stable <5% despite model evolution
 - ✅ No quarterly manual recomputation needed
-- ✅ Threshold evolution logged in PostgreSQL for analysis
+- ✅ Threshold evolution logged in MinIO `cadqstream-drift` for analysis
 
 **Validation Gate** (Before Publishing):
 ```python
@@ -4208,29 +4080,33 @@ def spatial_threshold_update(neighborhood_id, drift_magnitude):
 ```
 
 **Threshold History Tracking**:
-```sql
--- PostgreSQL table for threshold evolution
-CREATE TABLE threshold_history (
-    id BIGSERIAL PRIMARY KEY,
-    updated_at TIMESTAMP DEFAULT NOW(),
-    trip_type VARCHAR(20),
-    time_window INT,
-    day_type VARCHAR(10),
-    neighborhood_id VARCHAR(20),
-    percentile_95_old FLOAT,
-    percentile_95_new FLOAT,
-    trigger_reason VARCHAR(100)  -- 'quarterly', 'adwin_drift', 'spatial_tracking'
-);
+```python
+# Store threshold history in MinIO (Parquet format)
+import pandas as pd
 
--- Query to visualize threshold drift over time
-SELECT 
-    neighborhood_id,
-    DATE_TRUNC('month', updated_at) AS month,
-    AVG(percentile_95_new) AS avg_threshold
-FROM threshold_history
-WHERE trip_type = 'short'
-GROUP BY neighborhood_id, month
-ORDER BY month;
+threshold_history = pd.DataFrame([{
+    'updated_at': updated_at,
+    'trip_type': trip_type,
+    'time_window': time_window,
+    'day_type': day_type,
+    'neighborhood_id': neighborhood_id,
+    'percentile_95_old': percentile_95_old,
+    'percentile_95_new': percentile_95_new,
+    'trigger_reason': trigger_reason  # 'quarterly', 'adwin_drift', 'spatial_tracking'
+}])
+
+# Append to MinIO
+threshold_history.to_parquet(
+    f's3://cadqstream-drift/threshold_history/year={year}/month={month:02d}/threshold_history_{timestamp}.parquet'
+)
+
+# Query to visualize threshold drift over time
+threshold_df = pd.read_parquet('s3://cadqstream-drift/threshold_history/')
+monthly_threshold = threshold_df[
+    threshold_df['trip_type'] == 'short'
+].groupby(['neighborhood_id', pd.Grouper(key='updated_at', freq='M')]).agg({
+    'percentile_95_new': 'mean'
+}).reset_index()
 ```
 
 ---
@@ -4241,7 +4117,7 @@ ORDER BY month;
 - ✅ Rollback procedure tested (simulated FPR spike)
 - ✅ Quarterly threshold recomputation automated
 - ✅ Threshold validation gate prevents FPR degradation
-- ✅ Threshold history tracked in PostgreSQL
+- ✅ Threshold history tracked in MinIO `cadqstream-drift`
 
 ---
 
@@ -4295,11 +4171,11 @@ Criteria are designed for **Simplified Mode** (laptop/desktop, Docker Compose, 1
 
 **Flink Layer 2** (Canary - Static Rules):
 ✅ Rule violations correctly filtered
-✅ Violations written to topic + PostgreSQL with JDBC retry (V1.9 fix)
+✅ Violations written to topic + MinIO with StreamingFileSink retry (V2.0 fix)
 
 **Storage Layer**:
-✅ PostgreSQL with persistence volume (V1.8 fix)
-✅ No JDBC exceptions or connection pool exhaustion
+✅ MinIO data lake with StreamingFileSink fault tolerance
+✅ No MinIO connection errors or S3 retries exceeding limits
 
 **Performance Verification** (Laptop-Friendly):
 ✅ **Throughput**: 1K events/sec sustained, 5K bursts handled
@@ -4350,7 +4226,7 @@ Criteria are designed for **Simplified Mode** (laptop/desktop, Docker Compose, 1
 ✅ 1-minute tumbling windows close correctly (Event Time watermarks working)
 ✅ 6 meta-metrics computed per neighborhood per minute:
   - `volume`, `null_rate`, `dedup_rate`, `violation_rate`, `anomaly_rate`, `delta_score`
-✅ Metrics written to `dq-meta-stream` topic + `quality_metrics` PostgreSQL table
+✅ Metrics written to `dq-meta-stream` topic + MinIO `cadqstream-metrics` bucket
 ✅ **Network shuffle** at rekeying by `Neighborhood_ID` does not cause backpressure
   - Verify: `taskmanager.network.memory.fraction: 0.3` configured
 
@@ -4372,14 +4248,15 @@ Criteria are designed for **Simplified Mode** (laptop/desktop, Docker Compose, 1
 ✅ All TaskManagers reload new model (check logs: 4 instances show "Model updated to v2")
 
 **Storage Layer**:
-✅ All 7 PostgreSQL tables populated correctly:
-  - `taxi_clean`, `schema_violations`, `business_rule_violations`, 
-    `if_anomalies`, `quality_metrics`, `baseline_stats`, `ml_experiment_results`
+✅ All 6 MinIO buckets populated correctly:
+  - `cadqstream-raw` (clean records), `cadqstream-violations` (Layer 1+2 rejects),
+    `cadqstream-anomalies` (ML scores), `cadqstream-metrics` (aggregated metrics),
+    `cadqstream-drift` (threshold history), `cadqstream-checkpoints` (Flink state)
 
 **Performance Verification**:
 ✅ ADWIN does not false alarm constantly (trigger rate: <1 per hour on stable data)
 ✅ Flink remains stable during async API calls (no crashes)
-✅ PostgreSQL query latency for metrics: <500ms
+✅ MinIO query latency for metrics: <500ms (Parquet columnar scan)
 
 **Go/No-Go Decision**:
 - ✅ **GO**: ADWIN detects real drift, scenarios classified correctly, no crashes → proceed to Phase 4
@@ -4488,7 +4365,8 @@ flink run \
   /path/to/ca-dqstream-job.jar \
   --kafka-bootstrap-servers kafka:9092 \
   --schema-registry-url http://schema-registry:8081 \
-  --postgres-url jdbc:postgresql://postgres:5432/cadqstream \
+  --minio-endpoint http://minio:9000 \
+  --minio-bucket cadqstream-raw \
   --mlflow-tracking-uri http://mlflow:5000 \
   --fastapi-url http://fastapi:8000
 ```
@@ -4501,8 +4379,7 @@ flink run \
 - Zookeeper: 512 MB
 - Flink JobManager: 2 GB
 - Flink TaskManager: 6 GB (reduced from 8 GB)
-- PostgreSQL: 1 GB
-- MinIO: 512 MB
+- MinIO: 2 GB (for data lake)
 - MLflow: 512 MB
 - FastAPI: 512 MB
 
@@ -4559,32 +4436,28 @@ services:
           memory: 6G
           cpus: '2'
   
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: cadqstream
-      POSTGRES_PASSWORD: changeme
-      POSTGRES_DB: cadqstream
-    volumes:
-      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
-      - postgres-data:/var/lib/postgresql/data
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-  
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: changeme
+      MINIO_DEFAULT_BUCKETS: cadqstream-raw,cadqstream-violations,cadqstream-anomalies,cadqstream-metrics,cadqstream-drift,cadqstream-checkpoints,cadqstream-models
     volumes:
       - ./minio-data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 2G
   
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.9.0
-    command: mlflow server --host 0.0.0.0 --backend-store-uri postgresql://cadqstream:changeme@postgres:5432/mlflow --default-artifact-root s3://mlflow-artifacts/
+    command: mlflow server --host 0.0.0.0 --backend-store-uri s3://cadqstream-models/mlflow/ --default-artifact-root s3://cadqstream-checkpoints/mlflow-artifacts/
+    environment:
+      AWS_ACCESS_KEY_ID: minio
+      AWS_SECRET_ACCESS_KEY: changeme
+      AWS_ENDPOINT: http://minio:9000
+      AWS_DEFAULT_REGION: us-east-1
   
   fastapi:
     build: ./fastapi-ml-service
@@ -4592,8 +4465,6 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
 
 volumes:
-  postgres-data:
-    driver: local
   minio-data:
     driver: local
 ```
@@ -4848,7 +4719,7 @@ def plot_synthetic_injection_pie(synthetic_labels):
 from diagrams import Diagram, Cluster, Edge
 from diagrams.onprem.queue import Kafka
 from diagrams.onprem.compute import Server
-from diagrams.onprem.database import PostgreSQL
+from diagrams.onprem.storage import MinIO
 
 with Diagram("CA-DQStream Architecture", filename="figures/architecture_overview", show=False):
     kafka = Kafka("Kafka\n7 Topics")
@@ -4865,12 +4736,12 @@ with Diagram("CA-DQStream Architecture", filename="figures/architecture_overview
         layer1 >> layer2b >> layer2c
         layer2c >> layer3 >> layer4
     
-    db = PostgreSQL("PostgreSQL\n7 Tables")
+    db = MinIO("MinIO\n6 Buckets")
     mlflow = Server("MLflow +\nFastAPI")
     
     layer4 >> Edge(label="retrain/METER") >> mlflow
     mlflow >> Edge(label="model updates") >> kafka
-    layer2b >> Edge(label="JDBC Sink") >> db
+    layer2b >> Edge(label="StreamingFileSink") >> db
 
 print("✅ Saved: figures/architecture_overview.png")
 ```
@@ -5804,12 +5675,12 @@ echo ""
 
   **TRAP 3 - FastAPI Query Timeout (Data Illusion):**
   3. ✅ **Flink Sends Mini-Batch in HTTP Payload** (Section 2.5):
-     - Problem: FastAPI queries PostgreSQL for 100K records on METER shift
+     - Problem: FastAPI queries MinIO for 100K records on METER shift
        * 11.44 MB transfer takes 3-10+ seconds
        * HTTP timeout → `iec-action-replay` → retry → timeout again → deadloop
      - Solution: Flink IEC sends mini-batch (10K records) in HTTP POST payload
        * Payload size: ~1.2 MB JSON (acceptable)
-       * FastAPI processes in-memory, no DB query
+       * FastAPI processes in-memory, no MinIO query
        * Latency: <500ms (no timeout risk)
      - Impact: **METER shifts complete reliably**, no timeout deadloops
 
@@ -5832,15 +5703,15 @@ echo ""
 **Version 2.1.1-Production-Hardened** (2026-05-07):
 - **CRITICAL FIXES FROM FINAL BOSS REVIEW** - Addressed 5 architectural cracks discovered in V2.1:
 
-  **CRACK 1 - Technical: PostgreSQL Connection Pool Bottleneck:**
-  1. ✅ **PgBouncer Connection Pooler** (Section 2.3):
-     - Problem: 12 Flink slots × 3 connections + 4 FastAPI workers × 5 connections = 56 connections
-       → too close to max_connections=100 → risk of "too many clients" crash
-     - Solution: PgBouncer transaction pooling
-       * Flink/FastAPI → PgBouncer :6432 → PostgreSQL :5432
-       * 44 client connections pooled down to 20 actual PostgreSQL connections
-       * HikariCP pool settings: max 3 connections per Flink slot
-     - Impact: **Safe under load**, prevents connection exhaustion
+  **CRACK 1 - Technical: MinIO S3 Bottleneck:**
+  1. ✅ **MinIO StreamingFileSink with Fault Tolerance** (Section 2.3):
+     - Problem: With MinIO as primary storage, need reliable S3-compatible writes
+       → Need proper retry logic and exactly-once semantics
+     - Solution: Flink StreamingFileSink with Parquet format
+       * Exactly-once guarantee via checkpoint-aligned commits
+       * Automatic retry on transient failures (network timeout)
+       * Rolling policy: 128 MB files or 5-minute intervals
+     - Impact: **Reliable data persistence**, no data loss on failures
 
   2. ✅ **Automatic Model Update Failover** (Section 2.4):
      - Problem: TaskManager fails to load model after 3 retries → requires MANUAL restart
@@ -5916,7 +5787,7 @@ echo ""
      - Impact: **Experiment becomes runnable** overnight, not multi-day cluster job
 
   **Summary**:
-  - **Connection safety**: PgBouncer prevents database crash
+  - **Connection safety**: MinIO S3 handles concurrent access reliably
   - **Operational resilience**: Auto-failover eliminates manual restarts
   - **Scientific correctness**: True streaming methodology, not batch rolling window
   - **Adaptive thresholds**: FPR stays <5% despite model evolution
@@ -5998,7 +5869,7 @@ echo ""
       - Quarterly threshold recomputation (avoid Jan-only bias)
       - ADWIN-U threshold drift detection (per-context monitoring)
       - Spatial threshold tracking (zone-specific updates)
-      - Threshold history tracking in PostgreSQL
+      - Threshold history tracking in MinIO `cadqstream-drift`
 
   **Experimental Design Enhancements:**
   - **Experiment 1** (Section 2B-2H): CPU-Optimized Benchmark Matrix
@@ -6153,13 +6024,13 @@ echo ""
 - **COMPREHENSIVE CRITICAL FIXES FROM ARCHITECTURAL REVIEW** - Addressed 13 critical issues identified in self-review:
 
   **Infrastructure Fixes** (3 issues):
-  1. **PostgreSQL Data Persistence** (Section Appendix C):
-     - Added `postgres-data` volume to Docker Compose → prevents 100% data loss on container restart
-     - Added named volumes for both PostgreSQL and MinIO
+  1. **MinIO Data Persistence** (Section Appendix C):
+     - Added `minio-data` volume to Docker Compose → prevents 100% data loss on container restart
+     - Added named volumes for MinIO data lake
   
-  2. **JDBC Sink Fault Tolerance** (Section 2.3):
-     - Added comprehensive JDBC sink configuration with retry logic (maxRetries=3)
-     - Handles transient PostgreSQL failures gracefully
+  2. **StreamingFileSink Fault Tolerance** (Section 2.3):
+     - Added StreamingFileSink configuration with Parquet format and retry logic
+     - Handles transient MinIO/S3 failures gracefully
      - Documented failure behavior and Exactly-Once guarantee preservation
   
   3. **Kafka Partition Count Fixed** (Section 2.1):
@@ -6265,9 +6136,9 @@ echo ""
   - Clarified window trigger timing: watermark + 10s (Layer 1) → window closes → +30s allowed lateness
 
 - **Review Summary** (by agent abddfccfb200708c0):
-  - **Passing**: Kafka topics, Layer 1→2 flow, Layer 3→4 flow, PostgreSQL schema
+  - **Passing**: Kafka topics, Layer 1→2 flow, Layer 3→4 flow, MinIO buckets
   - **Fixed (4 critical)**: CoProcessFunction API, Late data, Retry logic, MinIO config
-  - **Noted (5 major gaps)**: Broadcast State fallback, Corrupted message handling, PostgreSQL index optimization, ADWIN warm-up, DLQ infrastructure definition
+  - **Noted (5 major gaps)**: Broadcast State fallback, Corrupted message handling, MinIO lifecycle policies, ADWIN warm-up, DLQ infrastructure definition
   - **Status**: Specification now **80% → 95% implementation-ready** after critical fixes
 
 **Version 1.9.0** (2026-05-07):

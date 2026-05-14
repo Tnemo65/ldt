@@ -1,0 +1,67 @@
+{
+  "model": "METER Hypernetwork (sklearn MLPClassifier)",
+  "architecture": "(128, 64, 32)",
+  "input_features": [
+    "volume",
+    "null_rate",
+    "violation_rate",
+    "avg_anomaly_score",
+    "anomaly_rate",
+    "delta_score"
+  ],
+  "output_strategies": {
+    "0": "do_nothing",
+    "1": "adjust_threshold",
+    "2": "retrain_model",
+    "3": "switch_model"
+  },
+  "train_accuracy": 0.9748062015503876,
+  "test_accuracy": 0.9728682170542635,
+  "test_f1_weighted": 0.9729274559615055,
+  "n_samples_total": 1290,
+  "n_samples_train": 1032,
+  "cv_results": [
+    {
+      "arch": [
+        64,
+        32,
+        16
+      ],
+      "cv_f1_mean": 0.9372038304704569,
+      "cv_f1_std": 0.023345410296735633,
+      "test_acc": 0.9728682170542635,
+      "test_f1": 0.972923699197471
+    },
+    {
+      "arch": [
+        128,
+        64,
+        32
+      ],
+      "cv_f1_mean": 0.9571646899457914,
+      "cv_f1_std": 0.008862219806230259,
+      "test_acc": 0.9728682170542635,
+      "test_f1": 0.9729274559615055
+    },
+    {
+      "arch": [
+        32,
+        16
+      ],
+      "cv_f1_mean": 0.6339039511458513,
+      "cv_f1_std": 0.006696437858460285,
+      "test_acc": 0.7054263565891473,
+      "test_f1": 0.6168280394641961
+    }
+  ],
+  "class_distribution": {
+    "do_nothing": 241,
+    "adjust_threshold": 514,
+    "retrain_model": 193,
+    "switch_model": 342
+  },
+  "source_data": {
+    "real": "data\\meter_training_real.csv",
+    "synthetic": "data\\meter_training_synthetic.csv"
+  }
+}

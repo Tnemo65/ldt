@@ -8,7 +8,7 @@ Exposes:
 """
 
 from flask import Flask, Response, request
-from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, CollectorRegistry, generate_latest, CONTENT_TYPE_LATEST
 import threading
 import time
 import requests
@@ -17,7 +17,6 @@ import os
 
 app = Flask(__name__)
 
-# Quiet werkzeug logging
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 logging.basicConfig(
     level=logging.INFO,
@@ -26,62 +25,78 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger('cadqstream-metrics')
 
-# Thread-safe metric registry
-_metrics_lock = threading.Lock()
-_metric_collectors = {}  # (name, type) -> prometheus Metric
+# Use multi-threaded registry to allow concurrent updates
+REGISTRY = CollectorRegistry(auto_describe=True)
 
+# Thread-safe metric registry: name -> (metric_type, collector)
+_registered = {}
+_lock = threading.Lock()
 
-def _get_or_create_metric(name: str, metric_type: str) -> object:
-    """Look up or create a prometheus Counter/Gauge by (name, type)."""
-    key = (name, metric_type)
-    with _metrics_lock:
-        if key not in _metric_collectors:
-            if metric_type == 'counter':
-                collector = Counter(name, f'Auto-created counter: {name}')
-            else:
-                collector = Gauge(name, f'Auto-created gauge: {name}')
-            _metric_collectors[key] = collector
-        return _metric_collectors[key]
-
-
-# ── Built-in gauges ────────────────────────────────────────────────────────────
+# ── Flink health polling ─────────────────────────────────────────────────────
 
 FLINK_JM_URL = os.getenv('FLINK_JM_URL', 'http://flink-jobmanager:8081')
 
-cadqstream_pipeline_up = Gauge(
-    'cadqstream_pipeline_up',
-    '1 if Flink pipeline is reachable, 0 otherwise',
-    ['job_name']
-)
-
-cadqstream_flink_job_running = Gauge(
-    'cadqstream_flink_job_running',
-    '1 if Flink REST /overview returns HTTP 200'
-)
-
 
 def _poll_flink():
-    """Background thread: poll Flink overview every 30 s and update built-in gauges."""
+    """Poll Flink overview every 30 s and update health gauges."""
     while True:
         try:
             resp = requests.get(f'{FLINK_JM_URL}/overview', timeout=5)
             running = 1 if resp.status_code == 200 else 0
-            cadqstream_flink_job_running.set(running)
-            cadqstream_pipeline_up.labels(job_name='cadqstream-complete').set(running)
+            with _lock:
+                for name, (mtype, col) in _registered.items():
+                    if name == 'cadqstream_flink_job_running':
+                        col.set(running)
+                    elif name == 'cadqstream_pipeline_up':
+                        col.labels(job_name='cadqstream-complete').set(running)
             LOGGER.info("Flink overview poll: status=%d", running)
         except Exception as exc:
-            cadqstream_flink_job_running.set(0)
-            cadqstream_pipeline_up.labels(job_name='cadqstream-complete').set(0)
+            with _lock:
+                for name, (mtype, col) in _registered.items():
+                    if name == 'cadqstream_flink_job_running':
+                        col.set(0)
+                    elif name == 'cadqstream_pipeline_up':
+                        col.labels(job_name='cadqstream-complete').set(0)
             LOGGER.warning("Flink overview poll failed: %s", exc)
         time.sleep(30)
 
 
-# Start background thread
 _poll_thread = threading.Thread(target=_poll_flink, daemon=True)
 _poll_thread.start()
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+# ── Metric registration and update ─────────────────────────────────────────────
+
+def _ensure_metric(name, label_keys, metric_type):
+    """Register a metric if not already registered. Thread-safe."""
+    with _lock:
+        key = (name, metric_type)
+        if key in _registered:
+            return _registered[key][1]
+        if metric_type == 'counter':
+            col = Counter(name, f'CA-DQStream {name}', list(label_keys) or None, registry=REGISTRY)
+        else:
+            col = Gauge(name, f'CA-DQStream {name}', list(label_keys) or None, registry=REGISTRY)
+        _registered[key] = (metric_type, col)
+        return col
+
+
+def _update_metric(name, value, labels_dict, metric_type):
+    """Update a single metric. Creates it dynamically if needed."""
+    label_keys = list(labels_dict.keys()) if labels_dict else []
+    col = _ensure_metric(name, label_keys, metric_type)
+
+    try:
+        if metric_type == 'counter':
+            col.labels(**labels_dict).inc(value if value else 1)
+        else:
+            col.labels(**labels_dict).set(value)
+    except ValueError:
+        pass
+    return True
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route('/internal/metrics', methods=['POST'])
 def receive_metric():
@@ -91,41 +106,43 @@ def receive_metric():
     except Exception:
         return {'error': 'invalid JSON'}, 400
 
+    if payload.get('type') == 'batch':
+        counters = payload.get('counters', [])
+        gauges = payload.get('gauges', [])
+        updated = 0
+        for item in counters:
+            _update_metric(item['Name'], item.get('value', 1), item.get('labels', {}), 'counter')
+            updated += 1
+        for item in gauges:
+            _update_metric(item['Name'], item.get('value', 0), item.get('labels', {}), 'gauge')
+            updated += 1
+        return {'status': 'ok', 'updated': updated}, 200
+
     name = payload.get('name')
-    value = payload.get('value')
+    value = payload.get('value', 1)
     labels = payload.get('labels', {})
     metric_type = payload.get('type', 'gauge')
 
-    if name is None or value is None:
-        return {'error': 'missing name or value'}, 400
+    if not name:
+        return {'error': 'missing name'}, 400
 
-    try:
-        collector = _get_or_create_metric(name, metric_type)
-        labels_dict = dict(labels)  # ensure dict
-        if metric_type == 'counter':
-            collector.labels(**labels_dict).inc(value if value else 1)
-        else:
-            collector.labels(**labels_dict).set(value)
-        LOGGER.debug("Metric updated: name=%s type=%s value=%s labels=%s",
-                     name, metric_type, value, labels)
-    except Exception as exc:
-        LOGGER.error("Failed to update metric %s: %s", name, exc)
-        return {'error': str(exc)}, 500
-
+    full_name = f'cadqstream_{name}'
+    labels_dict = dict(labels) if labels else {}
+    _update_metric(full_name, value, labels_dict, metric_type)
     return {'status': 'ok'}, 200
 
 
 @app.route('/metrics')
 def metrics():
     """Prometheus scrape endpoint."""
-    return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+    return Response(generate_latest(REGISTRY), mimetype=CONTENT_TYPE_LATEST)
 
 
 @app.route('/health')
 def health():
     """Health check."""
-    with _metrics_lock:
-        count = len(_metric_collectors)
+    with _lock:
+        count = len(_registered)
     return {'status': 'healthy', 'metrics_count': count}, 200
 
 

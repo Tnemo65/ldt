@@ -6,7 +6,7 @@
 
 **Architecture:** Four-layer Flink pipeline (Schema Filter → Rendezvous branches → MetaAggregator → IEC) with zero-downtime model updates via Broadcast State and multi-strategy drift adaptation.
 
-**Tech Stack:** Apache Flink (Python), Apache Kafka, PostgreSQL, MLflow, River (streaming ML), Prometheus/Grafana, FastAPI, Docker Compose.
+**Tech Stack:** Apache Flink (Python), Apache Kafka, MinIO (S3), MLflow, River (streaming ML), Prometheus/Grafana, FastAPI, Docker Compose.
 
 **Spec Reference:** `docs/superpowers/specs/2026-05-06-ca-dqstream-architecture-design.md` V2.2.0
 
@@ -2685,18 +2685,18 @@ Task: Phase 0, Task 0.11 (NEW - added from prototype)"
 - Sequential funnel: Schema → Rules → ML (86.51% ultra-clean data for training)
 - Prototype validation: Recall 92.2%, FPR 5.0% (12.7x improvement over baseline)
 
-**Next:** Phase 1 - Baseline Pipeline (Kafka + Flink + PostgreSQL)
+**Next:** Phase 1 - Baseline Pipeline (Kafka + Flink + MinIO)
 
 ---
 
 
-## Phase 1: Baseline Pipeline (Kafka → Flink → PostgreSQL)
+## Phase 1: Baseline Pipeline (Kafka → Flink → MinIO)
 
 **Goal:** Establish data flow infrastructure with Layer 1 filtering and deduplication.
 
 **Tasks:** 15 total
 
-**Critical Path:** Docker → Kafka → Flink → PostgreSQL → End-to-end validation
+**Critical Path:** Docker → Kafka → Flink → MinIO → End-to-end validation
 
 ---
 
@@ -2753,17 +2753,6 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
 
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: cadqstream
-      POSTGRES_PASSWORD: cadqstream123
-      POSTGRES_DB: dq_pipeline
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -2773,6 +2762,7 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_DEFAULT_BUCKETS: cadqstream-raw,cadqstream-violations,cadqstream-anomalies,cadqstream-metrics,cadqstream-drift,cadqstream-checkpoints,cadqstream-models
     volumes:
       - minio-data:/data
 
@@ -2780,65 +2770,7 @@ volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
-  postgres-data:
   minio-data:
-```
-
-- [ ] **Step 1.5: Add PgBouncer connection pooler (CRITICAL)**
-
-**Why:** 12 Flink slots + 4 FastAPI workers = ~50-100 DB connections → PostgreSQL crash without pooler.
-
-Add PgBouncer service to `docker-compose.yml` (insert before `volumes:` section):
-
-```yaml
-  pgbouncer:
-    image: pgbouncer/pgbouncer:1.21
-    depends_on:
-      - postgres
-    ports:
-      - "6432:6432"
-    environment:
-      DATABASES_HOST: postgres
-      DATABASES_PORT: 5432
-      DATABASES_USER: cadqstream
-      DATABASES_PASSWORD: cadqstream123
-      DATABASES_DBNAME: dq_pipeline
-      PGBOUNCER_POOL_MODE: transaction
-      PGBOUNCER_MAX_CLIENT_CONN: 1000
-      PGBOUNCER_DEFAULT_POOL_SIZE: 25
-      PGBOUNCER_MIN_POOL_SIZE: 10
-      PGBOUNCER_RESERVE_POOL_SIZE: 5
-    volumes:
-      - ./config/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini
-```
-
-Create `config/pgbouncer.ini`:
-
-```bash
-mkdir -p config
-cat > config/pgbouncer.ini << 'EOF'
-[databases]
-dq_pipeline = host=postgres port=5432 dbname=dq_pipeline
-
-[pgbouncer]
-listen_addr = *
-listen_port = 6432
-auth_type = md5
-auth_file = /etc/pgbouncer/userlist.txt
-pool_mode = transaction
-max_client_conn = 1000
-default_pool_size = 25
-min_pool_size = 10
-reserve_pool_size = 5
-EOF
-```
-
-Create `config/userlist.txt`:
-
-```bash
-cat > config/userlist.txt << 'EOF'
-"cadqstream" "md5cadqstream123"
-EOF
 ```
 
 - [ ] **Step 2: Create .env file**
@@ -2847,15 +2779,10 @@ EOF
 # .env
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
 SCHEMA_REGISTRY_URL=http://localhost:8081
-POSTGRES_HOST=localhost
-POSTGRES_PORT=6432
-POSTGRES_POOLER=pgbouncer
-POSTGRES_DB=dq_pipeline
-POSTGRES_USER=cadqstream
-POSTGRES_PASSWORD=cadqstream123
 MINIO_ENDPOINT=localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin123
+MINIO_BUCKETS=cadqstream-raw,cadqstream-violations,cadqstream-anomalies,cadqstream-metrics,cadqstream-drift,cadqstream-checkpoints,cadqstream-models
 ```
 
 - [ ] **Step 3: Start services**
@@ -2870,7 +2797,6 @@ Creating network "cadqstream_default"
 Creating cadqstream_zookeeper_1 ... done
 Creating cadqstream_kafka_1 ... done
 Creating cadqstream_schema-registry_1 ... done
-Creating cadqstream_postgres_1 ... done
 Creating cadqstream_minio_1 ... done
 ```
 
@@ -2890,27 +2816,23 @@ docker exec -it cadqstream_kafka_1 kafka-broker-api-versions --bootstrap-server 
 curl http://localhost:8081/subjects
 # Expected: []
 
-# Test PostgreSQL
-docker exec -it cadqstream_postgres_1 psql -U cadqstream -d dq_pipeline -c "SELECT version();"
-
-# Test PgBouncer (CRITICAL)
-docker exec cadqstream_pgbouncer_1 psql \
-  -h localhost -p 6432 -U cadqstream -d pgbouncer -c "SHOW POOLS;"
-# Expected: dq_pipeline | cadqstream | 0 active | 10 idle
+# Test MinIO
+mc alias set myminio http://localhost:9000 minioadmin minioadmin123
+mc ls myminio/
+# Expected: List of buckets
 ```
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add docker-compose.yml .env
-git commit -m "infra: Docker Compose for Kafka, Postgres, MinIO
+git commit -m "infra: Docker Compose for Kafka, MinIO
 
 Services:
 - Kafka (1 broker, port 9092)
 - Zookeeper (port 2181)
 - Schema Registry (port 8081)
-- PostgreSQL 15 (port 5432)
-- MinIO (port 9000)
+- MinIO (ports 9000/9001)
 
 Task: Phase 1, Task 1.1
 Spec: Section 2.1, Lines 147-167"
@@ -3128,185 +3050,107 @@ Spec: Section 2.1, Lines 176-178"
 
 ---
 
-### Task 1.4: PostgreSQL Schema Setup
+### Task 1.4: MinIO Bucket Setup
 
 **Files:**
-- Create: `sql/schema.sql`
-- Create: `scripts/init_postgres.sh`
+- Create: `scripts/init_minio.sh`
 
-- [ ] **Step 1: Write PostgreSQL schema**
-
-```sql
--- sql/schema.sql
--- PostgreSQL schema for CA-DQStream pipeline
--- Spec: Section 2.3, Lines 250-275
-
-CREATE TABLE IF NOT EXISTS taxi_trips_raw (
-    trip_id VARCHAR(64) PRIMARY KEY,
-    vendor_id INTEGER,
-    pickup_datetime TIMESTAMP NOT NULL,
-    dropoff_datetime TIMESTAMP NOT NULL,
-    passenger_count INTEGER,
-    trip_distance DOUBLE PRECISION,
-    pickup_location_id INTEGER,
-    dropoff_location_id INTEGER,
-    payment_type INTEGER,
-    fare_amount DOUBLE PRECISION,
-    total_amount DOUBLE PRECISION,
-    ingestion_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_pickup_datetime (pickup_datetime),
-    INDEX idx_pickup_location (pickup_location_id)
-);
-
-CREATE TABLE IF NOT EXISTS schema_violations (
-    violation_id SERIAL PRIMARY KEY,
-    trip_id VARCHAR(64),
-    violation_type VARCHAR(100),
-    violation_reason TEXT,
-    raw_record JSONB,
-    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_violation_type (violation_type),
-    INDEX idx_detected_at (detected_at)
-);
-
-CREATE TABLE IF NOT EXISTS deduplication_stats (
-    stat_id SERIAL PRIMARY KEY,
-    window_start TIMESTAMP,
-    window_end TIMESTAMP,
-    total_records BIGINT,
-    duplicates_removed BIGINT,
-    dedup_rate DOUBLE PRECISION,
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS anomaly_scores (
-    score_id SERIAL PRIMARY KEY,
-    trip_id VARCHAR(64),
-    anomaly_score DOUBLE PRECISION,
-    threshold DOUBLE PRECISION,
-    is_anomaly BOOLEAN,
-    context_key VARCHAR(200),
-    scored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_trip_id (trip_id),
-    INDEX idx_is_anomaly (is_anomaly)
-);
-
-CREATE TABLE IF NOT EXISTS meta_metrics (
-    metric_id SERIAL PRIMARY KEY,
-    neighborhood VARCHAR(100),
-    window_start TIMESTAMP,
-    window_end TIMESTAMP,
-    volume BIGINT,
-    null_rate DOUBLE PRECISION,
-    violation_rate DOUBLE PRECISION,
-    anomaly_rate DOUBLE PRECISION,
-    avg_anomaly_score DOUBLE PRECISION,
-    delta_score DOUBLE PRECISION,
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_neighborhood (neighborhood),
-    INDEX idx_window_start (window_start)
-);
-
-CREATE TABLE IF NOT EXISTS drift_events (
-    event_id SERIAL PRIMARY KEY,
-    scenario VARCHAR(50),
-    neighborhood VARCHAR(100),
-    triggered_at TIMESTAMP,
-    strategy VARCHAR(50),
-    action_taken TEXT,
-    recovery_time_sec INTEGER,
-    INDEX idx_scenario (scenario),
-    INDEX idx_triggered_at (triggered_at)
-);
-
-CREATE TABLE IF NOT EXISTS model_versions (
-    version_id SERIAL PRIMARY KEY,
-    model_name VARCHAR(100),
-    version VARCHAR(20),
-    deployed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    artifact_uri TEXT,
-    metrics JSONB,
-    INDEX idx_deployed_at (deployed_at)
-);
-```
-
-- [ ] **Step 2: Write init script**
+- [ ] **Step 1: Write MinIO bucket initialization script**
 
 ```bash
 #!/bin/bash
-# scripts/init_postgres.sh
+# scripts/init_minio.sh
 
-CONTAINER="cadqstream_postgres_1"
-DB="dq_pipeline"
-USER="cadqstream"
+MINIO_ALIAS="myminio"
+MINIO_ENDPOINT="localhost:9000"
+MINIO_USER="minioadmin"
+MINIO_PASS="minioadmin123"
 
-echo "Initializing PostgreSQL schema..."
+echo "Initializing MinIO buckets..."
 
-docker exec -i $CONTAINER psql -U $USER -d $DB < sql/schema.sql
+# Set up MinIO client alias
+mc alias set $MINIO_ALIAS http://$MINIO_ENDPOINT $MINIO_USER $MINIO_PASS
 
-if [ $? -eq 0 ]; then
-  echo "✅ Schema initialized"
-  
-  echo ""
-  echo "Tables:"
-  docker exec $CONTAINER psql -U $USER -d $DB -c "\dt"
-else
-  echo "❌ Schema initialization failed"
-  exit 1
-fi
+# Create buckets
+BUCKETS=(
+  "cadqstream-raw"
+  "cadqstream-violations"
+  "cadqstream-anomalies"
+  "cadqstream-metrics"
+  "cadqstream-drift"
+  "cadqstream-checkpoints"
+  "cadqstream-models"
+)
+
+for bucket in "${BUCKETS[@]}"; do
+  if mc ls $MINIO_ALIAS/$bucket 2>/dev/null; then
+    echo "  Bucket exists: $bucket"
+  else
+    mc mb $MINIO_ALIAS/$bucket
+    echo "  ✅ Created bucket: $bucket"
+  fi
+done
+
+# Set lifecycle policies (auto-expire old data)
+mc alias set $MINIO_ALIAS http://$MINIO_ENDPOINT $MINIO_USER $MINIO_PASS
+
+# Set public policy for checkpoints (Flink needs read access)
+mc anonymous set download $MINIO_ALIAS/cadqstream-checkpoints
+
+echo ""
+echo "✅ MinIO buckets initialized"
+mc ls $MINIO_ALIAS/
 ```
 
-- [ ] **Step 3: Run init script**
+- [ ] **Step 2: Run init script**
 
 ```bash
-chmod +x scripts/init_postgres.sh
-./scripts/init_postgres.sh
+chmod +x scripts/init_minio.sh
+./scripts/init_minio.sh
 ```
 
 Expected output:
 ```
-Initializing PostgreSQL schema...
-CREATE TABLE
-CREATE TABLE
+Initializing MinIO buckets...
+  ✅ Created bucket: cadqstream-raw
+  ✅ Created bucket: cadqstream-violations
+  ✅ Created bucket: cadqstream-anomalies
+  ✅ Created bucket: cadqstream-metrics
+  ✅ Created bucket: cadqstream-drift
+  ✅ Created bucket: cadqstream-checkpoints
+  ✅ Created bucket: cadqstream-models
+✅ MinIO buckets initialized
+
+[2024-01-15 10:30:00 UTC]     0B cadqstream-anomalies/
+[2024-01-15 10:30:00 UTC]     0B cadqstream-checkpoints/
 ...
-✅ Schema initialized
-
-Tables:
- public | anomaly_scores      | table | cadqstream
- public | deduplication_stats | table | cadqstream
- public | drift_events        | table | cadqstream
- public | meta_metrics        | table | cadqstream
- public | model_versions      | table | cadqstream
- public | schema_violations   | table | cadqstream
- public | taxi_trips_raw      | table | cadqstream
 ```
 
-- [ ] **Step 4: Verify tables**
+- [ ] **Step 3: Verify buckets**
 
 ```bash
-docker exec cadqstream_postgres_1 psql -U cadqstream -d dq_pipeline \
-  -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public';"
+mc ls myminio/
 ```
 
-Expected: 7 tables listed
+Expected: 7 buckets listed
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add sql/schema.sql scripts/init_postgres.sh
-git commit -m "infra: PostgreSQL schema for 7 tables
+git add scripts/init_minio.sh
+git commit -m "infra: MinIO bucket setup for data lake
 
-Tables:
-- taxi_trips_raw (raw ingestion)
-- schema_violations (Layer 1)
-- deduplication_stats (Layer 1)
-- anomaly_scores (Layer 2)
-- meta_metrics (Layer 3)
-- drift_events (Layer 4)
-- model_versions (MLOps)
+Buckets:
+- cadqstream-raw (clean records)
+- cadqstream-violations (Layer 1+2 rejects)
+- cadqstream-anomalies (ML scores)
+- cadqstream-metrics (aggregated metrics)
+- cadqstream-drift (threshold history)
+- cadqstream-checkpoints (Flink state)
+- cadqstream-models (MLflow artifacts)
 
 Task: Phase 1, Task 1.4
-Spec: Section 2.3, Lines 250-275"
+Spec: Section 2.3, Lines 250-350"
 ```
 
 ---
@@ -3757,35 +3601,50 @@ class SchemaValidator(FilterFunction):
 
 ---
 
-### Task 1.10: JDBC Sink for PostgreSQL
+### Task 1.10: StreamingFileSink for MinIO
 
 **Files:**
-- Create: `src/sinks/postgres_sink.py`
+- Create: `src/sinks/minio_sink.py`
 
-- [ ] **Steps 1-3: TDD for JDBC sink**
+- [ ] **Steps 1-3: TDD for StreamingFileSink**
 
 ```python
-# src/sinks/postgres_sink.py
-from pyflink.datastream.connectors.jdbc import JdbcSink, JdbcConnectionOptions
+# src/sinks/minio_sink.py
+from pyflink.datastream.connectors.file_system import FileSink
+from pyflink.formats.parquet.avro import ParquetAvroWriters
+from pyflink.datastream.connectors.file_system import RollingPolicy
 
-def create_postgres_sink(table: str):
-    """Create JDBC sink for PostgreSQL."""
+def create_minio_sink(bucket: str, record_type: type):
+    """Create StreamingFileSink for MinIO (S3-compatible) with Parquet output.
     
-    conn_opts = (
-        JdbcConnectionOptions.JdbcConnectionOptionsBuilder()
-        .with_url(f"jdbc:postgresql://localhost:5432/dq_pipeline")
-        .with_driver_name("org.postgresql.Driver")
-        .with_user_name("cadqstream")
-        .with_password("cadqstream123")
+    Args:
+        bucket: MinIO bucket name (e.g., 'cadqstream-violations')
+        record_type: Avro record type for serialization
+    
+    Returns:
+        Configured StreamingFileSink
+    """
+    return (
+        FileSink
+        .for_bulk_format(f"s3://{bucket}/", ParquetAvroWriters.for_avro_record(record_type))
+        .with_rolling_policy(
+            RollingPolicy.default_rolling_policy(
+                part_size=1024 * 1024 * 128,  # 128 MB
+                rollover_interval=timedelta(minutes=5),
+                inactivity_interval=timedelta(minutes=1)
+            )
+        )
+        .with_bucket_assigner(
+            DateTimeBucketAssigner("yyyy-MM-dd--HH-mm", timezone.utc)
+        )
         .build()
     )
-    
-    sink = JdbcSink.sink(
-        f"INSERT INTO {table} (trip_id, pickup_datetime, ...) VALUES (?, ?, ...)",
-        conn_opts
-    )
-    
-    return sink
+
+# Example: Create sink for violations bucket
+violations_sink = create_minio_sink(
+    bucket="cadqstream-violations",
+    record_type=ViolationRecord
+)
 ```
 
 - [ ] **Step 4: Wire to Flink job**
@@ -3851,7 +3710,7 @@ for record in read_parquet('data/clean/jan_2024_clean_baseline.parquet'):
 ```python
 # test/integration/test_e2e_baseline.py
 def test_e2e_baseline_pipeline():
-    """Test Kafka → Flink → PostgreSQL."""
+    """Test Kafka → Flink → MinIO."""
     
     # 1. Produce 1000 records
     produce_test_records(count=1000)
@@ -3862,12 +3721,13 @@ def test_e2e_baseline_pipeline():
     # 3. Wait for processing
     time.sleep(30)
     
-    # 4. Query PostgreSQL
-    conn = psycopg2.connect(...)
-    cursor = conn.execute("SELECT COUNT(*) FROM taxi_trips_raw")
-    count = cursor.fetchone()[0]
+    # 4. Check MinIO for written files
+    import boto3
+    s3 = boto3.client('s3', endpoint_url='http://localhost:9000')
+    response = s3.list_objects_v2(Bucket='cadqstream-raw')
+    count = response.get('KeyCount', 0)
     
-    assert count >= 900, f"Expected >=900, got {count}"  # Allow dedup
+    assert count >= 1, f"Expected files in MinIO, got {count}"
     
     # 5. Cleanup
     flink_proc.kill()
@@ -3931,7 +3791,7 @@ def validate_phase1():
         check_docker_services_running(),
         check_kafka_topics_exist(),
         check_schema_registered(),
-        check_postgres_tables_exist(),
+        check_minio_buckets_exist(),
         check_flink_job_running(),
         check_data_flow_working(),
         check_throughput_1k_eps()
@@ -3955,7 +3815,7 @@ Validates:
 - Docker services up
 - Kafka topics created
 - Schema registered
-- PostgreSQL tables exist
+- MinIO buckets exist
 - Flink job starts
 - E2E data flow works
 - Throughput >=1K eps
@@ -3969,16 +3829,16 @@ Spec: Section 7.2, Lines 3702-3716"
 ## Phase 1 Complete ✅
 
 **Deliverables:**
-- ✅ Docker Compose (Kafka, Postgres, MinIO)
+- ✅ Docker Compose (Kafka, MinIO)
 - ✅ 7 Kafka topics created
 - ✅ Avro schema registered
-- ✅ PostgreSQL schema (7 tables)
+- ✅ MinIO buckets (6 data lake buckets)
 - ✅ Flink job baseline (Layer 1)
 - ✅ Watermark assignment (30s idleness)
 - ✅ MurmurHash3 key generation
 - ✅ KeyedState deduplication (7-day TTL)
 - ✅ Schema validation
-- ✅ JDBC PostgreSQL sink
+- ✅ StreamingFileSink (MinIO/Parquet)
 - ✅ MinIO checkpoints (45s intervals)
 - ✅ Kafka Avro producer
 - ✅ E2E integration test
@@ -4642,7 +4502,7 @@ class CanaryRulesFilter(FilterFunction):
 
 - [ ] **3.2: Route violations to dq-hard-rule-violations**
 - [ ] **3.3: Pass-through clean records with violation_flag=False**
-- [ ] **3.4: PostgreSQL sink for violations**
+- [ ] **3.4: StreamingFileSink for violations to MinIO**
 - [ ] **3.5: Test Canary branch**
 
 - [ ] **Commit: Layer 2 Canary branch**
@@ -5830,7 +5690,7 @@ python scripts/inject_anomalies.py
 ```bash
 docker-compose up -d
 ./scripts/create_topics.sh
-./scripts/init_postgres.sh
+./scripts/init_minio.sh
 ```
 
 5. **Train models**
@@ -5907,7 +5767,7 @@ git tag -a v1.0.0 -m "CA-DQStream v1.0.0 - Production Release"
 | Phase | Tasks | Status | Key Deliverables |
 |-------|-------|--------|------------------|
 | **Phase 0** | 10 | ✅ | EDA, sanitization, 50K synthetic anomalies, 15D features, 4D thresholds |
-| **Phase 1** | 15 | ✅ | Kafka, Flink baseline, Layer 1 (schema+dedup), PostgreSQL, 1-5K eps |
+| **Phase 1** | 15 | ✅ | Kafka, Flink baseline, Layer 1 (schema+dedup), MinIO, 1-5K eps |
 | **Phase 2** | 35 | ✅ | iForestASD (F1=0.87), Layer 2 Complex, 7-algo benchmark, statistical tests |
 | **Phase 3** | 35 | ✅ | Canary, Rendezvous, MetaAgg, ADWIN-U, IEC, FastAPI, multi-strategy |
 | **Phase 4** | 20 | ✅ | MLOps, monitoring, Experiments 2-3, thesis materials, validation |

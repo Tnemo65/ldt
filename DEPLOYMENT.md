@@ -5,7 +5,7 @@
 ### Bước 1: Start Infrastructure Services
 
 ```bash
-# 1. Start Docker services (Kafka, PostgreSQL, MinIO)
+# 1. Start Docker services (Kafka, MinIO)
 docker compose up -d
 
 # 2. Wait for services to be ready (30-60 seconds)
@@ -13,7 +13,6 @@ docker compose ps
 
 # 3. Verify services
 docker compose logs kafka | tail -20
-docker compose logs postgres | tail -20
 ```
 
 **Expected:** All services "Up" and healthy
@@ -39,10 +38,7 @@ docker compose logs postgres | tail -20
 # 2. Register Avro schema
 python scripts/register_schema.py
 
-# 3. Initialize PostgreSQL schema
-./scripts/init_postgres.sh
-
-# 4. Setup MinIO buckets
+# 3. Setup MinIO buckets
 ./scripts/setup_minio.sh
 ```
 
@@ -206,9 +202,8 @@ docker exec cadqstream_kafka_1 kafka-console-consumer \
   --from-beginning \
   --max-messages 5
 
-# 3. Check PostgreSQL has data
-docker exec cadqstream_postgres_1 psql -U cadqstream -d dq_pipeline -c \
-  "SELECT COUNT(*) FROM taxi_trips_raw;"
+# 3. Check MinIO bucket data
+docker exec ldt-minio mc ls local/
 
 # 4. Check ML service metrics
 curl http://localhost:8000/metrics | grep inference
@@ -299,7 +294,7 @@ Producer → Kafka (taxi-nyc-raw)
            ↓
     Layer 4: IEC
            ↓
-    Outputs: PostgreSQL + Kafka + Metrics
+    Outputs: MinIO + Kafka + Metrics
 ```
 
 **Normal throughput:** 1,000-5,000 events/sec
@@ -351,7 +346,7 @@ When all services are running, you should have:
 ## 🎯 Next Steps
 
 1. **Monitor metrics:** Check Prometheus endpoint
-2. **View results:** Query PostgreSQL for processed records
+2. **View results:** Check MinIO buckets for processed records
 3. **Test drift:** Inject anomalies and watch IEC adapt
 4. **Benchmark:** Run performance validation scripts
 5. **Tune:** Adjust thresholds, model parameters

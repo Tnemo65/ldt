@@ -12,7 +12,7 @@
 \contentsline {table}{\numberline {5.4}{\ignorespaces Summary of threshold initialization and update mechanisms in CA-DQStream.}}{30}{table.5.4}%
 \contentsline {table}{\numberline {5.6}{\ignorespaces Flink operators implementing the CA-DQStream pipeline.}}{34}{table.5.6}%
 \contentsline {table}{\numberline {5.7}{\ignorespaces Apache Kafka topics in the CA-DQStream pipeline.}}{34}{table.5.7}%
-\contentsline {table}{\numberline {5.8}{\ignorespaces PostgreSQL database schema for CA-DQStream.}}{34}{table.5.8}%
+\contentsline {table}{\numberline {5.8}{\ignorespaces MinIO storage buckets for CA-DQStream.}}{34}{table.5.8}%
 \contentsline {table}{\numberline {5.9}{\ignorespaces Prometheus metrics collection sources.}}{35}{table.5.9}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }

@@ -27,8 +27,7 @@ dependencies = [
     "kafka-python==2.0.2",
     "avro-python3==1.10.2",
 
-    # Database
-    "psycopg2-binary==2.9.9",
+    # Data Storage
     "sqlalchemy==2.0.23",
 
     # ML & Data Science

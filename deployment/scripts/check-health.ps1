@@ -1,9 +1,9 @@
 # CA-DQStream Health Check Script (PowerShell)
+# Storage: MinIO only
 
 $services = @(
     @{Name="ldt-zookeeper"; Url=""; Port=2181; Protocol="tcp"; Desc="ZooKeeper"},
     @{Name="ldt-kafka"; Url=""; Port=9092; Protocol="tcp"; Desc="Kafka"},
-    @{Name="ldt-postgres"; Url=""; Port=5432; Protocol="tcp"; Desc="PostgreSQL"},
     @{Name="ldt-minio"; Url="http://localhost:9000/minio/health/live"; Port=9000; Protocol="http"; Desc="MinIO"},
     @{Name="ldt-mlflow"; Url="http://localhost:5000"; Port=5000; Protocol="http"; Desc="MLflow"},
     @{Name="ldt-schema-registry"; Url=""; Port=8082; Protocol="tcp"; Desc="Schema Registry"},
@@ -15,7 +15,7 @@ $services = @(
 
 Write-Host ""
 Write-Host "================================================================"
-Write-Host "  CA-DQStream Health Check"
+Write-Host "  CA-DQStream Health Check (MinIO-only storage)"
 Write-Host "================================================================"
 Write-Host ""
 
@@ -45,13 +45,6 @@ if ($topics) {
     $topics | ForEach-Object { Write-Host "  $_" }
 } else {
     Write-Host "  (unable to list)" -ForegroundColor Red
-}
-
-Write-Host ""
-Write-Host "[INFO] PostgreSQL tables:"
-$tables = docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c "\dt" 2>$null
-if ($tables) {
-    $tables | Select-Object -Last 10 | ForEach-Object { Write-Host "  $_" }
 }
 
 Write-Host ""

@@ -7,7 +7,7 @@
 % ================================================
 \section{System Overview}
 
-This chapter details the engineering implementation of CA-DQStream on Apache Flink, Kafka, PostgreSQL, and Grafana. While Chapter 3 presented the four core innovations (4D thresholds, Rendezvous, IEC, Hybrid model), this chapter explains how these innovations are deployed in a production-grade distributed system.
+This chapter details the engineering implementation of CA-DQStream on Apache Flink, Kafka, MinIO, and Grafana. While Chapter 3 presented the four core innovations (4D thresholds, Rendezvous, IEC, Hybrid model), this chapter explains how these innovations are deployed in a production-grade distributed system.
 
 CA-DQStream separates infrastructure concerns from algorithmic contributions through a clear architectural decomposition into \textbf{Infrastructure Layers} (data transport, storage, monitoring) and \textbf{Processing Layers} (data quality validation algorithms).
 
@@ -16,12 +16,12 @@ CA-DQStream separates infrastructure concerns from algorithmic contributions thr
 The infrastructure provides the distributed computing foundation:
 
 \begin{enumerate}
-    \item \textbf{Storage \& Messaging Layer:} Apache Kafka (event streaming backbone with 7 topics, 12 partitions each), PostgreSQL (persistent storage for clean/dirty records), MinIO (S3-compatible checkpoint storage), Confluent Schema Registry (Avro schema enforcement).
+    \item \textbf{Storage \& Messaging Layer:} Apache Kafka (event streaming backbone with 7 topics), MinIO (S3-compatible persistent storage via Flink StreamingFileSink in Parquet format), Confluent Schema Registry (schema enforcement).
 
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.75\textwidth]{figs/Thesis_Figures/kafka1.PNG}}
-\caption{CA-DQStream Kafka topics and consumer groups in the Flink Web UI. The seven topics (taxi-nyc-raw, dq-schema-violations, dq-hard-rule-violations, dq-if-anomalies, dq-anomaly-scores, dq-meta-stream, if-model-updates) with 12 partitions each enable parallel processing across the streaming pipeline.}
+\caption{CA-DQStream Kafka topics and consumer groups in the Flink Web UI. The seven topics (taxi-nyc-raw, dq-schema-violations, dq-hard-rule-violations, dq-if-anomalies, dq-anomaly-scores, dq-meta-stream, if-model-updates) with 4 partitions each enable parallel processing across the streaming pipeline.}
 \label{fig:kafka_topics_ui_architect}
 \end{figure}
 
@@ -53,7 +53,7 @@ The infrastructure provides the distributed computing foundation:
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.85\textwidth]{figs/Thesis_Figures/prometheus.PNG}}
-\caption{Prometheus targets page showing CA-DQStream monitoring endpoints. Prometheus scrapes metrics from Flink TaskManagers (port 9249), PostgreSQL (port 9187), and Kafka JMX (port 7071) at 15-second intervals.}
+\caption{Prometheus targets page showing CA-DQStream monitoring endpoints. Prometheus scrapes metrics from Flink TaskManagers (port 9249), Kafka JMX (port 7071), and MinIO (port 9000) at 15-second intervals.}
 \label{fig:prometheus_targets}
 \end{figure}
 \end{enumerate}
@@ -65,7 +65,7 @@ The scientific contributions (Chapter 3) are implemented in a four-stage process
 \begin{enumerate}
     \item \textbf{Layer 1: Schema Filter \& Deduplication} --- Completeness validation (NULL checks) and Flink KeyedState dedup with 7-day TTL.
 
-    \item \textbf{Layer 2: Rendezvous Architecture} --- Parallel execution of Canary (rule-based) and Complex (ML-based) branches with fork-join pattern.
+    \item \textbf{Layer 2: Conditional Routing Architecture} --- Records pass through exactly one of two evaluation paths (Canary or Complex) based on rule-based pre-qualification, with results merged at the MetaAggregator.
 
     \item \textbf{Layer 3: MetaAggregator} --- 1-minute windowed aggregation of quality metrics, spatial grouping by neighborhood.
 
@@ -75,11 +75,11 @@ The scientific contributions (Chapter 3) are implemented in a four-stage process
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.98\textwidth]{figs/system_architecture.png}}
-\caption{CA-DQStream System Architecture. The framework consists of five layers: (1) Data Source Layer with NYC TLC Parquet files ingested via Kafka Producer; (2) Kafka Layer with six topics for raw data, violations, anomaly scores, meta-stream, and model updates; (3) Processing Layer with Flink implementing a four-stage Rendezvous pipeline: Schema Validation, then parallel Business Rules and Isolation Forest branches converging at MetaAggregator, feeding the Intelligent Evolution Controller (ADWIN) for self-monitoring; (4) Data Storage Layer with PostgreSQL for cleaned data, dirty data, and alerts; (5) Monitoring Layer with Prometheus and Grafana for real-time observability.}
+\caption{CA-DQStream System Architecture. The framework consists of five layers: (1) Data Source Layer with NYC TLC Parquet files ingested via Kafka Producer; (2) Kafka Layer with six topics for raw data, violations, anomaly scores, meta-stream, and model updates; (3) Processing Layer with Flink implementing a four-stage Rendezvous pipeline: Schema Validation, then parallel Business Rules and Isolation Forest branches converging at MetaAggregator, feeding the Intelligent Evolution Controller (ADWIN) for self-monitoring; (4) Data Storage Layer with MinIO (S3-compatible) for all pipeline outputs in Parquet format; (5) Monitoring Layer with Prometheus and Grafana for real-time observability.}
 \label{fig:system_architecture}
 \end{figure}
 
-This separation clarifies that the \textbf{infrastructure layers} (Kafka, PostgreSQL, Prometheus, etc.) provide the distributed computing platform, while the \textbf{processing layers} (Schema Filter, Rendezvous, MetaAgg, IEC) contain the novel algorithmic contributions of this thesis (detailed in Chapter 3).
+This separation clarifies that the \textbf{infrastructure layers} (Kafka, MinIO, Prometheus, etc.) provide the distributed computing platform, while the \textbf{processing layers} (Schema Filter, Rendezvous, MetaAgg, IEC) contain the novel algorithmic contributions of this thesis (detailed in Chapter 3).
 
 \subsection{Cold-Start Model Training (Offline Phase)}
 
@@ -207,7 +207,7 @@ The Hybrid K-Means + sklearn IsolationForest model is trained \emph{offline} on 
 \begin{enumerate}
     \item \textbf{K-Means Clustering:} Create 5--7 neighborhood clusters based on (avg\_distance, avg\_fare) spatial features. Airport zones (JFK, Newark, LaGuardia) are assigned to a dedicated cluster. Remaining zones are clustered via K-Means (n=5, random\_state=42).
 
-    \item \textbf{IsolationForest Trees:} Train 100 isolation trees on 21D enhanced features (15D base + 6D ratio features). Contamination parameter set to 0.02 (2\% expected anomaly rate in production, accounting for residual anomalies not caught by Stages 1--2; the contamination level acts as a prior rather than a hard threshold, and the 4D context-aware thresholds in Layer 3 further refine the classification boundary at inference time).
+    \item \textbf{IsolationForest Trees:} Train 200 isolation trees on 21D enhanced features (15D base + 6D ratio features). Contamination parameter set to 0.001 (0.1\% expected anomaly rate in production, accounting for residual anomalies not caught by Stages 1--2; the contamination level acts as a prior rather than a hard threshold, and the 4D context-aware thresholds in Layer 3 further refine the classification boundary at inference time).
 
     \item \textbf{Threshold Matrix:} Compute 4D context-aware thresholds (588 cells) from the clean distribution. Each cell stores $(\mu_{\text{cell}}, \sigma_{\text{cell}}, T_{\text{cell}} = \mu + 2\sigma)$ for the context (trip\_type, time\_window, day\_type, neighborhood).
 
@@ -352,20 +352,14 @@ The full context-aware feature vector (\textbf{21 features}) is computed for eac
 6 & fare\_per\_mile & Computed & fare\_amount / trip\_distance (if dist $>$ 0) \\ \hline
 7 & total\_amount & Raw & --- \\ \hline
 8 & passenger\_count & Raw & --- \\ \hline
-9 & hour\_sin & Temporal & $\sin(2\pi h / 24)$ \\ \hline
-10 & hour\_cos & Temporal & $\cos(2\pi h / 24)$ \\ \hline
-11 & dow\_sin & Temporal & $\sin(2\pi \cdot \text{dow} / 7)$ \\ \hline
-12 & dow\_cos & Temporal & $\cos(2\pi \cdot \text{dow} / 7)$ \\ \hline
-13 & pickup\_grid\_x & Spatial & $g_x(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
-14 & pickup\_grid\_y & Spatial & $g_y(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
-15 & trip\_distance\_log & Transformed & $\log(1 + trip\_distance)$ \\ \hline
-\multicolumn{4}{|c|}{\textbf{RATIO FEATURES (6D) -- VARIANCE REDUCTION 10--100$\times$}} \\ \hline
-16 & fare\_per\_mile\_ratio & Normalized & $\text{fare\_per\_mile} / \mu_{\text{fpm}}^{\text{ctx}}$ \\ \hline
-17 & implied\_speed\_ratio & Normalized & $\text{speed\_mph} / \mu_{\text{speed}}^{\text{ctx}}$ \\ \hline
-18 & fare\_per\_minute\_ratio & Normalized & $\text{fare\_per\_minute} / \mu_{\text{fpmm}}^{\text{ctx}}$ \\ \hline
-19 & tip\_ratio\_normalized & Normalized & $(\text{tip} / \text{fare}) / \mu_{\text{tip}}^{\text{ctx}}$ \\ \hline
-20 & passenger\_density\_ratio & Normalized & $(\text{passengers} / d) / \mu_{\text{density}}$ \\ \hline
-21 & distance\_log\_ratio & Transformed & $\log(1+d) / \mu_{\log d}^{\text{ctx}}$ \\ \hline
+9 & hour & Temporal & Hour of day (0-23, raw numeric) \\ \hline
+10 & day\_of\_week & Temporal & Day of week (0-6, raw numeric) \\ \hline
+11 & is\_weekend & Temporal & Binary: 1 if Sat/Sun, 0 otherwise \\ \hline
+12 & is\_rush\_hour & Temporal & Binary: 1 if 7-9h or 16-19h \\ \hline
+13 & is\_night & Temporal & Binary: 1 if hour $<$ 6 or $>$ 22 \\ \hline
+14 & month & Temporal & Month (1-12, raw numeric) \\ \hline
+15 & pickup\_grid\_x & Spatial & $g_x(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
+16 & pickup\_grid\_y & Spatial & $g_y(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
 \caption{21-dimensional enhanced feature vector for Hybrid K-Means + sklearn IsolationForest.}
 \label{tab:feature_vector}
 \end{longtable}
@@ -381,25 +375,19 @@ NYC Taxi data exhibits extreme natural variance that confuses absolute-feature-b
 
 Absolute features ($fare\_amount$, $trip\_distance$) create \textbf{context collapse}: a \$50 fare is normal for JFK airport trips but anomalous for Standard trips. This causes the model to learn spurious patterns and produce high false positive rates (FPR $>$ 60\% in baseline experiments).
 
-\textbf{Ratio features normalize by baseline values}, reducing variance 10--100$\times$:
+\textbf{Ratio features normalize by global baseline values}, reducing variance 10--100$\times$:
 
 \begin{equation}
-\text{fare\_per\_mile\_ratio} = \frac{\text{fare\_per\_mile}}{\text{baseline\_fpm}_{\text{context}}}
+\text{fare\_per\_mile\_ratio} = \frac{\text{fare\_per\_mile}}{\text{BASELINE}_{\text{fpm}}}
 \end{equation}
 
-where $\text{baseline\_fpm}_{\text{context}}$ is the median fare-per-mile for the trip's context (ratecode, hour, neighborhood). For example:
+where $\text{BASELINE}_{\text{fpm}} = \$2.5$ per mile is a fixed global baseline computed from the training data (January 2024 clean baseline). For example:
 \begin{itemize}
-    \item JFK airport trip: baseline\_fpm = \$3.50 (high)
-    \item Standard Manhattan trip: baseline\_fpm = \$2.20 (low)
+    \item JFK airport trip: fare\_per\_mile\_ratio = $52.18 / 2.5 = 20.87$
+    \item Standard Manhattan trip: fare\_per\_mile\_ratio = $15.42 / 2.5 = 6.17$
 \end{itemize}
 
-A trip with fare\_per\_mile = \$8.00 produces:
-\begin{itemize}
-    \item JFK context: ratio = $8.00 / 3.50 = 2.29$ (suspicious but plausible)
-    \item Standard context: ratio = $8.00 / 2.20 = 3.64$ (\textbf{clear fraud})
-\end{itemize}
-
-The ratio feature makes the fraud signal \textbf{context-independent}, enabling the model to generalize across trip types.
+A trip with fare\_per\_mile = \$8.00 produces ratio = $8.00 / 2.5 = 3.2$, which is significantly elevated compared to the baseline of 1.0, enabling detection of anomalous trips regardless of trip type.
 
 \textbf{Empirical Validation (Offline Prototype):}
 \begin{itemize}
@@ -437,7 +425,7 @@ Records passing through Branch 2 receive an anomaly score from the hybrid model.
 \end{cases}
 \end{equation}
 
-Output: Anomaly scores and priorities are emitted to the \texttt{dq-anomaly-scores} Kafka topic and written to PostgreSQL.
+Output: Anomaly scores and priorities are emitted to the \texttt{dq-anomaly-scores} Kafka topic and written to MinIO (cadqstream-anomalies bucket).
 
 Scale: Approximately 89,230 records out of 3M (2.9\%) are flagged at the Isolation Forest sub-stage.
 
@@ -516,9 +504,9 @@ After the two parallel branches (Business Rules and Isolation Forest) complete t
 The MetaAggregator serves two \textbf{distinct} functions:
 
 \begin{enumerate}
-    \item \textbf{Data Routing (Data Plane):} Merges results from both branches. Violation records (from Business Rules or sklearn IsolationForest) are emitted to \texttt{dq-dirty-data} Kafka topic (written to PostgreSQL dirty\_data table). Clean records are emitted to \texttt{dq-clean-data}.
+    \item \textbf{Data Routing (Data Plane):} Merges results from both branches. Violation records (from Business Rules or sklearn IsolationForest) are emitted to \texttt{dq-stream-anomalies} Kafka topic and written to MinIO (cadqstream-violations bucket). Clean records are emitted to \texttt{dq-stream-processed} Kafka topic.
 
-    \item \textbf{Meta-stream Generation (Control Plane):} Computes aggregated quality metrics (violation\_rate, anomaly\_rate, null\_rate, $\Delta$\_score) over 1-minute windows grouped by neighborhood, then emits the statistics stream to \texttt{dq-meta-stream} Kafka topic for IEC to monitor. MetaAggregator does NOT route clean/dirty data to PostgreSQL -- it only emits aggregate statistics to the meta-stream.
+    \item \textbf{Meta-stream Generation (Control Plane):} Computes aggregated quality metrics (violation\_rate, anomaly\_rate, null\_rate, $\Delta$\_score) over 1-minute windows grouped by neighborhood, then emits the statistics stream to \texttt{dq-meta-stream} Kafka topic for IEC to monitor and writes to MinIO (cadqstream-metrics bucket). MetaAggregator emits aggregate statistics to the meta-stream and MinIO.
 \end{enumerate}
 
 The quality meta-stream consists of six metrics, each defined as a rate over the current time window $t$:
@@ -624,7 +612,7 @@ CA-DQStream implements this operational layer through two components: a \textbf{
 The FastAPI ML Service is an asynchronous HTTP service that exposes three endpoints for IEC-triggered model updates:
 
 \begin{enumerate}
-    \item \texttt{POST /api/retrain} --- Triggers full Hybrid K-Means + sklearn IsolationForest retraining on MLflow. Loads a recent training window from PostgreSQL, retrains the model asynchronously (non-blocking), and publishes the new model to the \texttt{if-model-updates} Kafka topic for Flink Broadcast State consumption.
+    \item \texttt{POST /api/retrain} --- Triggers full Hybrid K-Means + sklearn IsolationForest retraining on MLflow. Loads training data, retrains the model asynchronously (non-blocking), publishes the new model artifact to MinIO, and the \texttt{if-model-updates} Kafka topic for Flink Broadcast State consumption.
 
     \item \texttt{POST /api/meter\_shift} --- Applies METER hypernetwork parameter shifts. Loads the pre-trained METER model (MLP 64-32-16), computes new K-Means centroid displacements based on input meta-metrics (null\_rate, violation\_rate, anomaly\_rate, volume, dedup\_rate, $\Delta$\_score), and publishes the updated model parameters to Kafka.
 
@@ -684,9 +672,9 @@ CA-DQStream implements the Rendezvous pattern on Apache Flink \citep{flinkdocs20
     \item \textbf{JobManager:} Schedules tasks, coordinates checkpoints for exactly-once semantics, handles failures.
     \item \textbf{TaskManagers:} Worker nodes executing parallel subtasks (12 slots total in Production Development mode, 4 slots in Laptop mode).
     \item \textbf{Event Time Processing:} Uses \texttt{tpep\_pickup\_datetime} as event timestamp (not processing time) for consistent time-based analytics.
-    \item \textbf{Checkpointing:} Incremental snapshots every 45 seconds to MinIO S3 storage, enabling exactly-once guarantee and failure recovery.
+    \item \textbf{Checkpointing:} Incremental snapshots every 45 seconds to MinIO S3 storage, enabling at-least-once delivery and failure recovery.
 
-\textbf{Exactly-Once Semantics:} CA-DQStream achieves end-to-end exactly-once through two complementary mechanisms: (1) \textbf{Flink Checkpointing:} Periodic state snapshots (45s interval) ensure operator state can be restored on failure. (2) \textbf{Kafka Transactions:} The Flink Kafka producer uses transactional writes with \texttt{transaction.timeout.ms = 10 minutes}. On checkpoint recovery, in-flight transactions are aborted and replayed idempotently. This is \emph{not} a traditional Two-Phase Commit (2PC) distributed transaction -- there is no blocking coordinator; throughput impact is limited to checkpoint barrier alignment phase (approximately 200-400ms per 45s interval, less than 1\% overhead).
+\textbf{At-Least-Once Semantics:} CA-DQStream uses at-least-once delivery through two complementary mechanisms: (1) \textbf{Flink Checkpointing:} Periodic state snapshots (45s interval) ensure operator state can be restored on failure. (2) \textbf{Kafka Transactions:} The Flink Kafka producer uses transactional writes with \texttt{transaction.timeout.ms = 10 minutes}. On checkpoint recovery, in-flight transactions are aborted and replayed idempotently. At-least-once is the standard production configuration for streaming systems; exactly-once requires significant throughput overhead from two-phase commit coordination that outweighs the benefit for data quality applications where downstream sinks handle deduplication.
     \item \textbf{RocksDB State Backend:} Manages KeyedState (7-day dedup TTL) with local SSD storage for high IOPS.
     \item \textbf{Broadcast State:} Distributes Hybrid K-Means + sklearn IsolationForest model to all parallel operator instances via Kafka-to-Python-worker delivery, loaded in-process for microsecond-access scoring.
 
@@ -749,7 +737,7 @@ IECOperator & Stateful (Keyed) & ADWIN-U drift detection \\ \hline
 
 \subsection{Apache Kafka Topics}
 
-Apache Kafka serves as the distributed event streaming backbone. The CA-DQStream pipeline uses 7 topics with 12 partitions each for parallel processing:
+Apache Kafka serves as the distributed event streaming backbone. The CA-DQStream pipeline uses 7 topics with 4 partitions each for parallel processing:
 
 \begin{longtable}{|m{4cm}|m{9cm}|}
 \hline
@@ -767,27 +755,28 @@ if-model-updates & Serialized model bytes for Broadcast State updates \\ \hline
 
 Kafka retention: 7 days for raw data topics, infinite retention with log compaction for \texttt{if-model-updates} (latest model always available for recovery).
 
-\subsection{PostgreSQL Data Storage}
+\subsection{MinIO Data Storage}
 
-PostgreSQL serves as the persistent data storage layer. The MetaAggregator (Rendezvous Point) writes clean records, dirty data (violations from both branches), and alerts to PostgreSQL via JDBC sink.
+All pipeline outputs are persisted to MinIO (S3-compatible object storage) via Flink StreamingFileSink in Parquet format. This provides scalable, durable storage with built-in versioning and lifecycle policies.
 
-The database schema consists of seven core tables:
+The storage hierarchy consists of seven buckets:
 
 \begin{longtable}{|m{4cm}|m{9.5cm}|}
 \hline
-\textbf{Table} & \textbf{Description} \\ \hline
-taxi\_clean & Clean records passing all stages, with IF scores and context features \\ \hline
-schema\_violations & Schema validation rejects (NULL fields, invalid types, duplicates) \\ \hline
-business\_rule\_violations & Business rules rejects (negative fare, zero distance, extreme speed, etc.) \\ \hline
-if\_anomalies & Isolation Forest detections with anomaly score, priority, and context features \\ \hline
-quality\_metrics & Aggregated DQ metrics per 1-minute window with IEC drift flags \\ \hline
-baseline\_stats & Rolling baseline statistics for Hybrid K-Means + sklearn IsolationForest retraining \\ \hline
-ml\_experiment\_results & Model ablation study results (Precision/Recall/F1/FPR) \\ \hline
-\caption{PostgreSQL database schema for CA-DQStream.}
-\label{tab:postgres_schema}
+\textbf{Bucket} & \textbf{Description} \\ \hline
+cadqstream-raw & Clean records passing all stages, with IF scores and context features \\ \hline
+cadqstream-violations & Schema validation rejects (NULL fields, invalid types, duplicates) + business rule violations \\ \hline
+cadqstream-anomalies & Isolation Forest detections with anomaly score, priority, and context features \\ \hline
+cadqstream-metrics & Aggregated DQ metrics per 1-minute window with IEC drift flags (Parquet) \\ \hline
+cadqstream-drift & Drift events and IEC decisions (Parquet) \\ \hline
+cadqstream-checkpoints & Flink checkpoints + ML model artifacts \\ \hline
+mlflow-artifacts & MLflow tracking server artifacts \\
+\hline
+\caption{MinIO storage buckets for CA-DQStream.}
+\label{tab:minio_schema}
 \end{longtable}
 
-Key indexes: \texttt{idx\_clean\_pickup} on pickup\_datetime for time-range queries, \texttt{idx\_quality\_metrics\_drift} on drift\_detected for alert history.
+Key features: Parquet format for columnar compression, bucket versioning enabled, lifecycle policies for automatic cleanup of raw data after 7 days.
 
 \subsection{Prometheus \& Grafana Monitoring}
 
@@ -801,7 +790,7 @@ Prometheus scrapes metrics from three sources:
 \hline
 \textbf{Source} & \textbf{Job Name} & \textbf{Metrics} \\ \hline
 Flink TaskManagers & flink & records\_processed, processing\_latency, numRecordsOut, consumer\_lag, if\_model\_version \\ \hline
-PostgreSQL & postgres & pg\_statements\_total, pg\_connections, pg\_write\_latency \\ \hline
+MinIO & minio & s3\_requests\_total, s3\_request\_latency\_seconds, cluster\_capacity\_used \\ \hline
 Kafka & kafka & kafka\_consumer\_lag\_sum, kafka\_messages\_in\_per\_sec \\ \hline
 \caption{Prometheus metrics collection sources.}
 \label{tab:prometheus_metrics}
@@ -828,7 +817,7 @@ Four pre-built Grafana dashboards provide operational visibility:
 
     \item \textbf{Dashboard 3: Business Rules} --- Violations per Rule Type (bar chart), Violation Trends (line chart per rule).
 
-    \item \textbf{Dashboard 4: System Performance} --- Flink Throughput (records/sec per TaskManager), Kafka Consumer Lag (ms), Processing Latency P50/P95/P99 (heatmap), PostgreSQL Write Latency.
+    \item \textbf{Dashboard 4: System Performance} --- Flink Throughput (records/sec per TaskManager), Kafka Consumer Lag (ms), Processing Latency P50/P95/P99 (heatmap), MinIO S3 Request Latency.
 \end{enumerate}
 
 Key PromQL queries: violation rates use \texttt{rate(dq\_schema\_violations[1m])} vs \texttt{rate(dq\_business\_rule\_violations[1m])} vs \texttt{rate(dq\_if\_anomalies[1m])}, and IEC drift status uses \texttt{iec\_drift\_events\_total} mapped to alert panels.
@@ -963,67 +952,9 @@ t_{\text{IPC, batched}} = \frac{300\mu\text{s}}{200} + \frac{8\text{ms}}{200} = 
 
 Combined with NumPy vectorization (16$\times$ speedup), mini-batching enables 10,000--20,000 events/sec throughput on the 64-core Threadripper.
 
-\subsection{Database Connection Pooling with PgBouncer}
+\subsection{Scalable Object Storage with MinIO}
 
-High-throughput streaming pipelines make thousands of concurrent database writes, overwhelming PostgreSQL's default connection limit. CA-DQStream V2.2.0 uses \textbf{PgBouncer} as a connection pooling layer between the Flink JDBC Sink and PostgreSQL.
-
-\textbf{The Connection Exhaustion Problem:} Without pooling, each Flink TaskManager slot opens its own PostgreSQL connection. Let $S$ be the number of Flink slots and $C$ be the connections per slot:
-
-\begin{equation}
-\text{Total\_connections} = S \times C = 12 \text{ slots} \times 3 \text{ connections/slot} = 36
-\end{equation}
-
-Adding FastAPI ML service connections ($W = 4$ workers, $C_{\text{API}} = 5$ connections/worker):
-
-\begin{equation}
-\text{Total\_connections} = 36 + (4 \times 5) = 56 \text{ connections}
-\end{equation}
-
-This approaches PostgreSQL's \texttt{max\_connections=100} limit, leaving only 44 connections for monitoring, admin tools, and connection spikes. During Flink restarts or IEC model updates, connection counts can temporarily double, exceeding the limit and causing FATAL errors:
-
-\begin{verbatim}
-FATAL: remaining connection slots are reserved for
-non-replication superuser connections
-\end{verbatim}
-
-\textbf{PgBouncer Solution:} PgBouncer multiplexes $N_{\text{client}}$ logical connections onto $N_{\text{server}}$ physical PostgreSQL connections. In \texttt{transaction} pool mode, connections are returned to the pool after each transaction commits, maximizing reuse.
-
-\textbf{Connection Math with PgBouncer:}
-
-Client connections (to PgBouncer):
-\begin{equation}
-N_{\text{client}} = 36 \text{ (Flink: 12 slots $\times$ 3 conn/slot)} + 20 \text{ (FastAPI)} + 10 \text{ (monitoring)} = 66
-\end{equation}
-
-Physical PostgreSQL connections (from PgBouncer):
-\begin{equation}
-N_{\text{server}} = 20 \text{ (default\_pool\_size)} + 5 \text{ (reserve\_pool\_size)} = 25
-\end{equation}
-
-\textbf{Multiplexing Ratio:}
-\begin{equation}
-\text{Multiplexing} = \frac{N_{\text{client}}}{N_{\text{server}}} = \frac{66}{25} = 2.64\times
-\end{equation}
-
-During normal operation, transaction latency is low (50--200ms), so connections are returned to the pool quickly. PgBouncer can serve 66 clients with only 25 physical connections because most clients are idle at any given time (waiting for Flink checkpoints, network I/O, etc.).
-
-\textbf{Connection Overhead Reduction:} Each PostgreSQL connection consumes approximately 10 MB RAM for backend process, shared buffers, and connection state. Without PgBouncer:
-
-\begin{equation}
-\text{RAM}_{\text{direct}} = 56 \text{ connections} \times 10 \text{ MB} = 560 \text{ MB}
-\end{equation}
-
-With PgBouncer:
-\begin{equation}
-\text{RAM}_{\text{pooled}} = 25 \text{ connections} \times 10 \text{ MB} = 250 \text{ MB}
-\end{equation}
-
-\textbf{Overhead Reduction:}
-\begin{equation}
-\frac{\text{RAM}_{\text{direct}} - \text{RAM}_{\text{pooled}}}{\text{RAM}_{\text{direct}}} = \frac{560 - 250}{560} = 55.4\% \text{ reduction}
-\end{equation}
-
-\textbf{Critical benefit: Connection pool exhaustion prevention.} The primary value of PgBouncer is preventing PostgreSQL from running out of connections under high concurrency. Without pooling, 56 concurrent connections approach the PostgreSQL \texttt{max\_connections=100} limit, leaving only 44 connections for monitoring, admin tools, and connection spikes. PgBouncer multiplexes 66 logical client connections onto 25 physical server connections, ensuring PostgreSQL never exhausts its connection pool and the system never encounters FATAL connection errors during production load spikes.
+MinIO provides high-throughput, S3-compatible object storage that scales horizontally. Flink StreamingFileSink writes Parquet files to MinIO buckets, enabling cost-effective storage with automatic tiering and compression.
 
 
 % ================================================
@@ -1072,17 +1003,17 @@ CA-DQStream uses Docker Compose for containerized deployment with automatic vers
 % ================================================
 \section{Chapter Summary}
 
-This chapter detailed the engineering implementation of CA-DQStream's four core innovations (Chapter 3) on a distributed stack of Apache Flink, Kafka, PostgreSQL, and Grafana.
+This chapter detailed the engineering implementation of CA-DQStream's four core innovations (Chapter 3) on a distributed stack of Apache Flink, Kafka, MinIO, and Grafana.
 
 \textbf{Key Implementation Highlights:}
 
 \begin{itemize}
     \item \textbf{Four-Layer Processing Pipeline:} Schema Filter, Rendezvous (Canary + Complex), MetaAggregator, IEC
-    \item \textbf{Infrastructure:} 7 Kafka topics (12 partitions), Flink (12 TaskManager slots), PostgreSQL (7 tables), Prometheus + Grafana (4 dashboards)
+    \item \textbf{Infrastructure:} 7 Kafka topics, Flink (12 TaskManager slots), MinIO (7 buckets with Parquet output), Prometheus + Grafana (4 dashboards)
     \item \textbf{Optimization Techniques:}
         \begin{itemize}
             \item PyFlink Vectorized UDFs: 16$\times$ throughput improvement
-            \item PgBouncer connection pooling: prevents connection exhaustion, 55\% RAM reduction
+            \item StreamingFileSink Parquet: efficient columnar storage on MinIO
             \item Broadcast State: atomic model swap without pipeline interruption
             \item MurmurHash3: 10--20$\times$ faster than MD5
             \item AggregateFunction pattern: prevents OOM on large windows

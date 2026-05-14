@@ -15,11 +15,8 @@ sys.path.insert(0, '/tmp')
 
 # Environment variables for Kafka, etc.
 os.environ['KAFKA_BOOTSTRAP_SERVERS'] = 'ldt-kafka:9092'
-os.environ['POSTGRES_HOST'] = 'ldt-postgres'
-os.environ['POSTGRES_PORT'] = '5432'
-os.environ['POSTGRES_DB'] = 'dq_pipeline'
-os.environ['POSTGRES_USER'] = 'cadqstream'
-os.environ['POSTGRES_PASSWORD'] = 'cadqstream123'
+os.environ['PYTHONPATH'] = '/tmp:/tmp/src'
+os.environ['PYTHONPATH'] = '/tmp:/tmp/src'
 
 print("=" * 70)
 print("CA-DQStream - Flink Job Submission")
@@ -28,7 +25,6 @@ print(f"Working directory: {os.getcwd()}")
 print(f"Python: {sys.version}")
 print(f"PYTHONPATH: {os.environ.get('PYTHONPATH', 'not set')}")
 print(f"KAFKA: {os.environ['KAFKA_BOOTSTRAP_SERVERS']}")
-print(f"POSTGRES: {os.environ['POSTGRES_HOST']}:{os.environ['POSTGRES_PORT']}")
 print("=" * 70)
 
 # Import Flink

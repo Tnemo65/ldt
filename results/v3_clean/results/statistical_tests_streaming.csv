@@ -1,0 +1,4 @@
+difficulty,alg_i,alg_j,W_stat,p_raw,cohens_d,effect,p_holm,sig_holm
+hard,sHST-River,MemStream,0.0,0.0009765625,27.597989777752225,large,0.0029296875,True
+hard,sHST-River,IForestASD,0.0,0.0009765625,190.72844152629162,large,0.001953125,True
+hard,MemStream,IForestASD,0.0,0.0009765625,11.930224495229377,large,0.0009765625,True

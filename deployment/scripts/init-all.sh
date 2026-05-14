@@ -1,6 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # CA-DQStream - Run All Initialization Scripts in Order
+# Storage: MinIO only
 # =============================================================================
 
 set -e
@@ -23,11 +24,6 @@ for i in $(seq 1 30); do
     sleep 2
 done
 docker logs ldt-kafka-init | tail -10
-
-# PostgreSQL init (handled by docker-compose volume mount)
-echo "[postgres-init] Schema loaded via volume mount"
-docker compose -f docker-compose.yml restart postgres
-sleep 5
 
 # MinIO init
 echo "[minio-init] Creating buckets..."

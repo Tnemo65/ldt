@@ -15,11 +15,25 @@ taskmanager.numberOfTaskSlots: ${TASK_MANAGER_NUMBER_OF_TASK_SLOTS}
 taskmanager.memory.task.off-heap.enabled: true
 parallelism.default: ${FLINK_PARALLELISM_DEFAULT}
 
-# State Backend
-state.backend: filesystem
-state.checkpoints.dir: file:///tmp/flink-checkpoints
-state.savepoints.dir: file:///tmp/flink-savepoints
+# State Backend: RocksDB with MinIO (S3) checkpoint storage
+# (overridden by FLINK_PROPERTIES env var in docker-compose.yml)
+state.backend: rocksdb
+state.backend.incremental: true
+state.checkpoints.dir: s3://cadqstream-checkpoints/flink/checkpoints
+state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
 state.checkpoints.num-retained: 3
+
+# RocksDB tuning
+state.backend.rocksdb.memory.managed: true
+state.backend.rocksdb.block.cache-size: 512mb
+state.backend.rocksdb.writebuffer.size: 64mb
+state.backend.rocksdb.writebuffer.count: 3
+state.backend.rocksdb.predefined-options: SPINNING_DISK_OPTIMIZED_HIGH_MEM
+
+# S3 / MinIO (Hadoop S3A)
+# Note: credentials must be set via s3.access-key / s3.secret-key in FLINK_PROPERTIES
+s3.endpoint: http://minio:9000
+s3.path.style.access: true
 
 # Checkpointing
 execution.checkpointing.mode: EXACTLY_ONCE
@@ -42,7 +56,8 @@ restart-strategy.exponential-delay.jitter-factor: 0.1
 # REST API
 rest.port: 8081
 rest.bind-address: 0.0.0.0
-rest.enable cors: true
+rest.address: flink-jobmanager
+rest.enable_cors: true
 
 # Metrics
 metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
@@ -53,13 +68,9 @@ metrics.scope.taskmanager: taskmanager
 metrics.scope.operator: operator
 
 # Network
-taskmanager.network.memory.fraction: 0.1
-taskmanager.network.memory.min: 64mb
-taskmanager.network.memory.max: 1024mb
-
-# Security
-security.ssl.internal.enabled: false
-security.ssl.rest.enabled: false
+taskmanager.network.memory.fraction: 0.15
+taskmanager.network.memory.min: 128mb
+taskmanager.network.memory.max: 2048mb
 
 # Python UDF
 python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
@@ -69,7 +80,5 @@ python.client.executor.args: --python /usr/local/bin/python3
 pipeline.auto.type-info-hierarchy.enabled: true
 pipeline.object-reuse.max-age: 60000
 
-# RocksDB (optional, for large state)
-# state.backend.incremental: true
-# state.backend.rocksdb.memory.managed: true
-# state.backend.rocksdb.checkpoint.transfer.thread.num: 2
+# PyFlink optimization
+python.execution.reuse-slot-for-inner-classes: true

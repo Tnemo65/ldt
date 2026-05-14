@@ -1,0 +1,239 @@
+\documentclass[a4paper, reqno, oneside]{book}
+\usepackage[left=2.5cm, right=2cm, top=2cm, bottom=2cm]{geometry}
+\usepackage{amsmath,amsxtra,amssymb,latexsym,amscd,amsthm}
+\usepackage{indentfirst}
+\usepackage{color}
+\usepackage{empheq}
+\usepackage[USenglish]{babel}
+% \usepackage[ nocaptions]{vntex}
+\usepackage{amsmath}
+\usepackage[mathscr]{eucal}
+\usepackage{amsfonts}
+\usepackage{graphicx}
+\usepackage{pifont}
+\usepackage{amssymb}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{verbatim}
+\usepackage{listings}
+\usepackage{tkz-graph}
+\usetikzlibrary {positioning}
+\usetikzlibrary {fit}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage[chapter]{algorithm}
+\usepackage{algpseudocode}
+\usepackage{pseudocode}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\fancyhf{}
+\fancyfoot[C]{ \thepage}
+\usepackage{ulem}
+\usepackage{pdfpages}
+\usepackage{niceframe}
+\usepackage[square,numbers]{natbib}
+\usepackage{subcaption,booktabs}
+\usepackage{longtable}
+\usepackage{bibentry}
+\usepackage[printonlyused,withpage]{acronym}
+\usepackage[hyphens,spaces,obeyspaces]{url}
+\usepackage[colorlinks,bookmarksopen,bookmarksnumbered,citecolor=blue, colorlinks=true, linkcolor=blue,urlcolor=blue]{hyperref}
+
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}m{#1}}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
+\newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
+
+\graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/}}
+
+\begin{document}
+% Title page
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+\newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
+\thispagestyle{empty}
+\thisfancypage{\doublebox}{}
+
+\centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
+\centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
+
+\vspace*{2cm}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.3\linewidth]{figs/dhcn.png}
+\end{figure}
+
+\centerline{\bf LE DAC THINH}
+\vspace*{3cm}
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace*{3cm}
+\centerline{Major: Information Systems}
+
+\vfill
+\centerline{\bf Ha Noi - 2025}
+\vspace{8pt}
+\end{titlepage}
+
+\newpage
+\newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
+\thispagestyle{empty}
+\thisfancypage{\doublebox}{}
+\normalsize
+\centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
+\centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
+\vspace*{3cm}
+\large
+\centerline{\bf LE DAC THINH}
+\vspace*{3cm}
+\centerline{\bf CA-DQStream: A Context-Aware Framework}
+\centerline{\bf for Streaming Data Quality Monitoring}
+\vspace*{2cm}
+\centerline{Major: Information Systems}
+
+\vspace*{2cm}
+
+\vspace*{2cm}
+\centerline{\bf Supervisor: }
+\centerline{\bf Associate Professor Nguyen Ngoc Hoa }
+
+\vfill
+\centerline{\bf Ha Noi - 2025}
+\vspace{8pt}
+\newgeometry{left=2.5cm, right=2cm, top=2cm, bottom=2cm}
+\hypersetup{pageanchor=true}
+\normalsize
+
+\newgeometry{left=2.5cm, right=2cm, top=2cm, bottom=2cm}
+
+
+\chapter*{ACKNOWLEDGEMENTS}
+\pagenumbering{roman}
+\vspace{20pt}
+
+I would like to express my deepest gratitude to my supervisor, Associate Professor Nguyen Ngoc Hoa, for his invaluable guidance, patience, and continuous support throughout this research. His insightful feedback and encouragement have been instrumental in shaping this thesis.
+
+I am also grateful to the faculty members and colleagues at the University of Engineering and Technology for their stimulating discussions and constructive critiques that have significantly improved this work.
+
+Special thanks to the NYC Taxi and Limousine Commission for providing the publicly available datasets that made this research possible, and to the open-source community for the excellent tools and frameworks used in this work.
+
+Finally, I would like to thank my family and friends for their unwavering support and understanding during the course of this research.
+
+\vspace{2cm}
+\begin{flushright}
+Le Dac Thinh\\
+Ha Noi, May 2025
+\end{flushright}
+
+
+\newpage
+\chapter*{AUTHORSHIP}
+\vspace{20pt}
+
+I hereby declare that this thesis is my own work, carried out under the supervision of Associate Professor Nguyen Ngoc Hoa. All sources of information and data from the literature have been duly acknowledged and referenced.
+
+This thesis has not been submitted for any degree or professional qualification at any other institution.
+
+
+\vspace{2cm}
+\begin{flushright}
+{\it Ha Noi, May 2025}
+
+{\bf Le Dac Thinh}
+\end{flushright}
+
+\newpage
+\centerline{\bf CA-DQStream: A Framework for}
+\centerline{\bf Streaming Data Quality Monitoring}
+\vspace{10pt}
+\centerline{Le Dac Thinh}
+
+\vspace{2cm}
+{\bf Abstract}
+
+\noindent Streaming data pipelines process millions of events per second, making real-time data quality (DQ) monitoring essential. Existing open-source DQ frameworks (Great Expectations, AWS Deequ, Soda Core) operate in batch mode, cannot adapt when data distributions shift over time, and cannot detect multivariate anomalies that require understanding inter-feature relationships.
+
+This thesis presents \textbf{CA-DQStream}, a framework for real-time streaming data quality monitoring built on Apache Kafka and Apache Flink. The proposed method consists of two components:
+
+\begin{enumerate}
+    \item \textbf{Four-stage processing pipeline:} (1) Schema Validation with deterministic NULL checks and Flink KeyedState deduplication; (2) Business Rules with six deterministic validity checks; (3) Online Autoencoder + Memory Module for multivariate anomaly detection; and (4) ADWIN drift detection on quality meta-streams for self-monitoring.
+    \item \textbf{Monitoring and storage layer:} MinIO (S3-compatible object storage) persists cleaned data, dirty data, and alerts in Parquet format; Prometheus collects metrics from all pipeline components; Grafana provides real-time dashboards for operators to visualize violation rates, anomaly scores, and drift alerts.
+\end{enumerate}
+
+Together, the pipeline processes incoming records in real time while the monitoring layer provides full observability into pipeline health, data quality metrics, and drift events.
+
+\textbf{Case Study.} The framework is evaluated on the NYC Yellow Taxi dataset, where we identify and solve specific data quality problems: completeness violations, validity violations such as negative fares and impossible timestamps, multivariate anomalies including meter tampering and short-trip fraud, and concept drift over time. On Easy-difficulty synthetic anomalies (meter tampering, short-trip fraud, traffic manipulation, payment inflation), the Online Autoencoder + Memory Module achieves F1=0.828; across Easy/Medium/Hard difficulty levels, the weighted average F1=0.71 with FPR=2.99\%. The Online Autoencoder is warmup-trained on ultra-clean January 2024 historical baseline data (~2.86M records after 3-stage filtering) and operates online with continuous learning via FIFO memory replacement. The four-stage pipeline demonstrates substantial improvements over fixed-threshold approaches. ADWIN detects gradual drift within 24 hours on average (1440 aggregated 1-minute windows), with 93\% of drift events resolved by lightweight incremental updates without full retraining, triggering automatic threshold recalculation and memory reset when needed.
+
+\vspace{2cm}
+\noindent {\bf Keywords:} Data Quality, Streaming Data, Drift Detection, Anomaly Detection, Online Learning, Memory Module, Autoencoder, ADWIN, Apache Flink, Apache Kafka.
+
+\newpage
+\tableofcontents
+
+\newpage
+\listoffigures
+
+\newpage
+\listoftables
+
+
+\chapter*{List of abbreviations}
+\vspace{20pt}
+
+\begin{longtable}{|m{2.5cm}|m{10cm}|}
+\hline
+\textbf{Abbreviation} & \textbf{Full Form} \\ \hline
+ADWIN & Adaptive Windowing (drift detection algorithm) \\ \hline
+API & Application Programming Interface \\ \hline
+CDC & Change Data Capture \\ \hline
+DAMA & Data Management Association \\ \hline
+DMBOK & Data Management Body of Knowledge \\ \hline
+DQ & Data Quality \\ \hline
+FPR & False Positive Rate \\ \hline
+IF & Isolation Forest (anomaly detection) \\ \hline
+JSON & JavaScript Object Notation \\ \hline
+KG & Knowledge Graph \\ \hline
+LOF & Local Outlier Factor (anomaly detection) \\ \hline
+ML & Machine Learning \\ \hline
+MTTD & Mean Time To Detect (drift) \\ \hline
+NYC & New York City \\ \hline
+OC-SVM & One-Class Support Vector Machine \\ \hline
+RQ & Research Question \\ \hline
+TLC & Taxi and Limousine Commission (NYC) \\ \hline
+UUID & Universal Unique Identifier \\ \hline
+\end{longtable}
+
+
+\mainmatter
+
+\input{intro}
+
+\input{chap1}
+
+\input chap2
+
+\input chap3
+
+\input chap4
+
+\input chap5
+
+\input chap6
+
+\input{chap7}
+
+% ================================================
+% REFERENCES
+% ================================================
+\backmatter
+\addcontentsline{toc}{chapter}{REFERENCES}
+\bibliographystyle{plainnat}
+\bibliography{citation}
+
+% ================================================
+% APPENDICES
+% ================================================
+\appendix
+\input appendix_a_eda
+
+\end{document}

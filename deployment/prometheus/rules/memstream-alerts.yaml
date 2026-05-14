@@ -1,0 +1,298 @@
+# Prometheus alert rules for MemStream monitoring
+# Enable these rules AFTER implementing all metrics
+#
+# Install: Copy to /etc/prometheus/rules/ or include via prometheus.yml
+
+groups:
+  - name: memstream_scoring
+    interval: 30s
+    rules:
+      # C-MON-1 / H-MON-6: Latency SLO
+      - alert: MemStreamLatencyP99High
+        expr: |
+          histogram_quantile(0.99, rate(memstream_scoring_latency_seconds_bucket[5m])) * 1000 > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream p99 latency exceeds 100ms"
+          description: "P99 latency is {{ $value | printf \"%.2f\" }}ms (threshold: 100ms)"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-latency"
+      
+      - alert: MemStreamLatencyP99Critical
+        expr: |
+          histogram_quantile(0.99, rate(memstream_scoring_latency_seconds_bucket[5m])) * 1000 > 500
+        for: 2m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream p99 latency severely degraded"
+          description: "P99 latency is {{ $value | printf \"%.2f\" }}ms (threshold: 500ms)"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-latency"
+      
+      # C-MON-3: SLO Burn Rate
+      - alert: MemStreamSLOBudgetBurningFast
+        expr: |
+          memstream_slo_burn_rate > 14.4
+        for: 5m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream SLO budget burning at high rate"
+          description: "Burn rate is {{ $value | printf \"%.1f\" }}x (threshold: 14.4x for 1h window)"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-slo"
+      
+      - alert: MemStreamSLOBudgetBurningMedium
+        expr: |
+          memstream_slo_burn_rate > 6
+        for: 15m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream SLO budget burning at medium rate"
+          description: "Burn rate is {{ $value | printf \"%.1f\" }}x (threshold: 6x for 6h window)"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-slo"
+      
+      # H-MON-6: Availability
+      - alert: MemStreamAvailabilityLow
+        expr: |
+          memstream_availability_ratio < 0.99
+        for: 10m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream availability below 99%"
+          description: "Current availability: {{ $value | printf \"%.4f\" }}"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-availability"
+      
+      - alert: MemStreamAvailabilityCritical
+        expr: |
+          memstream_availability_ratio < 0.95
+        for: 5m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream availability critically low"
+          description: "Current availability: {{ $value | printf \"%.4f\" }}"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-availability"
+      
+      # C-MON-4: Anomaly Rate
+      - alert: MemStreamAnomalyRateAnomalouslyLow
+        expr: |
+          rate(memstream_records_scored_total{scoring_result="anomaly"}[1h])
+          / rate(memstream_records_scored_total[1h]) < 0.001
+        for: 30m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream anomaly rate unexpectedly low"
+          description: "Anomaly rate is {{ $value | printf \"%.4f\" }}, may indicate model degradation"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-anomaly-rate"
+      
+      - alert: MemStreamAnomalyRateAnomalouslyHigh
+        expr: |
+          rate(memstream_records_scored_total{scoring_result="anomaly"}[1h])
+          / rate(memstream_records_scored_total[1h]) > 0.15
+        for: 15m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream anomaly rate abnormally high"
+          description: "Anomaly rate is {{ $value | printf \"%.4f\" }}, may indicate data quality issues"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-anomaly-rate"
+      
+      # C-MON-5: HMAC Failures
+      - alert: MemStreamHMACFailuresDetected
+        expr: |
+          increase(memstream_hmac_failures_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+          security: true
+        annotations:
+          summary: "MemStream HMAC validation failures"
+          description: "{{ $value }} HMAC failures in last 5 minutes - possible security issue"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-security"
+      
+      # H-MON-8: Redis Health
+      - alert: MemStreamRedisConnectionFailures
+        expr: |
+          increase(memstream_redis_connection_failures_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream Redis connection failures"
+          description: "{{ $value }} Redis connection failures - beta polling may be affected"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-redis"
+      
+      - alert: MemStreamRedisLatencyHigh
+        expr: |
+          histogram_quantile(0.99, rate(memstream_redis_latency_seconds_bucket[5m])) * 1000 > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream Redis latency high"
+          description: "Redis p99 latency is {{ $value | printf \"%.2f\" }}ms"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-redis"
+
+  - name: memstream_checkpoints
+    interval: 60s
+    rules:
+      # H-MON-9: Checkpoint Health
+      - alert: MemStreamCheckpointFailures
+        expr: |
+          increase(flink_checkpoint_failed_total[1h]) > 3
+        for: 5m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream checkpoint failures detected"
+          description: "{{ $value }} checkpoint failures in last hour"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-checkpoints"
+      
+      - alert: MemStreamCheckpointDurationHigh
+        expr: |
+          histogram_quantile(0.99, rate(flink_checkpoint_duration_seconds_bucket[1h])) > 300
+        for: 10m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream checkpoint duration high"
+          description: "Checkpoint p99 duration is {{ $value | printf \"%.0f\" }}s"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-checkpoints"
+      
+      - alert: MemStreamCheckpointSizeGrowing
+        expr: |
+          rate(flink_checkpoint_size_bytes_sum[1h]) / rate(flink_checkpoint_size_bytes_count[1h]) > 1e9
+        for: 30m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream checkpoint size growing"
+          description: "Average checkpoint size is {{ $value | humanize1024 }} - may indicate state growth"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-state-growth"
+      
+      - alert: MemStreamNoCheckpoints
+        expr: |
+          rate(flink_checkpoint_completed_total[30m]) == 0
+        for: 15m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+        annotations:
+          summary: "No checkpoints completed recently"
+          description: "No checkpoints have completed in the last 30 minutes"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-checkpoints"
+
+  - name: memstream_memory
+    interval: 60s
+    rules:
+      # Memory Health
+      - alert: MemStreamMemoryUtilizationHigh
+        expr: |
+          memstream_memory_utilization > 0.9
+        for: 15m
+        labels:
+          severity: warning
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream memory utilization high"
+          description: "Memory utilization is {{ $value | printf \"%.2f\" }}%"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-memory"
+      
+      - alert: MemStreamMemoryUtilizationCritical
+        expr: |
+          memstream_memory_utilization > 0.95
+        for: 5m
+        labels:
+          severity: critical
+          service: cadqstream-memstream
+        annotations:
+          summary: "MemStream memory utilization critical"
+          description: "Memory utilization is {{ $value | printf \"%.2f\" }}%"
+          runbook_url: "https://wiki.example.com/runbooks/memstream-memory"
+
+  - name: iec_operator
+    interval: 60s
+    rules:
+      # IEC Health
+      - alert: IECCircuitBreakerTripped
+        expr: |
+          iec_consecutive_actions_total > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: cadqstream-iec
+        annotations:
+          summary: "IEC circuit breaker potentially tripped"
+          description: "{{ $value }} consecutive IEC actions - possible oscillation"
+          runbook_url: "https://wiki.example.com/runbooks/iec-circuit-breaker"
+      
+      - alert: IECDriftRateHigh
+        expr: "rate(iec_drifts_detected_total[1h]) / ignoring(neighborhood) group_left(neighborhood) rate(memstream_records_scored_total[1h]) > 0.05"
+        for: 30m
+        labels:
+          severity: warning
+          service: cadqstream-iec
+        annotations:
+          summary: "High drift detection rate"
+          description: "Drift rate is {{ $value | printf \"%.2f\" }}"
+          runbook_url: "https://wiki.example.com/runbooks/iec-drift"
+
+  - name: memstream_slo_recording
+    interval: 30s
+    rules:
+      # SLO Recording Rules (pre-computed)
+      - record: slo:scoring_latency_p99:seconds
+        expr: |
+          histogram_quantile(0.99, rate(memstream_scoring_latency_seconds_bucket[5m]))
+      
+      - record: slo:scoring_latency_p95:seconds
+        expr: |
+          histogram_quantile(0.95, rate(memstream_scoring_latency_seconds_bucket[5m]))
+      
+      - record: slo:scoring_latency_p50:seconds
+        expr: |
+          histogram_quantile(0.50, rate(memstream_scoring_latency_seconds_bucket[5m]))
+      
+      - record: slo:error_rate:ratio
+        expr: |
+          rate(memstream_scoring_errors_total[5m])
+          /
+          (rate(memstream_scoring_errors_total[5m]) + rate(memstream_records_scored_total[5m]))
+      
+      - record: slo:anomaly_rate:ratio
+        expr: |
+          rate(memstream_records_scored_total{scoring_result="anomaly"}[5m])
+          /
+          rate(memstream_records_scored_total[5m])
+      
+      - record: slo:checkpoint_success:ratio
+        expr: |
+          rate(flink_checkpoint_completed_total[1h])
+          /
+          (rate(flink_checkpoint_completed_total[1h]) + rate(flink_checkpoint_failed_total[1h]))
+      
+      - record: slo:request_rate:rpm
+        expr: |
+          rate(memstream_records_scored_total[5m]) * 60
+      
+      - record: slo:throughput_mbps
+        expr: |
+          rate(memstream_checkpoint_size_bytes_sum[5m]) / 1e6

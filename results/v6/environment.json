@@ -1,0 +1,15 @@
+{
+  "version": "6.0",
+  "timestamp": "2026-05-12T17:27:29.215493",
+  "python": "3.12.10",
+  "gpu": true,
+  "gpu_device": "NVIDIA GeForce RTX 3090 Ti",
+  "scipy": "1.17.1",
+  "sklearn": "1.8.0",
+  "torch": "2.5.1",
+  "river": "0.24.2",
+  "total_jobs": 198,
+  "runtime_min": 59.95490033666671,
+  "protocol": "three-way split (train/val/test)",
+  "pre_registration": "2026-05-12"
+}

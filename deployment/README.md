@@ -1,6 +1,6 @@
 # CA-DQStream Production Deployment
 
-Production-grade end-to-end streaming platform deployment for the Context-Aware Data Quality Stream Processing System (CA-DQStream).
+Production-grade end-to-end streaming platform deployment for the Context-Aware Data Quality Stream Processing System (CA-DQStream). All data persisted to MinIO via Flink StreamingFileSink in Parquet format.
 
 ## Architecture
 
@@ -13,7 +13,7 @@ Production-grade end-to-end streaming platform deployment for the Context-Aware 
 # │  │  Layer 1: Baseline Validation                                          │ │
 # │  │  Kafka Source (taxi-nyc-raw)                                          │ │
 # │  │    → Parse JSON → Watermark → KeyGen → Dedup → Schema Validation       │ │
-# │  │    → taxi_trips_raw (PostgreSQL) + schema_violations                  │ │
+# │  │    → MinIO (cadqstream-violations) + Kafka (dq-hard-rule-violations)   │ │
 # │  └──────────────────────────────────────────────────────────────────────┘ │
 # │                                    ↓ (valid records)                         │
 # │  ┌──────────────────────────────────────────────────────────────────────┐ │
@@ -22,7 +22,7 @@ Production-grade end-to-end streaming platform deployment for the Context-Aware 
 # │  │  │  Canary Branch       │    │  Complex Branch (ML Scoring)      │    │ │
 # │  │  │  (Rule-based)       │    │  (Anomaly Detection)              │    │ │
 # │  │  │  7 business rules   │    │  Isolation Forest / ML models     │    │ │
-# │  │  │  → hard violations  │    │  → anomaly_scores                 │    │ │
+# │  │  │  → violations       │    │  → anomaly_scores                 │    │ │
 # │  │  └──────────────────────┘    └──────────────────────────────────┘    │ │
 # │  └──────────────────────────────────────────────────────────────────────┘ │
 # │                                    ↓ (both branches)                         │
@@ -31,7 +31,7 @@ Production-grade end-to-end streaming platform deployment for the Context-Aware 
 # │  │  CoProcessFunction (synchronize Canary + Complex)                      │ │
 # │  │    → Voting Ensemble (Canary overrides ML)                             │ │
 # │  │    → 1-min windowed meta-metrics per neighborhood (6 signals)          │ │
-# │  │    → meta_metrics (PostgreSQL) + dq-meta-stream (Kafka)               │ │
+# │  │    → MinIO (cadqstream-metrics) + Kafka (dq-meta-stream)             │ │
 # │  └──────────────────────────────────────────────────────────────────────┘ │
 # │                                    ↓ (meta-metrics)                         │
 # │  ┌──────────────────────────────────────────────────────────────────────┐ │
@@ -39,7 +39,7 @@ Production-grade end-to-end streaming platform deployment for the Context-Aware 
 # │  │  ADWIN-U drift detection (36 instances per neighborhood×metric)        │ │
 # │  │  METER hypernetwork strategy prediction                               │ │
 # │  │  Multi-strategy execution (do_nothing / adjust / retrain / switch)    │ │
-# │  │    → drift_events (PostgreSQL) + iec-action-replay (Kafka)           │ │
+# │  │    → MinIO (cadqstream-drift) + Kafka (iec-action-replay)            │ │
 # │  └──────────────────────────────────────────────────────────────────────┘ │
 # │                                                                             │
 # └─────────────────────────────────────────────────────────────────────────────┘
@@ -93,9 +93,6 @@ bash scripts/check-health.sh
 | Schema Registry | ldt-schema-registry | 8082 | localhost:8082 | - | HTTP /subjects |
 | Kafka UI | ldt-kafka-ui | 8080 | localhost:8080 | - | HTTP / |
 | Kafka Exporter | ldt-kafka-exporter | 9308 | localhost:9308 | - | Prometheus metrics |
-| PostgreSQL | ldt-postgres | 5432 | localhost:5432 | cadqstream/cadqstream123 | pg_isready |
-| PgBouncer | ldt-pgbouncer | 6432 | localhost:6432 | cadqstream/cadqstream123 | TCP connect |
-| Postgres Exporter | ldt-postgres-exporter | 9187 | localhost:9187 | - | Prometheus metrics |
 | MinIO | ldt-minio | 9000/9001 | localhost:9000 / localhost:9001 | minioadmin/minioadmin123 | mc ready |
 | Flink JobManager | ldt-flink-jobmanager | 8081 | localhost:8081 | - | REST /overview |
 | Flink TaskManager | ldt-flink-taskmanager | - | internal | - | - |
@@ -129,17 +126,17 @@ Producer → taxi-nyc-raw (Kafka) → Flink Kafka Source
 ```
 Raw Stream → Parse JSON → Watermark (30s idleness) → TripID (MurmurHash3)
 → Deduplicate (7-day TTL) → Schema Validation (NYC TLC zones 1-263)
-→ [violations] → schema_violations (PostgreSQL)
-→ [valid] → taxi_trips_raw (PostgreSQL) → next layer
+→ [violations] → schema_violations (MinIO)
+→ [valid] → taxi_trips_raw (MinIO) → next layer
 ```
 
 ### Layer 2 (Dual-Branch)
 ```
 Valid Stream → Canary Rules (7 rules: negative_fare, zero_distance, invalid_passengers, etc.)
-            → canary_violations (PostgreSQL)
+            → canary_violations (MinIO)
 
 Valid Stream → ML Scoring (Isolation Forest + context features)
-            → anomaly_scores (PostgreSQL)
+            → anomaly_scores (MinIO)
 ```
 
 ### Layer 3 (Voting + Meta)
@@ -147,7 +144,7 @@ Valid Stream → ML Scoring (Isolation Forest + context features)
 [Canary + Complex] → CoProcessFunction (Rendezvous)
 → Voting Ensemble (Canary overrides ML)
 → 1-min Tumbling Windows (per neighborhood)
-→ meta_metrics (PostgreSQL) + dq-meta-stream (Kafka)
+→ meta_metrics (MinIO) + dq-meta-stream (Kafka)
 ```
 
 ### Layer 4 (IEC)
@@ -155,7 +152,7 @@ Valid Stream → ML Scoring (Isolation Forest + context features)
 meta_metrics → ADWIN-U (36 instances: 6 neighborhoods × 6 metrics)
 → DriftAggregator → METER Strategy Prediction
 → Strategy Execution (adjust_threshold / retrain_model / switch_model)
-→ drift_events (PostgreSQL)
+→ drift_events (MinIO)
 ```
 
 ## Flink Job Submission
@@ -168,8 +165,7 @@ python3 /opt/flink/e2e/src/flink_job_complete.py
 
 # Connects to:
 #   - Kafka: kafka:9092 (topic: taxi-nyc-raw)
-#   - PgBouncer: pgbouncer:5432 (database: dq_pipeline)
-#   - State backend: filesystem (MinIO checkpoints)
+#   - MinIO: minio:9000 (state backend, output storage)
 ```
 
 ### Checkpointing
@@ -188,7 +184,7 @@ python3 /opt/flink/e2e/src/flink_job_complete.py
 ### Grafana Dashboards (5 Pre-configured)
 
 1. **CA-DQStream: Pipeline Overview** (`cadqstream-pipeline-overview`)
-   - End-to-end flow: Kafka in → Flink processing → PostgreSQL out
+   - End-to-end flow: Kafka in → Flink processing → MinIO out
    - Per-layer metrics: input rates, violation rates, anomaly rates
    - IEC drift detection and strategy execution
 
@@ -202,10 +198,9 @@ python3 /opt/flink/e2e/src/flink_job_complete.py
    - Processing throughput (records/sec per task)
    - JVM heap memory and watermark latency
 
-4. **CA-DQStream: PostgreSQL Health** (`cadqstream-postgres-health`)
-   - Connection pool (PgBouncer) stats
-   - Query performance, transaction rates
-   - Cache hit rate, table row counts
+4. **CA-DQStream: MinIO Storage** (`cadqstream-minio-overview`)
+   - S3 request rates, latency, bucket usage
+   - Parquet file counts per bucket
 
 5. **CA-DQStream: Infrastructure** (`cadqstream-infrastructure`)
    - Host CPU, memory, disk I/O, network
@@ -216,7 +211,6 @@ python3 /opt/flink/e2e/src/flink_job_complete.py
 Prometheus alert rules cover:
 - **Kafka**: broker down, consumer lag, under-replicated partitions
 - **Flink**: job failed, checkpoint failure, TaskManager down, high GC time
-- **PostgreSQL**: connection exhaustion, long-running queries, low cache hit
 - **Infrastructure**: disk usage >80%, memory >85%, container restart loop
 - **Pipeline**: E2E latency, record drops, anomaly rate spikes, drift detected
 
@@ -224,7 +218,7 @@ Prometheus alert rules cover:
 
 ```
 node-exporter:9100          # Host metrics
-postgres-exporter:9187      # DB metrics
+minio:9096                  # MinIO metrics
 kafka-exporter:9308         # Kafka JMX metrics
 flink-jobmanager:9248       # Flink JobManager metrics
 flink-taskmanager:9249      # Flink TaskManager metrics
@@ -255,14 +249,14 @@ docker exec ldt-flink-jobmanager bash -c 'nc -zv kafka 9092'
 curl http://localhost:8081/overview
 ```
 
-### PostgreSQL connection refused
+### MinIO connection refused
 ```bash
-# Check PgBouncer logs
-docker logs ldt-pgbouncer
-# Test direct PostgreSQL connection
-docker exec ldt-postgres psql -U cadqstream -d dq_pipeline -c 'SELECT 1'
-# Test PgBouncer connection
-docker exec ldt-pgbouncer bash -c 'echo "show pools;" | nc localhost 6432'
+# Check MinIO logs
+docker logs ldt-minio
+# Test MinIO health
+docker exec ldt-minio mc ready local
+# List buckets
+docker exec ldt-minio mc ls local/
 ```
 
 ### Prometheus not scraping targets
@@ -338,11 +332,6 @@ docker compose -f docker-compose.yml up -d --force-recreate flink-init
 |----------|---------|-------------|
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:9092` | Kafka broker connection |
 | `SCHEMA_REGISTRY_URL` | `http://schema-registry:8081` | Confluent Schema Registry |
-| `POSTGRES_DB` | `dq_pipeline` | PostgreSQL database name |
-| `POSTGRES_USER` | `cadqstream` | PostgreSQL username |
-| `POSTGRES_PASSWORD` | `cadqstream123` | PostgreSQL password |
-| `PGBOUNCER_HOST` | `pgbouncer` | PgBouncer hostname |
-| `PGBOUNCER_PORT` | `5432` | PgBouncer port |
 | `MINIO_ENDPOINT` | `minio:9000` | MinIO S3 endpoint |
 | `MINIO_ACCESS_KEY` | `minioadmin` | MinIO access key |
 | `MINIO_SECRET_KEY` | `minioadmin123` | MinIO secret key |
@@ -372,13 +361,6 @@ deployment/
 ├── kafka/
 │   └── init-scripts/         # (handled inline in docker-compose)
 │
-├── postgres/
-│   ├── init-scripts/
-│   │   ├── 01-init-schema.sql    # Full schema (8 tables, views, indexes)
-│   │   └── 02-performance-tuning.sql
-│   ├── pgbouncer.ini         # PgBouncer config
-│   └── queries.yml            # Postgres exporter custom queries
-│
 ├── prometheus/
 │   ├── prometheus.yml         # Scrape configs for all targets
 │   └── alert-rules/
@@ -392,7 +374,6 @@ deployment/
 │   └── dashboards/
 │       ├── kafka-overview.json
 │       ├── flink-jobs.json
-│       ├── postgres-health.json
 │       ├── infrastructure.json
 │       └── pipeline-overview.json
 │
@@ -418,7 +399,7 @@ The docker-compose.yml allocates resources based on a 32-core / 64 GB machine. F
 # In docker-compose.yml, per-service deploy.resources.limits:
 kafka:        { memory: 2G, cpus: "1.0" }
 flink-taskmanager: { memory: 2G, cpus: "1.0", replicas: 1 }
-postgres:     { memory: 1G, cpus: "0.5" }
+minio:       { memory: 1G, cpus: "0.5" }
 prometheus:  { memory: 1G, cpus: "0.25" }
 ```
 
@@ -427,10 +408,11 @@ prometheus:  { memory: 1G, cpus: "0.25" }
 This deployment is production-ready for **single-node** scenarios. For multi-node HA, consider:
 
 1. **Kafka**: Increase `offsets.topic.replication.factor` to 3, add more brokers
-2. **PostgreSQL**: Set up streaming replication with a primary and replicas
+2. **MinIO**: Set up erasure coding or distributed MinIO cluster
 3. **Flink**: Run HA JobManager with ZooKeeper/HA, increase TaskManager replicas
 4. **MinIO**: Set up erasure coding or use distributed MinIO
 5. **Prometheus**: Set up Thanos or Cortex for long-term storage
-6. **TLS**: Enable SSL/TLS for Kafka, PostgreSQL, and REST APIs
+6. **TLS**: Enable SSL/TLS for Kafka, MinIO, and REST APIs
 7. **Secrets**: Use Docker secrets or a secrets manager for credentials
 8. **Logging**: Forward container logs to a centralized logging system (ELK/Loki)
+

@@ -1,0 +1,144 @@
+groups:
+  - name: cadqstream-kafka
+    interval: 30s
+    rules:
+      - alert: KafkaBrokerDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka broker is down"
+          description: "Kafka broker on {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: KafkaHighConsumerLag
+        expr: kafka_consumer_lag_sum > 100000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer lag is {{ $value }} messages behind."
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_server_replicas_leader_isr_total{type="UnderReplicated"} > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka under-replicated partitions"
+          description: "{{ $value }} partitions are under-replicated."
+
+  - name: cadqstream-flink
+    interval: 30s
+    rules:
+      - alert: FlinkJobManagerDown
+        expr: up{job="flink", instance=~".*jobmanager.*"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Flink JobManager is down"
+          description: "Flink JobManager has been down for more than 1 minute."
+
+      - alert: FlinkTaskManagerDown
+        expr: up{job="flink", instance=~".*taskmanager.*"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Flink TaskManager is down"
+          description: "Flink TaskManager on {{ $labels.instance }} has been down."
+
+      - alert: FlinkJobRestarting
+        expr: flink_jobmanager_job_restarting_count > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Flink job is restarting"
+          description: "Job {{ $labels.job_name }} has restarted {{ $value }} times."
+
+  - name: cadqstream-redis
+    interval: 30s
+    rules:
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis server has been down for more than 1 minute."
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is at {{ $value | humanizePercentage }}."
+
+  - name: cadqstream-minio
+    interval: 60s
+    rules:
+      - alert: MinioServerDown
+        expr: up{job="minio"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MinIO server is down"
+          description: "MinIO server has been down for more than 1 minute."
+
+      - alert: MinioHighStorageUsage
+        expr: minio_cluster_storage_used_bytes / minio_cluster_storage_total_bytes > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MinIO high storage usage"
+          description: "MinIO storage usage is at {{ $value | humanizePercentage }}."
+
+  - name: cadqstream-metrics
+    interval: 30s
+    rules:
+      - alert: CadqstreamMetricsExporterDown
+        expr: up{job="cadqstream-metrics"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CA-DQStream metrics exporter is down"
+          description: "Custom metrics exporter has been down for 2 minutes."
+
+      - alert: HighAnomalyRate
+        expr: rate(cadqstream_anomalies_detected_total[5m]) > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High anomaly detection rate"
+          description: "Anomaly rate is {{ $value }} per second over the last 5 minutes."
+
+      - alert: HighViolationRate
+        expr: rate(cadqstream_violations_total[5m]) > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High data quality violation rate"
+          description: "Violation rate is {{ $value }} per second over the last 5 minutes."
+
+  - name: cadqstream-zookeeper
+    interval: 30s
+    rules:
+      - alert: ZookeeperDown
+        expr: up{job="zookeeper"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ZooKeeper is down"
+          description: "ZooKeeper ensemble has been unavailable for 1 minute."

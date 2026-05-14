@@ -12,7 +12,7 @@ Data quality (DQ) is a critical concern in modern data-intensive systems. As org
 % ================================================
 \section{Streaming Data Processing}
 
-Streaming data processing refers to the continuous ingestion, processing, and analysis of data as it arrives, rather than in predefined batches. Key technologies in this space include Apache Kafka \citep{kafkaintro2024} for distributed event streaming, and Apache Flink \citep{flinkdocs2024} for stateful stream processing with exactly-once semantics.
+Streaming data processing refers to the continuous ingestion, processing, and analysis of data as it arrives, rather than in predefined batches. Key technologies in this space include Apache Kafka \citep{kafkaintro2024} for distributed event streaming, and Apache Flink \citep{flinkdocs2024} for stateful stream processing with checkpoint-based fault tolerance.
 
 \subsection{Apache Kafka: Event Streaming Platform}
 
@@ -70,7 +70,7 @@ The Flink architecture is built around four critical concepts \citep{flinkdocs20
     \item \textbf{Stateful stream processing:} Flink operations can be stateful---how one event is handled can depend on the accumulated effect of all events that came before it. A Flink application running in parallel is effectively a sharded key-value store: each parallel instance of a stateful operator is responsible for handling events for a specific group of keys, with state kept locally for high throughput and low latency.
 \end{itemize}
 
-Flink provides exactly-once state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies. The Flink Web UI displaying the CA-DQStream job execution, task status, and task manager metrics is illustrated in Chapter 5, Figure~\ref{fig:flink_job_execution}.
+Flink provides checkpoint-based state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies. The Flink Web UI displaying the CA-DQStream job execution, task status, and task manager metrics is illustrated in Chapter 5, Figure~\ref{fig:flink_job_execution}.
 
 Flink supports both \textit{unbounded streams} (continuous, no defined end, must be continuously processed) and \textit{bounded streams} (batch processing with a defined start and end). Bounded streams are internally processed by algorithms and data structures specifically designed for fixed-size datasets, yielding excellent performance. This makes Flink a unified batch-stream processing engine.
 

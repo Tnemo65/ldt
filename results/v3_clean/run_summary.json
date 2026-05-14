@@ -1,0 +1,10 @@
+{
+  "phases_run": [
+    "data_prep"
+  ],
+  "phase_times": {
+    "data_prep": "685.7s"
+  },
+  "total_time": "11.4 min",
+  "total_time_s": 685.7249264999991
+}

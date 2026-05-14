@@ -14,12 +14,6 @@ from src.operators.key_generator import generate_trip_id
 from src.operators.deduplicator import DeduplicatorFunction
 from src.operators.watermark_assigner import create_watermark_strategy
 from src.operators.schema_validator import SchemaValidator
-from src.sinks.postgres_sink import (
-    create_raw_trips_sink,
-    create_violations_sink,
-    record_to_raw_trips_row,
-    record_to_violation_row
-)
 
 def create_kafka_source(env, topic: str):
     """Create Kafka source with Avro deserialization."""
@@ -138,11 +132,7 @@ def main():
     # Violations (fail filter) - need to invert the filter
     violation_stream = deduplicated_stream.filter(lambda x: not validator.filter(x))
 
-    # PostgreSQL Sinks
-    # Note: JDBC sinks require Flink runtime with JDBC connector JAR
-    # For now, we'll print to console. Uncomment below when running with proper Flink setup
-    # valid_stream.map(RecordToRawTripsRowFunction()).add_sink(create_raw_trips_sink())
-    # violation_stream.map(RecordToViolationRowFunction()).add_sink(create_violations_sink())
+    # Storage sinks are configured via MinIO StreamingFileSink
 
     # Debug output
     print("\n[Valid records]")

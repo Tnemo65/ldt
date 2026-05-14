@@ -167,20 +167,36 @@ class RendezvousOperator(CoProcessFunction):
     def on_timer(self, timestamp, ctx):
         """Handle timer expiration (5s timeout).
 
-        When timer fires, check if any records are still waiting in inbox.
-        Emit them as partial records (one branch missing).
-
-        Args:
-            timestamp: Timer timestamp
-            ctx: Timer context
-
-        Yields:
-            Partial records with missing branch flagged
+        When timer fires, iterate through inbox and emit partial records
+        (records that arrived from one branch but not the other within 5s).
         """
-        # Note: In production Flink, we'd iterate over inbox and emit timeouts
-        # For now, TTL handles cleanup automatically
-        # This is a simplified implementation
-        pass
+        from datetime import datetime
+
+        # Emit timeouts from canary inbox
+        if self.canary_inbox:
+            for trip_id in list(self.canary_inbox.keys()):
+                try:
+                    canary_record = self.canary_inbox.get(trip_id)
+                    if canary_record:
+                        partial = self._create_merged_record(canary_record, None, 'canary_timeout')
+                        self.stats['canary_timeout'] += 1
+                        yield partial
+                        self.canary_inbox.remove(trip_id)
+                except Exception:
+                    pass
+
+        # Emit timeouts from complex inbox
+        if self.complex_inbox:
+            for trip_id in list(self.complex_inbox.keys()):
+                try:
+                    complex_record = self.complex_inbox.get(trip_id)
+                    if complex_record:
+                        partial = self._create_merged_record(None, complex_record, 'complex_timeout')
+                        self.stats['complex_timeout'] += 1
+                        yield partial
+                        self.complex_inbox.remove(trip_id)
+                except Exception:
+                    pass
 
     def _create_merged_record(self, canary_record, complex_record, merge_status):
         """Merge records from both branches.

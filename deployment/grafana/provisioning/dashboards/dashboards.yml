@@ -1,0 +1,15 @@
+# Grafana dashboard provisioning provider
+# This file must be inside the dashboards directory (/etc/grafana/dashboards)
+# so that relative path "." resolves to the JSON files alongside it.
+apiVersion: 1
+
+providers:
+  - name: 'CA-DQStream'
+    orgId: 1
+    folder: 'CA-DQStream'
+    type: file
+    disableDeletion: false
+    editable: true
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards

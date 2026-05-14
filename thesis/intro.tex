@@ -21,17 +21,17 @@ Despite decades of research in data quality management, three critical gaps rema
 These gaps are detailed in Chapter 3, where we derive five research questions and six hypotheses to address them.
 
 \section{Expected System}
-This thesis introduces \textbf{CA-DQStream} (Context-Aware Data Quality for Streaming), a framework organized into five layers, built on Apache Kafka \citep{kafkaintro2024} for distributed event streaming and Apache Flink \citep{flinkdocs2024} for stateful stream processing with exactly-once semantics:
+This thesis introduces \textbf{CA-DQStream} (Context-Aware Data Quality for Streaming), a framework organized into five layers, built on Apache Kafka \citep{kafkaintro2024} for distributed event streaming and Apache Flink \citep{flinkdocs2024} for stateful stream processing with checkpoint-based fault tolerance:
 
 \begin{enumerate}
     \item \textbf{Data Source Layer} --- NYC TLC Parquet files ingested via Kafka Producer into the streaming pipeline.
     \item \textbf{Kafka Layer} --- Distributed event streaming backbone with six topics managing raw data, violation records, anomaly scores, meta-streams, and model updates.
     \item \textbf{Processing Layer with Flink} --- A four-stage Rendezvous pipeline implementing the scientific contributions of this thesis: Schema Validation $\rightarrow$ [Business Rules $\parallel$ Isolation Forest] $\rightarrow$ MetaAggregator $\rightarrow$ IEC (ADWIN Drift Detection). The fork-join pattern parallelizes rule-based and ML-based validation, enabling early exit optimization.
-    \item \textbf{Data Storage Layer (PostgreSQL)} --- Persistent storage for cleaned data, dirty data, and alerts, accessible for downstream analytics.
+    \item \textbf{Data Storage Layer (MinIO)} --- Persistent storage for cleaned data, dirty data, and alerts in Parquet format, accessible for downstream analytics.
     \item \textbf{Monitoring Layer (Prometheus + Grafana)} --- Real-time observability into pipeline health, violation rates, anomaly scores, and drift alerts.
 \end{enumerate}
 
-The Monitoring Layer complements the processing pipeline by providing full observability: Prometheus scrapes metrics from Flink TaskManagers, PostgreSQL, and Kafka; Grafana dashboards display DQ Overview (violation rates per layer), ML Comparison (anomaly scores by priority), System Performance (throughput, latency), and Drift Alerts (ADWIN events).
+The Monitoring Layer complements the processing pipeline by providing full observability: Prometheus scrapes metrics from Flink TaskManagers, MinIO, and Kafka; Grafana dashboards display DQ Overview (violation rates per layer), ML Comparison (anomaly scores by priority), System Performance (throughput, latency), and Drift Alerts (ADWIN events).
 
 \section{Objectives and Contents}
 The primary objectives of this thesis are:
@@ -50,7 +50,7 @@ The thesis is organized as follows: Chapter 1 covers background and related work
 The key contributions of this thesis are:
 
 \begin{enumerate}
-    \item \textbf{Five-Layer Architecture:} A production-grade streaming DQ architecture built on Apache Kafka and Apache Flink, with persistent storage via PostgreSQL and full observability through Prometheus and Grafana. This architecture separates infrastructure concerns from algorithmic contributions, enabling independent optimization of each layer.
+    \item \textbf{Five-Layer Architecture:} A production-grade streaming DQ architecture built on Apache Kafka and Apache Flink, with persistent storage via MinIO (S3-compatible object storage) and full observability through Prometheus and Grafana. This architecture separates infrastructure concerns from algorithmic contributions, enabling independent optimization of each layer.
 
     \item \textbf{Four-Stage Rendezvous Pipeline:} A novel fork-join processing pipeline that parallelizes rule-based (Canary) and ML-based (Complex) validation branches, converging at a MetaAggregator rendezvous point. This architecture reduces end-to-end latency and increases throughput compared to sequential pipelines.
 
@@ -68,7 +68,7 @@ The remainder of this thesis is organized as follows:
     \item \textbf{Chapter 2: Background and Related Works} --- Reviews streaming data processing (Kafka, Flink), MLOps, DAMA-DMBOK DQ dimensions, and related works on context-aware DQ, Rendezvous/fork-join patterns, and drift detection.
     \item \textbf{Chapter 3: Problem Definition and Research Questions} --- Presents empirical analysis of the NYC Yellow Taxi dataset as a case study, research gaps, five research questions (RQ1-RQ5), and six hypotheses (H1-H6).
     \item \textbf{Chapter 4: Core Innovations} --- Details the four scientific contributions: (1) 4D Context-Aware Thresholding, (2) Rendezvous Pipeline Architecture, (3) Intelligent Evolution Controller with 4 Adaptation Strategies, and (4) Hybrid K-Means + sklearn IsolationForest Model.
-    \item \textbf{Chapter 5: System Architecture \& Implementation} --- Describes infrastructure (Kafka, Flink, PostgreSQL, Grafana), four-layer processing pipeline, optimization techniques (PyFlink Vectorized UDFs, PgBouncer), and MLOps integration.
+    \item \textbf{Chapter 5: System Architecture \& Implementation} --- Describes infrastructure (Kafka, Flink, MinIO, Grafana), four-layer processing pipeline, optimization techniques (PyFlink Vectorized UDFs, StreamingFileSink), and MLOps integration.
     \item \textbf{Chapter 6: Experiments \& Evaluation} --- Presents 13 experiments organized by research question: RQ1 (multi-layer coverage), RQ2 (Hybrid model vs baselines), RQ3 (IEC drift adaptation), RQ4 (Rendezvous performance), RQ5 (4D thresholds vs global), plus additional validation experiments.
     \item \textbf{Chapter 7: Conclusion \& Future Work} --- Summarizes contributions, validates hypotheses, discusses limitations, and outlines future research directions (multi-domain validation, deep learning integration, federated learning, anomaly explanation via intrinsic structure).
 \end{itemize}
