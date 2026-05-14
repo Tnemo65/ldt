@@ -336,10 +336,17 @@ class FeatureVectorizer:
         normalized = np.nan_to_num(features, nan=0.0, posinf=100.0, neginf=0.0)
         return normalized.astype(np.float32)
     
-    def _parse_datetime(self, dt_str: str) -> Optional[datetime]:
-        """Parse datetime string from NYC taxi data."""
+    def _parse_datetime(self, dt_str: Union[str, datetime]) -> Optional[datetime]:
+        """Parse datetime string or pandas Timestamp from NYC taxi data."""
         if not dt_str:
             return None
+        # Handle pandas Timestamp / datetime objects
+        if hasattr(dt_str, 'to_pydatetime'):
+            dt_str = dt_str.to_pydatetime()
+        if hasattr(dt_str, 'hour'):
+            return dt_str
+        if not isinstance(dt_str, str):
+            dt_str = str(dt_str)
         formats = [
             '%Y-%m-%d %H:%M:%S',
             '%Y-%m-%d %H:%M:%S UTC',

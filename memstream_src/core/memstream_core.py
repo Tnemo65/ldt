@@ -81,7 +81,7 @@ class MemStreamConfig:
         self.latent_dim: int = 60  # Alias for hidden_dim (benchmark compatibility)
 
         # Memory
-        self.memory_len: int = 256  # v10: 256 (not 100)
+        self.memory_len: int = 100000  # v10: 100000 (production scale)
         self.memory_init_fraction: float = 0.1
 
         # kNN scoring (v10 benchmark)
@@ -148,7 +148,7 @@ class MemoryModule:
     Distance metric: L1 (Manhattan) per benchmark_v10.py line 662.
     """
 
-    def __init__(self, memory_len: int = 256, out_dim: int = 34, device: str = 'cpu'):
+    def __init__(self, memory_len: int = 100000, out_dim: int = 34, device: str = 'cpu'):
         self.memory_len = memory_len
         self.out_dim = out_dim
         self.device = device
@@ -230,6 +230,11 @@ class ContextBeta:
                               if nm == n and ctx == c]
                 if len(cell_scores) >= 50:
                     self.betas[n, c] = float(np.percentile(cell_scores, self.percentile))
+                else:
+                    LOGGER.warning(
+                        "[ContextBeta] UNDERPOPULATED CELL: nb=%d, cell=%d, n=%d",
+                        n, c, len(cell_scores)
+                    )
 
     def get_beta(self, neighborhood_id, context_id):
         n = min(int(neighborhood_id), self.n_neighborhoods - 1)
@@ -472,7 +477,7 @@ class MemStreamCore:
         # =====================================================================
         # Fit ContextBeta from warmup scores (v10 benchmark logic)
         # =====================================================================
-        warmup_n = min(5000, len(X_norm))
+        warmup_n = min(50000, len(X_norm))
         warmup_scores = []
         for i in range(warmup_n):
             x = X_norm[i].cpu().numpy()

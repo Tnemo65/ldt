@@ -653,7 +653,7 @@ services:
       start_period: 30s
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_SECURITY_ADMIN_PASSWORD: changeme  # NOTE: Change changeme to a secure password in production
       GF_SECURITY_ADMIN_EMAIL: admin@cadqstream.local
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"

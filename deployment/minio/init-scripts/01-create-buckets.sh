@@ -46,10 +46,8 @@ mc mb "${MC_ALIAS}/clean-zone" --ignore-existing
 mc mb "${MC_ALIAS}/ml-models" --ignore-existing
 mc mb "${MC_ALIAS}/mlflow-artifacts" --ignore-existing
 
-echo "[minio-init] Setting bucket policies (public download)..."
-for bucket in cadqstream-checkpoints cadqstream-raw cadqstream-violations cadqstream-anomalies cadqstream-metrics cadqstream-drift cadqstream-dlq raw-zone quarantine-zone clean-zone ml-models mlflow-artifacts; do
-    mc anonymous set download "${MC_ALIAS}/${bucket}" 2>/dev/null || true
-done
+# REMOVED: Public download was a security risk - raw taxi PII was publicly accessible
+# mc anonymous set download "${MC_ALIAS}/${bucket}" 2>/dev/null || true
 
 echo "[minio-init] Verifying buckets..."
 mc ls "${MC_ALIAS}/"

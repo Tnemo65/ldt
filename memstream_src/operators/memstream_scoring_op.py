@@ -33,7 +33,7 @@ LOGGER = logging.getLogger('memstream-scoring')
 
 # Checkpoint path
 MODEL_CHECKPOINT_DIR = os.getenv('MEMSTREAM_CHECKPOINT_DIR', '/models/memstream')
-MEMORY_CHECKPOINT_INTERVAL = int(os.getenv('MEMSTREAM_CHECKPOINT_INTERVAL', '10000'))
+MEMORY_CHECKPOINT_INTERVAL = int(os.getenv('MEMSTREAM_CHECKPOINT_INTERVAL', '1000'))
 
 # Default MemStream config for production (matching benchmark v10)
 DEFAULT_CONFIG = {
@@ -260,7 +260,7 @@ class MemStreamScoringOperator(MapFunction):
             return False
         try:
             import torch
-            state = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+            state = torch.load(checkpoint_path, map_location='cpu', weights_only=True)
             self._ms_core.load_state_dict(state)
             LOGGER.info("[MemStreamScoring] Loaded checkpoint successfully")
             return True
@@ -319,7 +319,12 @@ class MemStreamScoringOperator(MapFunction):
                         new_beta = float(payload.get('beta', self._current_betas.get(neighborhood_idx, self._default_beta)))
 
                         # Verify HMAC
-                        iec_key = os.getenv('IEC_SIGNING_KEY', '')
+                        iec_key = os.getenv('IEC_SIGNING_KEY')
+                        if not iec_key:
+                            raise RuntimeError(
+                                "[MemStreamScoring] FATAL: IEC_SIGNING_KEY environment variable is required. "
+                                "Unsigned beta updates are not permitted."
+                            )
                         if iec_key and iec_key != 'training-signing-key':
                             hmac_hex = payload.get('hmac', '')
                             beta_str = f"{new_beta:.6f}"

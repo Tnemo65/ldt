@@ -60,7 +60,7 @@ LOGGER = logging.getLogger('memstream-scoring')
 
 # Model checkpoint path
 MODEL_CHECKPOINT_DIR = os.getenv('MEMSTREAM_CHECKPOINT_DIR', '/models/memstream')
-MEMORY_CHECKPOINT_INTERVAL = int(os.getenv('MEMSTREAM_CHECKPOINT_INTERVAL', '10000'))
+MEMORY_CHECKPOINT_INTERVAL = int(os.getenv('MEMSTREAM_CHECKPOINT_INTERVAL', '1000'))
 
 # Default MemStream config for production
 DEFAULT_CONFIG = {
@@ -261,20 +261,20 @@ class MemStreamScoringOperator(MapFunction):
 
         try:
             # Load AE weights and normalization stats
-            weights_state = torch.load(weights_path, map_location='cpu', weights_only=False)
+            weights_state = torch.load(weights_path, map_location='cpu', weights_only=True)
             self._ms_core.ae.load_state_dict(weights_state['ae_state_dict'])
             self._ms_core.mean = weights_state['mean'].to(self._ms_core.device)
             self._ms_core.std = weights_state['std'].to(self._ms_core.device)
             LOGGER.info("[MemStreamScoring] Loaded AE weights and scaler")
 
             # Load memory state
-            mem_state = torch.load(memory_path, map_location='cpu', weights_only=False)
+            mem_state = torch.load(memory_path, map_location='cpu', weights_only=True)
             self._ms_core.load_state_dict(mem_state)
 
             # Load bar controller stats if available
             bar_path = os.path.join(self.checkpoint_dir, 'bar_controller.pt')
             if os.path.exists(bar_path):
-                bar_state = torch.load(bar_path, map_location='cpu', weights_only=False)
+                bar_state = torch.load(bar_path, map_location='cpu', weights_only=True)
                 self._bar_controller._total_records = bar_state.get('total_records', 0)
                 self._bar_controller._memory_updates = bar_state.get('memory_updates', 0)
                 self._bar_controller._drift_events = bar_state.get('drift_events', 0)
