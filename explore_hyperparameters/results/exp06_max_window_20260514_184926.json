@@ -1,0 +1,68 @@
+{
+  "experiment": "exp06_max_window",
+  "hyperparameter": "max_window",
+  "timestamp": "20260514_184926",
+  "priority": "MEDIUM",
+  "primary_metric": "Latency",
+  "grid": [
+    200,
+    500,
+    1000,
+    2000
+  ],
+  "results": [
+    {
+      "max_window": 200,
+      "metrics": {
+        "drift_point": 7500,
+        "detection_time": 7500,
+        "latency": 0,
+        "detected": true,
+        "false_positives": 487,
+        "recall": 1.0,
+        "precision": 0.0020491803278688526,
+        "avg_window_size": 33
+      }
+    },
+    {
+      "max_window": 500,
+      "metrics": {
+        "drift_point": 7500,
+        "detection_time": 7500,
+        "latency": 0,
+        "detected": true,
+        "false_positives": 485,
+        "recall": 1.0,
+        "precision": 0.00205761316872428,
+        "avg_window_size": 33
+      }
+    },
+    {
+      "max_window": 1000,
+      "metrics": {
+        "drift_point": 7500,
+        "detection_time": 7500,
+        "latency": 0,
+        "detected": true,
+        "false_positives": 485,
+        "recall": 1.0,
+        "precision": 0.00205761316872428,
+        "avg_window_size": 33
+      }
+    },
+    {
+      "max_window": 2000,
+      "metrics": {
+        "drift_point": 7500,
+        "detection_time": 7500,
+        "latency": 0,
+        "detected": true,
+        "false_positives": 485,
+        "recall": 1.0,
+        "precision": 0.00205761316872428,
+        "avg_window_size": 33
+      }
+    }
+  ],
+  "recommendation": "Trade-off between detection latency and false positives. Smaller window = faster detection but more FPs."
+}

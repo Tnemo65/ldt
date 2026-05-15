@@ -1,0 +1,108 @@
+{
+  "experiment": "exp05_adwin_delta",
+  "hyperparameter": "adwin_delta",
+  "timestamp": "20260514_184912",
+  "priority": "HIGH",
+  "primary_metric": "Recall",
+  "grid": [
+    0.001,
+    0.002,
+    0.005,
+    0.01,
+    0.02
+  ],
+  "results": [
+    {
+      "delta": 0.001,
+      "metrics": {
+        "drift_start_idx": 7500,
+        "detection_time": 7512,
+        "latency": 12,
+        "detected": true,
+        "false_positives": 491,
+        "total_adwin_updates": 15000,
+        "recall": 1.0,
+        "precision": 0.0020325203252032522
+      }
+    },
+    {
+      "delta": 0.002,
+      "metrics": {
+        "drift_start_idx": 7500,
+        "detection_time": 7525,
+        "latency": 25,
+        "detected": true,
+        "false_positives": 502,
+        "total_adwin_updates": 15000,
+        "recall": 1.0,
+        "precision": 0.0019880715705765406
+      }
+    },
+    {
+      "delta": 0.005,
+      "metrics": {
+        "drift_start_idx": 7500,
+        "detection_time": 7505,
+        "latency": 5,
+        "detected": true,
+        "false_positives": 519,
+        "total_adwin_updates": 15000,
+        "recall": 1.0,
+        "precision": 0.0019230769230769232
+      }
+    },
+    {
+      "delta": 0.01,
+      "metrics": {
+        "drift_start_idx": 7500,
+        "detection_time": 7521,
+        "latency": 21,
+        "detected": true,
+        "false_positives": 521,
+        "total_adwin_updates": 15000,
+        "recall": 1.0,
+        "precision": 0.0019157088122605363
+      }
+    },
+    {
+      "delta": 0.02,
+      "metrics": {
+        "drift_start_idx": 7500,
+        "detection_time": 7505,
+        "latency": 5,
+        "detected": true,
+        "false_positives": 533,
+        "total_adwin_updates": 15000,
+        "recall": 1.0,
+        "precision": 0.0018726591760299626
+      }
+    }
+  ],
+  "best_recall": {
+    "delta": 0.001,
+    "metrics": {
+      "drift_start_idx": 7500,
+      "detection_time": 7512,
+      "latency": 12,
+      "detected": true,
+      "false_positives": 491,
+      "total_adwin_updates": 15000,
+      "recall": 1.0,
+      "precision": 0.0020325203252032522
+    }
+  },
+  "best_precision": {
+    "delta": 0.001,
+    "metrics": {
+      "drift_start_idx": 7500,
+      "detection_time": 7512,
+      "latency": 12,
+      "detected": true,
+      "false_positives": 491,
+      "total_adwin_updates": 15000,
+      "recall": 1.0,
+      "precision": 0.0020325203252032522
+    }
+  },
+  "recommendation": "delta=0.001 gives best drift recall. For balanced precision/recall, use delta=0.001."
+}

@@ -2,8 +2,8 @@
 """
 CA-DQStream ML Model Training Script.
 
-Trains an IsolationForest anomaly detection model on synthetic NYC taxi data,
-registers it in MLflow, and uploads the artifact to MinIO.
+Trains an IsolationForest anomaly detection model on synthetic NYC taxi data
+and uploads the artifact to MinIO. No MLflow dependency.
 
 Pipeline:
   1. Generate or load synthetic historical NYC taxi data
@@ -11,7 +11,7 @@ Pipeline:
   3. Compute 21D ratio features for IsolationForest
   4. Train IsolationForest on clean data
   5. Compute per-cluster thresholds (baseline stats)
-  6. Register in MLflow with params, metrics, and artifacts
+  6. Save artifacts locally
   7. Upload to MinIO: cadqstream-checkpoints/ml-models/anomaly_detector_<version>.pkl
 
 Usage:
@@ -19,7 +19,6 @@ Usage:
   python train_model.py --load-from-minio s3://nyc-taxi-raw/training_data.parquet
 
 Environment Variables:
-  MLFLOW_TRACKING_URI    MLflow server URL (default: http://mlflow:5000)
   MINIO_ENDPOINT         MinIO endpoint (default: minio:9000)
   MINIO_ACCESS_KEY       MinIO access key (default: minioadmin)
   MINIO_SECRET_KEY       MinIO secret key (default: minioadmin123)
@@ -48,8 +47,6 @@ from sklearn.metrics import (
 )
 
 # Cloud / storage
-import mlflow
-from mlflow.tracking import MlflowClient
 import boto3
 from botocore.config import Config
 
@@ -128,15 +125,12 @@ def layer1_filter(df):
     """
     mask = pd.Series(True, index=df.index)
 
-    # Required fields not null
     for col in ['trip_distance', 'fare_amount', 'PULocationID', 'DOLocationID', 'passenger_count']:
         mask &= df[col].notna()
 
-    # Zone range
     mask &= (df['PULocationID'] >= NYC_ZONE_MIN) & (df['PULocationID'] <= NYC_ZONE_MAX)
     mask &= (df['DOLocationID'] >= NYC_ZONE_MIN) & (df['DOLocationID'] <= NYC_ZONE_MAX)
 
-    # Physical impossibility filters
     mask &= df['passenger_count'] >= 1
     mask &= df['trip_distance'] >= 0
     mask &= df['fare_amount'] >= 0
@@ -151,19 +145,17 @@ def engineer_features(df):
     """Compute 21 ratio/demographic features for IsolationForest."""
     features = pd.DataFrame(index=df.index)
 
-    # Handle division by zero
     eps = 1e-6
 
     features['fare_per_mile'] = df['fare_amount'] / (df['trip_distance'] + eps)
-    features['tip_pct'] = 0.0  # Will be computed if tip column exists
-    features['tolls_per_fare'] = 0.0  # No tolls in simplified data
+    features['tip_pct'] = 0.0
+    features['tolls_per_fare'] = 0.0
     features['extra_pct'] = df['fare_amount'] / (df['fare_amount'] + eps)
 
     duration_h = np.maximum(df['trip_duration'], eps / 3600)
     features['duration_miles_per_hour'] = df['trip_distance'] / duration_h
     features['fare_per_duration'] = df['fare_amount'] / duration_h
 
-    # Z-score features (relative to dataset)
     features['fare_z'] = (df['fare_amount'] - df['fare_amount'].mean()) / (df['fare_amount'].std() + eps)
     features['distance_z'] = (df['trip_distance'] - df['trip_distance'].mean()) / (df['trip_distance'].std() + eps)
     features['passenger_z'] = (df['passenger_count'] - df['passenger_count'].mean()) / (df['passenger_count'].std() + eps)
@@ -194,7 +186,6 @@ def engineer_features(df):
         lambda x: 1.0 if pd.Timestamp(x).dayofweek >= 5 else 0.0
     )
 
-    # Clip extreme z-scores
     for col in ['fare_z', 'distance_z', 'passenger_z']:
         features[col] = features[col].clip(-5, 5)
 
@@ -219,15 +210,12 @@ def train_isolation_forest(X_train, X_test, contamination=0.05, n_estimators=200
 def evaluate_model(model, X_test):
     """Evaluate model on test set, computing precision/recall/f1."""
     preds = model.predict(X_test)
-    labels = (preds == -1).astype(int)  # -1 = anomaly, 1 = normal
+    labels = (preds == -1).astype(int)
 
-    # Compute metrics relative to contamination
     precision = precision_score(labels, np.zeros_like(labels), zero_division=0)
     recall = recall_score(labels, np.zeros_like(labels), zero_division=0)
     f1 = f1_score(labels, np.zeros_like(labels), zero_division=0)
 
-    # Since we trained on clean data, we can't compute true anomalies here
-    # In production, you'd have labelled anomaly data
     return {
         'precision': precision,
         'recall': recall,
@@ -240,7 +228,6 @@ def evaluate_model(model, X_test):
 
 def compute_thresholds(model, X_train, scaler):
     """Compute per-feature baseline thresholds for cluster analysis."""
-    X_scaled = scaler.transform(X_train)
     return {
         'fare_per_mile': {'mean': float(X_train['fare_per_mile'].mean()), 'std': float(X_train['fare_per_mile'].std())},
         'fare_z': {'mean': float(X_train['fare_z'].mean()), 'std': float(X_train['fare_z'].std())},
@@ -280,17 +267,6 @@ def upload_to_minio(local_path, bucket, key):
     print(f"[upload] Uploaded {local_path} -> s3://{bucket}/{key}")
 
 
-# ─── MLflow Integration ─────────────────────────────────────────────────────────
-
-def setup_mlflow(tracking_uri):
-    """Configure MLflow tracking server."""
-    mlflow.set_tracking_uri(tracking_uri)
-    mlflow.set_experiment('cadqstream-anomaly-detection')
-
-    client = MlflowClient(tracking_uri)
-    return client
-
-
 # ─── Main Training Pipeline ─────────────────────────────────────────────────────
 
 def main():
@@ -308,20 +284,16 @@ def main():
     parser.add_argument('--test-size', type=float, default=0.2,
                         help='Test set fraction (default: 0.2)')
     parser.add_argument('--no-upload', action='store_true',
-                        help='Skip MinIO upload')
-    parser.add_argument('--no-register', action='store_true',
-                        help='Skip MLflow registration')
+                        help='Skip MinIO upload (save artifacts locally only)')
 
     args = parser.parse_args()
 
-    tracking_uri = os.getenv('MLFLOW_TRACKING_URI', 'http://mlflow:5000')
     model_name = f'anomaly_detector_{args.version}'
 
     print(f"[train] === CA-DQStream Model Training ===")
     print(f"[train] Version: {model_name}")
     print(f"[train] Samples: {args.n_samples:,}")
     print(f"[train] Contamination: {args.contamination}")
-    print(f"[train] MLflow: {tracking_uri}")
 
     # ─── Step 1: Generate data ───────────────────────────────────────────────
     print(f"\n[train] Step 1: Generating {args.n_samples:,} synthetic trips...")
@@ -368,7 +340,7 @@ def main():
     print(f"[train] Anomalies detected: {metrics['n_anomalies']:,} "
           f"({metrics['contamination']:.2%} of test set)")
 
-    # ─── Step 8: Compute thresholds ────────────────────────────────────────
+    # ─── Step 8: Compute thresholds ───────────────────────────────────────
     print(f"\n[train] Step 8: Computing baseline thresholds...")
     thresholds = compute_thresholds(model, X_train, scaler)
 
@@ -395,56 +367,9 @@ def main():
     print(f"[train] Saved: {scaler_path}")
     print(f"[train] Saved: {threshold_path}")
 
-    # ─── Step 10: Register in MLflow ───────────────────────────────────────
-    if not args.no_register:
-        print(f"\n[train] Step 10: Registering model in MLflow...")
-        setup_mlflow(tracking_uri)
-
-        with mlflow.start_run(run_name=f'train-{model_name}') as run:
-            run_id = run.info.run_id
-
-            # Log parameters
-            mlflow.log_param('model_version', args.version)
-            mlflow.log_param('model_type', 'IsolationForest')
-            mlflow.log_param('contamination', args.contamination)
-            mlflow.log_param('n_estimators', args.n_estimators)
-            mlflow.log_param('n_features', len(FEATURE_NAMES))
-            mlflow.log_param('n_training_samples', len(X_train))
-            mlflow.log_param('n_clean_samples', len(df_clean))
-            mlflow.log_param('random_state', args.seed)
-            mlflow.log_param('features', ','.join(FEATURE_NAMES[:5]) + '...')
-
-            # Log metrics
-            mlflow.log_metric('n_anomalies', metrics['n_anomalies'])
-            mlflow.log_metric('contamination_actual', metrics['contamination'])
-            mlflow.log_metric('n_normal', metrics['n_normal'])
-            mlflow.log_metric('n_clean_records', len(df_clean))
-            mlflow.log_metric('clean_rate', len(df_clean) / len(df))
-
-            # Log baseline threshold stats
-            for feat, stats in thresholds.items():
-                mlflow.log_metric(f'threshold_{feat}_mean', stats['mean'])
-                mlflow.log_metric(f'threshold_{feat}_std', stats['std'])
-
-            # Log artifacts
-            mlflow.log_artifact(model_path)
-            mlflow.log_artifact(scaler_path)
-            mlflow.log_artifact(threshold_path)
-            mlflow.log_artifact(feature_path)
-
-            print(f"[train] MLflow run: {run_id}")
-
-        # Register as model version
-        try:
-            model_uri = f'runs:/{run_id}/anomaly_detector_{args.version}.pkl'
-            mv = mlflow.register_model(model_uri, model_name)
-            print(f"[train] Registered model: {model_name}:{mv.version}")
-        except Exception as e:
-            print(f"[train] Note: Could not register model in MLflow registry: {e}")
-
-    # ─── Step 11: Upload to MinIO ───────────────────────────────────────────
+    # ─── Step 10: Upload to MinIO ───────────────────────────────────────────
     if not args.no_upload:
-        print(f"\n[train] Step 11: Uploading to MinIO (bucket: {args.model_bucket})...")
+        print(f"\n[train] Step 10: Uploading to MinIO (bucket: {args.model_bucket})...")
         try:
             upload_to_minio(model_path, args.model_bucket, f'{model_name}.pkl')
             upload_to_minio(scaler_path, args.model_bucket, f'anomaly_scaler_{args.version}.pkl')
@@ -456,7 +381,6 @@ def main():
 
     print(f"\n[train] === Training Complete ===")
     print(f"[train] Model: {model_path}")
-    print(f"[train] MLflow: {tracking_uri}")
     print(f"[train] MinIO: s3://{args.model_bucket}/{model_name}.pkl")
     print(f"[train] Run: python src/flink_job_complete.py (set MODEL_VERSION={args.version})")
 

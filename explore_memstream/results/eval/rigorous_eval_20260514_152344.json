@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-05-14T15:23:44.532905",
+  "fraud_type": "mixed",
+  "n_warmup": 150000,
+  "n_test": 150000,
+  "n_anomalies": 4500,
+  "anomaly_rate": 0.03,
+  "warmup_frac": 0.5,
+  "results": [
+    {
+      "name": "mem1024_g0_k10_b0p5",
+      "config": {
+        "name": "mem1024_g0_k10_b0p5",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemoryModule' object has no attribute 'n_records'"
+    }
+  ]
+}

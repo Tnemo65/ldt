@@ -1,0 +1,62 @@
+{
+  "timestamp": "20260514_155618",
+  "fraud_type": "mixed",
+  "anomaly_rate": 0.05,
+  "n_train": 10000,
+  "n_test": 15000,
+  "n_anomalies": 711,
+  "eval_mode": "streaming",
+  "device": "cuda",
+  "results": [
+    {
+      "name": "v10_mem256_k10",
+      "config": {
+        "name": "v10_mem256_k10",
+        "memory_len": 256,
+        "k": 10,
+        "gamma": 0.0
+      },
+      "error": "readonly attribute"
+    },
+    {
+      "name": "v10_mem512_k10",
+      "config": {
+        "name": "v10_mem512_k10",
+        "memory_len": 512,
+        "k": 10,
+        "gamma": 0.0
+      },
+      "error": "readonly attribute"
+    },
+    {
+      "name": "v10_mem1024_k10",
+      "config": {
+        "name": "v10_mem1024_k10",
+        "memory_len": 1024,
+        "k": 10,
+        "gamma": 0.0
+      },
+      "error": "readonly attribute"
+    },
+    {
+      "name": "v10_mem256_k5",
+      "config": {
+        "name": "v10_mem256_k5",
+        "memory_len": 256,
+        "k": 5,
+        "gamma": 0.0
+      },
+      "error": "readonly attribute"
+    },
+    {
+      "name": "v10_mem512_k10_g05",
+      "config": {
+        "name": "v10_mem512_k10_g05",
+        "memory_len": 512,
+        "k": 10,
+        "gamma": 0.5
+      },
+      "error": "readonly attribute"
+    }
+  ]
+}

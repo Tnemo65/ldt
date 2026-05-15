@@ -1,66 +1,108 @@
 """
-IEC (Intelligent Evolution Controller) Operator - Layer 4.
-Task 3.21-3.25: Multi-strategy adaptation with METER + ADWIN-U
+IEC (Intelligent Evolution Controller) Operator - Phase 2D Migration + Phase 5A REC-8.
 
-IEC combines:
-1. ADWIN-U drift detection (spatial-temporal signals)
-2. METER hypernetwork (strategy selection)
-3. Multi-strategy execution (retrain, adjust, switch, do_nothing)
+Task: Multi-strategy adaptation with METER + ADWIN-U
+
+Phase 2D Changes from CA-DQStream version:
+1. Uses new IECController from src/iec package with HMAC security
+2. Monitoring-only mode by default (no beta writes)
+3. After ContextBeta verified: enable beta writes from MinIO
+4. Uses 10-neighborhood ADWIN instances from Phase 1D
+5. Prometheus alerts for HMAC failures
+
+Phase 5A REC-8: operator_id in all IEC payloads for audit trail.
 
 Flow:
 1. Meta-metrics arrive from MetaAggregator
 2. ADWIN-U detects drifts per neighborhood×metric
 3. METER predicts optimal strategy from metrics
-4. IEC executes strategy (update models, thresholds, etc.)
+4. IEC executes strategy (monitoring only in Phase 2D)
 
-Spec: Task 3.21-3.25 (IEC multi-strategy architecture)
+Usage:
+    # Initial migration: monitoring only
+    iec_stream = meta_window_stream.map(IECOperator())
+    
+    # After ContextBeta verified: enable beta writes
+    iec_stream = meta_window_stream.map(
+        IECOperator(enable_beta_writes=True, minio_client=minio_client)
+    )
+
+Spec: Phase 2D migration plan
 """
 
 from pyflink.datastream import MapFunction
+import os
 import pickle
+import socket
 import sys
+import uuid
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.iec.adwin_multi_instance import MultiInstanceADWIN, DriftAggregator
+# Phase 2D: Import from new IEC package
+from src.iec import (
+    IECController,
+    IECConfig,
+    CircuitBreaker,
+    CircuitState,
+)
+
+
+def _get_default_operator_id() -> str:
+    """Generate default operator_id from hostname + PID + random suffix (REC-8)."""
+    hostname = socket.gethostname()
+    pid = os.getpid()
+    short_uuid = uuid.uuid4().hex[:8]
+    return f"iec-{hostname}-{pid}-{short_uuid}"
 
 
 class IECOperator(MapFunction):
-    """Intelligent Evolution Controller for adaptive drift handling.
+    """
+    Intelligent Evolution Controller for adaptive drift handling.
+    
+    Phase 2D version with HMAC security and monitoring-only mode.
 
     Combines ADWIN-U drift detection with METER strategy selection.
     Executes multi-strategy adaptation based on drift signals and meta-metrics.
 
     Strategies:
     1. do_nothing - No drift detected, continue normal operation
-    2. adjust_threshold - Minor drift, adjust anomaly thresholds
-    3. retrain_model - Moderate drift, trigger model retraining
-    4. switch_model - Severe drift, switch to alternative model
+    2. adjust_threshold - Minor drift, adjust anomaly thresholds (Phase 2D: monitoring only)
+    3. memory_reset - Severe drift, reset memory (Phase 2D: monitoring only)
 
     Args:
         meter_model_path: Path to trained METER hypernetwork
         meter_scaler_path: Path to METER feature scaler
         adwin_delta_config: ADWIN sensitivity configuration
+        enable_beta_writes: Enable beta writes to MinIO (default: False for Phase 2D)
+        minio_client: MinIO client for beta writes (required if enable_beta_writes=True)
     """
 
     def __init__(
         self,
         meter_model_path: str = 'models/meter_hypernetwork.pkl',
         meter_scaler_path: str = 'models/meter_scaler.pkl',
-        adwin_delta_config: dict = None
+        adwin_delta_config: dict = None,
+        enable_beta_writes: bool = False,  # Phase 2D: disabled by default
+        minio_client: object = None,
+        operator_id: str = None,  # REC-8: audit trail identifier
     ):
         """Initialize IEC operator."""
         self.meter_model_path = meter_model_path
         self.meter_scaler_path = meter_scaler_path
         self.adwin_delta_config = adwin_delta_config
+        self.enable_beta_writes = enable_beta_writes  # Phase 2D: disabled by default
+        self.minio_client = minio_client
+        # REC-8: operator_id for audit trail
+        self.operator_id = operator_id or _get_default_operator_id()
 
-        self.meter_model = None
-        self.meter_scaler = None
-        self.adwin_u = None
-        self.drift_aggregator = None
+        # Phase 2D: Use new IECController
+        self.iec_controller: Optional[IECController] = None
+        self.iec_config: Optional[IECConfig] = None
 
         self.stats = {
             'windows_processed': 0,
@@ -68,47 +110,51 @@ class IECOperator(MapFunction):
             'strategies_executed': {
                 'do_nothing': 0,
                 'adjust_threshold': 0,
-                'lock_memory': 0,
-                'canary_only': 0
-            }
+                'memory_reset': 0,
+            },
+            'hmac_failures': 0,
+            'retrain_triggers': {
+                'Trigger_A_ADWIN_Drift': 0,
+                'Trigger_B_AnomalyRate': 0,
+                'Trigger_C_kNNDistance': 0,
+            },
         }
 
     def open(self, runtime_context):
-        """Load METER model and initialize ADWIN-U.
+        """
+        Initialize IEC controller.
 
         Called once per task slot when Flink job starts.
         """
-        try:
-            # Load METER model
-            print(f"[IEC] Loading METER model: {self.meter_model_path}")
-            with open(self.meter_model_path, 'rb') as f:
-                self.meter_model = pickle.load(f)
-
-            with open(self.meter_scaler_path, 'rb') as f:
-                self.meter_scaler = pickle.load(f)
-
-            print(f"[IEC] METER model loaded")
-
-        except Exception as e:
-            print(f"[IEC] WARNING: Could not load METER model: {e}")
-            print(f"[IEC] IEC will operate in ADWIN-only mode")
-            self.meter_model = None
-
-        # Initialize ADWIN-U
-        # GLOBAL ADWIN-U: Monitors 6 meta-metrics for system-wide drift detection
-        # See module docstring for scope separation details
-        # NOTE: This is INDEPENDENT from LOCAL ADWIN in MemStreamCore
-        self.adwin_u = MultiInstanceADWIN(
-            delta_config=self.adwin_delta_config
+        # Phase 2D: Create new IECConfig and IECController
+        self.iec_config = IECConfig(
+            meter_model_path=self.meter_model_path,
+            meter_scaler_path=self.meter_scaler_path,
+            enable_meter=True,
         )
 
-        # Initialize drift aggregator
-        self.drift_aggregator = DriftAggregator(drift_threshold=3)
+        self.iec_controller = IECController(
+            config=self.iec_config,
+            minio_client=self.minio_client if self.enable_beta_writes else None,
+        )
 
-        print(f"[IEC] Operator initialized")
+        # Try to load METER model
+        if self.iec_controller._load_meter():
+            print(f"[IEC] METER model loaded from {self.meter_model_path}")
+        else:
+            print(f"[IEC] WARNING: METER model not found at {self.meter_model_path}")
+            print(f"[IEC] IEC will operate in fallback mode (severity-based strategies)")
+
+        # Log Phase 2D configuration
+        print(f"[IEC] Phase 2D IEC Operator initialized")
+        print(f"[IEC]   operator_id: {self.operator_id}")  # REC-8
+        print(f"[IEC]   Monitoring mode: {'ENABLED' if self.enable_beta_writes else 'MONITORING ONLY'}")
+        print(f"[IEC]   Beta writes: {'ENABLED' if self.enable_beta_writes else 'DISABLED'}")
+        print(f"[IEC]   HMAC security: ENABLED")
 
     def map(self, meta_metrics):
-        """Process meta-metrics window and execute IEC loop.
+        """
+        Process meta-metrics window and execute IEC loop.
 
         Args:
             meta_metrics: Meta-metrics from MetaAggregator (1-minute window)
@@ -121,42 +167,96 @@ class IECOperator(MapFunction):
 
         self.stats['windows_processed'] += 1
 
-        # Step 1: Update ADWIN-U with meta-metrics
-        drifts = self.adwin_u.update_meta_metrics(meta_metrics)
+        # Step 1: Update IEC controller with meta-metrics
+        # The meta_metrics format is expected to be a dict keyed by neighborhood:
+        # {
+        #     'manhattan': {'volume': 1500, 'null_rate': 0.02, ...},
+        #     'brooklyn': {'volume': 800, 'null_rate': 0.01, ...},
+        # }
+        # Or if it's a flat dict with neighborhood_id field, convert it
+        if 'neighborhood_id' in meta_metrics:
+            # Flat format - convert to per-neighborhood format
+            nb = meta_metrics.get('neighborhood_id', 'unknown')
+            meta_metrics = {nb: meta_metrics}
 
-        # Add drifts to aggregator
-        for drift in drifts:
-            self.drift_aggregator.add_drift(drift)
-            self.stats['drifts_detected'] += 1
+        try:
+            decision = self.iec_controller.update(meta_metrics)
+        except EnvironmentError as e:
+            # HMAC key missing - this should not happen in monitoring mode
+            # but log it for visibility
+            print(f"[IEC] ERROR: {e}")
+            self.stats['hmac_failures'] += 1
+            return {
+                **meta_metrics,
+                'iec_strategy': 'do_nothing',
+                'iec_confidence': 0.0,
+                'iec_error': str(e),
+                'iec_timestamp': datetime.utcnow().isoformat(),
+            }
 
-        # Step 2: Assess drift severity
-        drift_assessment = self.drift_aggregator.assess_drift_severity()
+        # Extract decision fields
+        strategy = decision.get('strategy', 'do_nothing')
+        confidence = decision.get('confidence', 0.0)
+        severity = decision.get('severity', 'none')
+        drifts = decision.get('drift_events', [])
+        retrain_triggers = decision.get('retrain_triggers', {})
 
-        # Step 3: Predict strategy using METER (if available)
-        if self.meter_model is not None:
-            strategy, confidence = self._predict_strategy(meta_metrics)
+        # Update statistics
+        self.stats['drifts_detected'] += len(drifts)
+        self.stats['strategies_executed'][strategy] = \
+            self.stats['strategies_executed'].get(strategy, 0) + 1
+
+        # Track retrain triggers
+        for trigger_name in retrain_triggers:
+            if trigger_name in self.stats['retrain_triggers']:
+                self.stats['retrain_triggers'][trigger_name] += 1
+
+        # Step 2: Execute strategy (if beta writes enabled)
+        action_result = {}
+        if self.enable_beta_writes:
+            try:
+                action_result = self.iec_controller.execute_strategy(decision)
+            except EnvironmentError as e:
+                print(f"[IEC] HMAC ERROR during strategy execution: {e}")
+                self.stats['hmac_failures'] += 1
+                action_result = {
+                    'status': 'hmac_error',
+                    'message': str(e),
+                }
         else:
-            # Fallback: Rule-based strategy selection
-            strategy, confidence = self._fallback_strategy(drift_assessment)
-
-        # Step 4: Execute strategy
-        action_result = self._execute_strategy(strategy, meta_metrics, drift_assessment)
-
-        # Update stats
-        self.stats['strategies_executed'][strategy] += 1
+            # Monitoring only - log the decision but don't execute
+            action_result = {
+                'status': 'monitoring_only',
+                'message': f'Would execute {strategy} but beta writes disabled',
+                'strategy': strategy,
+                'confidence': confidence,
+                'severity': severity,
+            }
 
         # Emit IEC metrics to cadqstream-metrics for Prometheus
-        self._emit_iec_metrics(meta_metrics, drifts, strategy, confidence)
+        self._emit_iec_metrics(meta_metrics, drifts, strategy, confidence, severity)
 
-        # Construct IEC decision
+        # Log retrain triggers if any
+        if retrain_triggers:
+            for trigger_name, trigger_details in retrain_triggers.items():
+                print(f"[IEC] RETRAIN TRIGGER: {trigger_name} - {trigger_details}")
+                self._emit_retrain_alert(trigger_name, trigger_details)
+
+        # Construct IEC decision (REC-8: includes operator_id for audit trail)
         iec_decision = {
             **meta_metrics,
+            'operator_id': self.operator_id,  # REC-8: audit trail
             'drifts_detected': drifts,
-            'drift_assessment': drift_assessment,
+            'drift_count': len(drifts),
+            'drift_assessment': severity,
             'iec_strategy': strategy,
             'iec_confidence': confidence,
+            'iec_severity': severity,
             'action_result': action_result,
-            'iec_timestamp': datetime.utcnow().isoformat()
+            'retrain_triggers': retrain_triggers,
+            'circuit_state': decision.get('circuit_state', 'closed'),
+            'iec_timestamp': datetime.utcnow().isoformat(),
+            'phase2d_monitoring': not self.enable_beta_writes,
         }
 
         # Log periodically
@@ -165,157 +265,41 @@ class IECOperator(MapFunction):
 
         return iec_decision
 
-    def _predict_strategy(self, meta_metrics: dict):
-        """Predict optimal strategy using METER.
-
-        Args:
-            meta_metrics: Meta-metrics dict
-
-        Returns:
-            (strategy_name, confidence)
-        """
-        import numpy as np
-
-        # Extract features
-        features = np.array([[
-            meta_metrics.get('volume', 1000),
-            meta_metrics.get('null_rate', 0.0),
-            meta_metrics.get('violation_rate', 0.0),
-            meta_metrics.get('anomaly_rate', 0.0),
-            meta_metrics.get('avg_anomaly_score', 0.0),
-            meta_metrics.get('delta_score', 0.0)
-        ]])
-
-        # Scale
-        features_scaled = self.meter_scaler.transform(features)
-
-        # Predict
-        strategy_id = self.meter_model.predict(features_scaled)[0]
-        probs = self.meter_model.predict_proba(features_scaled)[0]
-
-        strategy_names = {
-            0: 'do_nothing',
-            1: 'adjust_threshold',
-            2: 'lock_memory',
-            3: 'canary_only'
-        }
-
-        strategy_name = strategy_names[strategy_id]
-        confidence = probs[strategy_id]
-
-        return strategy_name, confidence
-
-    def _fallback_strategy(self, drift_assessment: dict):
-        """Fallback rule-based strategy selection (if METER unavailable).
-
-        Args:
-            drift_assessment: Drift severity assessment
-
-        Returns:
-            (strategy_name, confidence)
-        """
-        severity = drift_assessment['severity']
-
-        if severity == 'none':
-            return 'do_nothing', 1.0
-        elif severity == 'low':
-            return 'adjust_threshold', 0.7
-        elif severity == 'moderate':
-            return 'lock_memory', 0.8
-        else:  # high
-            return 'canary_only', 0.9
-
-    def _execute_strategy(self, strategy: str, meta_metrics: dict, drift_assessment: dict):
-        """Execute adaptation strategy.
-
-        Args:
-            strategy: Strategy name
-            meta_metrics: Current meta-metrics
-            drift_assessment: Drift assessment
-
-        Returns:
-            Dict with action results
-        """
-        if strategy == 'do_nothing':
-            return {'action': 'none', 'message': 'No adaptation needed'}
-
-        elif strategy == 'adjust_threshold':
-            # In production: Adjust anomaly detection thresholds
-            # For now, just log the action
-            new_threshold = self._compute_adjusted_threshold(meta_metrics)
-            return {
-                'action': 'threshold_adjusted',
-                'new_threshold': new_threshold,
-                'message': 'Anomaly threshold adjusted'
-            }
-
-        elif strategy == 'lock_memory':
-            return {
-                'action': 'memory_locked',
-                'message': 'Memory updates frozen to prevent poisoning',
-                'emit_topic': 'memstream-control',
-                'neighborhood': meta_metrics.get('neighborhood_id')
-            }
-
-        elif strategy == 'canary_only':
-            return {
-                'action': 'canary_fallback',
-                'message': 'Switched to Canary-only mode due to severe drift',
-                'emit_topic': 'memstream-control',
-                'neighborhood': meta_metrics.get('neighborhood_id')
-            }
-
-        else:
-            return {'action': 'unknown', 'message': f'Unknown strategy: {strategy}'}
-
-    def _compute_adjusted_threshold(self, meta_metrics: dict):
-        """Compute adjusted anomaly threshold based on meta-metrics.
-
-        Args:
-            meta_metrics: Current meta-metrics
-
-        Returns:
-            New threshold value
-        """
-        # Simple heuristic: increase threshold if anomaly_rate is high
-        anomaly_rate = meta_metrics.get('anomaly_rate', 0.05)
-
-        if anomaly_rate > 0.15:
-            # High FPR - increase threshold
-            return 0.55
-        elif anomaly_rate < 0.03:
-            # Low TPR - decrease threshold
-            return 0.45
-        else:
-            # Normal - keep default
-            return 0.50
-
-    def _emit_iec_metrics(self, meta_metrics: dict, drifts: list, strategy: str, confidence: float):
+    def _emit_iec_metrics(self, meta_metrics: dict, drifts: list, strategy: str, 
+                          confidence: float, severity: str):
         """Emit IEC metrics to cadqstream-metrics for Prometheus scraping.
 
         Sends these metrics:
-          - cadqstream_iec_decisions_total{strategy}  (counter)
-          - cadqstream_iec_drift_detected_total{neighborhood}  (counter)
-          - cadqstream_iec_confidence{neighborhood}  (gauge)
-          - cadqstream_meta_anomaly_rate{neighborhood}  (gauge)
+          - memstream_iec_decisions_total{strategy}  (counter)
+          - memstream_iec_drift_detected_total{neighborhood}  (counter)
+          - memstream_iec_confidence{neighborhood}  (gauge)
+          - memstream_meta_anomaly_rate{neighborhood}  (gauge)
 
         Args:
             meta_metrics: Current window meta-metrics
             drifts: List of detected drifts
             strategy: Selected IEC strategy
             confidence: Strategy confidence score
+            severity: Drift severity level
         """
         try:
             import urllib.request
             import json
 
-            neighborhood = str(meta_metrics.get('neighborhood_id', 'global'))
+            # Get neighborhood from meta_metrics
+            neighborhoods = list(meta_metrics.keys())
+            neighborhood = neighborhoods[0] if neighborhoods else 'global'
 
-            # IEC decision counter
+            # IEC decision counter (REC-8: includes operator_id)
             payload_decision = json.dumps({
-                'name': 'iec_decisions_total',
+                'name': 'memstream_iec_decisions_total',
                 'value': 1,
-                'labels': {'strategy': strategy, 'neighborhood': neighborhood},
+                'labels': {
+                    'strategy': strategy, 
+                    'neighborhood': neighborhood,
+                    'severity': severity,
+                    'operator_id': self.operator_id,  # REC-8
+                },
                 'type': 'counter'
             }).encode('utf-8')
             req = urllib.request.Request(
@@ -329,29 +313,34 @@ class IECOperator(MapFunction):
             except Exception:
                 pass
 
-            # Drift detected counter (once per window with drift)
+            # Drift detected counter
             if drifts:
-                payload_drift = json.dumps({
-                    'name': 'iec_drift_detected_total',
-                    'value': len(drifts),
-                    'labels': {'neighborhood': neighborhood},
-                    'type': 'counter'
-                }).encode('utf-8')
-                req2 = urllib.request.Request(
-                    'http://cadqstream-metrics:9250/internal/metrics',
-                    data=payload_drift,
-                    headers={'Content-Type': 'application/json'},
-                    method='POST'
-                )
-                try:
-                    urllib.request.urlopen(req2, timeout=2)
-                except Exception:
-                    pass
+                for drift in drifts:
+                    nb = drift.get('neighborhood', neighborhood)
+                    payload_drift = json.dumps({
+                        'name': 'memstream_iec_drift_detected_total',
+                        'value': 1,
+                        'labels': {
+                            'neighborhood': nb,
+                            'metric': drift.get('metric', 'unknown'),
+                        },
+                        'type': 'counter'
+                    }).encode('utf-8')
+                    req2 = urllib.request.Request(
+                        'http://cadqstream-metrics:9250/internal/metrics',
+                        data=payload_drift,
+                        headers={'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    try:
+                        urllib.request.urlopen(req2, timeout=2)
+                    except Exception:
+                        pass
 
             # IEC confidence gauge
             payload_conf = json.dumps({
-                'name': 'iec_confidence',
-                'value': confidence,
+                'name': 'memstream_iec_confidence',
+                'value': float(confidence),
                 'labels': {'neighborhood': neighborhood},
                 'type': 'gauge'
             }).encode('utf-8')
@@ -366,74 +355,91 @@ class IECOperator(MapFunction):
             except Exception:
                 pass
 
-            # Meta-metric gauges (anomaly_rate, null_rate)
-            payload_anomaly = json.dumps({
-                'name': 'meta_anomaly_rate',
-                'value': float(meta_metrics.get('anomaly_rate', 0.0)),
-                'labels': {'neighborhood': neighborhood},
-                'type': 'gauge'
+            # Meta-metric gauges (from first neighborhood)
+            if neighborhoods:
+                nb_data = meta_metrics.get(neighborhoods[0], {})
+                for metric_name in ['anomaly_rate', 'null_rate', 'violation_rate', 'delta_score']:
+                    value = nb_data.get(metric_name, 0.0)
+                    payload_metric = json.dumps({
+                        'name': f'memstream_meta_{metric_name}',
+                        'value': float(value),
+                        'labels': {'neighborhood': neighborhoods[0]},
+                        'type': 'gauge'
+                    }).encode('utf-8')
+                    req4 = urllib.request.Request(
+                        'http://cadqstream-metrics:9250/internal/metrics',
+                        data=payload_metric,
+                        headers={'Content-Type': 'application/json'},
+                        method='POST'
+                    )
+                    try:
+                        urllib.request.urlopen(req4, timeout=2)
+                    except Exception:
+                        pass
+
+        except Exception:
+            pass
+
+    def _emit_retrain_alert(self, trigger_name: str, trigger_details: dict):
+        """Emit Prometheus alert for retrain trigger.
+        
+        Args:
+            trigger_name: Name of the trigger (e.g., 'Trigger_A_ADWIN_Drift')
+            trigger_details: Details of the trigger
+        """
+        try:
+            import urllib.request
+            import json
+            
+            neighborhood = trigger_details.get('neighborhood', 'unknown')
+            
+            payload = json.dumps({
+                'name': 'memstream_retrain_trigger_total',
+                'value': 1,
+                'labels': {
+                    'trigger': trigger_name,
+                    'neighborhood': neighborhood,
+                },
+                'type': 'counter'
             }).encode('utf-8')
-            req4 = urllib.request.Request(
+            
+            req = urllib.request.Request(
                 'http://cadqstream-metrics:9250/internal/metrics',
-                data=payload_anomaly,
+                data=payload,
                 headers={'Content-Type': 'application/json'},
                 method='POST'
             )
             try:
-                urllib.request.urlopen(req4, timeout=2)
+                urllib.request.urlopen(req, timeout=2)
             except Exception:
                 pass
-
-            payload_null = json.dumps({
-                'name': 'meta_null_rate',
-                'value': float(meta_metrics.get('null_rate', 0.0)),
-                'labels': {'neighborhood': neighborhood},
-                'type': 'gauge'
-            }).encode('utf-8')
-            req5 = urllib.request.Request(
-                'http://cadqstream-metrics:9250/internal/metrics',
-                data=payload_null,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            try:
-                urllib.request.urlopen(req5, timeout=2)
-            except Exception:
-                pass
-
-            payload_delta = json.dumps({
-                'name': 'meta_delta_score',
-                'value': float(meta_metrics.get('delta_score', 0.0)),
-                'labels': {'neighborhood': neighborhood},
-                'type': 'gauge'
-            }).encode('utf-8')
-            req6 = urllib.request.Request(
-                'http://cadqstream-metrics:9250/internal/metrics',
-                data=payload_delta,
-                headers={'Content-Type': 'application/json'},
-                method='POST'
-            )
-            try:
-                urllib.request.urlopen(req6, timeout=2)
-            except Exception:
-                pass
-
+                
         except Exception:
             pass
 
     def _log_stats(self):
         """Log IEC statistics."""
-        print(f"\n[IEC Statistics]")
+        print(f"\n[IEC Statistics - Phase 2D]")
+        print(f"  operator_id: {self.operator_id}")  # REC-8
         print(f"  Windows processed: {self.stats['windows_processed']}")
         print(f"  Drifts detected: {self.stats['drifts_detected']}")
+        print(f"  HMAC failures: {self.stats['hmac_failures']}")
         print(f"  Strategies executed:")
         for strategy, count in self.stats['strategies_executed'].items():
             print(f"    {strategy}: {count}")
+        print(f"  Retrain triggers:")
+        for trigger, count in self.stats['retrain_triggers'].items():
+            print(f"    {trigger}: {count}")
+        if self.iec_controller:
+            circuit_status = self.iec_controller.get_circuit_status()
+            print(f"  Circuit breaker: {circuit_status.get('state', 'unknown')}")
+            print(f"    Trip count: {circuit_status.get('trip_count', 0)}")
+            print(f"    Consecutive actions: {circuit_status.get('consecutive_actions', 0)}")
 
     def close(self):
         """Print final statistics on close."""
         print(f"\n{'='*60}")
-        print(f"IEC OPERATOR FINAL STATISTICS")
+        print(f"IEC OPERATOR PHASE 2D - FINAL STATISTICS")
         print(f"{'='*60}")
         self._log_stats()
         print(f"{'='*60}")

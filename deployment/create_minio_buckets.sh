@@ -1,4 +1,4 @@
-mc alias set local http://localhost:9000 minioadmin minioadmin123
+mc alias set local http://localhost:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD}
 mc mb local/cadqstream-raw -p
 mc mb local/cadqstream-violations -p
 mc mb local/cadqstream-anomalies -p

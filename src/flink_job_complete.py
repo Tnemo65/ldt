@@ -7,7 +7,9 @@ Layer 1: Kafka Source (taxi-nyc-raw) -> Parse JSON -> Watermark -> Dedup -> Sche
 Layer 2: Canary Branch (7 rules) | Complex Branch (ML scoring via MemStream)
 Layer 3: Voting Ensemble -> MetaAggregator
 Layer 4: IEC (ADWIN-U drift detection + METER strategy)
-Outputs: MinIO (raw-zone, quarantine-zone, clean-zone) + Kafka topics + Prometheus metrics
+Outputs: MinIO (cadqstream-raw, cadqstream-violations, cadqstream-anomalies,
+         cadqstream-metrics, cadqstream-drift, cadqstream-checkpoints)
+         + Kafka topics + Prometheus metrics
 
 Usage:
   python src/flink_job_complete.py
@@ -171,7 +173,8 @@ def make_kafka_sink(topic, bootstrap_servers):
 # =============================================================================
 # MINIO SINK FACTORIES
 # All data persisted to MinIO via StreamingFileSink.
-# Buckets: raw-zone, quarantine-zone, clean-zone
+# Buckets: cadqstream-raw, cadqstream-violations, cadqstream-anomalies,
+#           cadqstream-metrics, cadqstream-drift, cadqstream-checkpoints
 # Rolling: 60s time-based OR 128 MB size limit (whichever hits first).
 # =============================================================================
 
@@ -275,7 +278,7 @@ class ToMetaMetricJson(MapFunction):
 
 
 class ToAlertJson(MapFunction):
-    """Serialize alert record to JSON for MinIO clean-zone/alerts.
+    """Serialize alert record to JSON for MinIO cadqstream-drift/alerts.
 
     Emits only when IEC detects drift OR executes a non-do_nothing strategy.
     """
@@ -305,7 +308,7 @@ class SerializeToJson(MapFunction):
 
 def create_kafka_source(env, topic: str):
     properties = {
-        'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092'),
+        'bootstrap.servers': os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092'),
         'group.id': 'cadqstream-complete-pipeline',
         'auto.offset.reset': 'earliest',
         'request.timeout.ms': '120000',
@@ -342,7 +345,7 @@ def main():
     )
 
     # ── Layer 1: Baseline Validation ───────────────────────────────────
-    kafka_source = create_kafka_source(env, 'taxi-nyc-raw')
+    kafka_source = create_kafka_source(env, 'taxi-nyc-raw-v2')
     stream = env.add_source(kafka_source)
 
     stream = (
@@ -374,12 +377,18 @@ def main():
     violation_stream = deduplicated_stream.filter(InvalidFilter())
 
     # ── Layer 2: Dual-Branch Processing ────────────────────────────────
-    canary_stream = valid_stream.map(
-        CanaryRulesValidator(),
+    # All operators use env-level parallelism (2). MemStreamScoringOperator uses Flink
+    # ValueState for checkpoint recovery. To force MemStream at parallelism=1, set
+    # MEMSTREAM_PARALLELISM=1 in the environment or via FLINK_PROPERTIES.
+    # Key the stream by trip_id so MemStreamScoringOperator can access keyed state.
+    keyed_for_memstream = valid_stream.key_by(lambda x: x['trip_id'], key_type=Types.STRING())
+    complex_stream = keyed_for_memstream.map(
+        MemStreamScoringOperator(),
         output_type=Types.PICKLED_BYTE_ARRAY()
     )
-    complex_stream = valid_stream.map(
-        MemStreamScoringOperator(),
+
+    canary_stream = valid_stream.map(
+        CanaryRulesValidator(),
         output_type=Types.PICKLED_BYTE_ARRAY()
     )
 
@@ -445,7 +454,7 @@ def main():
         .map(ToAnomalyScoreJson()) \
         .add_sink(make_anomaly_scores_sink())
 
-    # Layer 3: windowed meta-metrics -> MinIO clean-zone/meta_metrics
+    # Layer 3: windowed meta-metrics -> MinIO cadqstream-metrics/meta_metrics
     meta_window_stream \
         .map(ToMetaMetricJson()) \
         .add_sink(make_meta_metrics_sink())

@@ -1,7 +1,7 @@
 # =============================================================================
 # CA-DQStream Production Deployment - docker-compose.yml
 # Architecture: 4-Layer streaming pipeline (Baseline -> Dual-Branch ->
-#               Rendezvous+Meta -> IEC) on Apache Flink 1.17.1
+#               Rendezvous+Meta -> IEC) on Apache Flink 1.18.1
 # Run: docker compose -f deployment/docker-compose.yml up -d
 # =============================================================================
 
@@ -16,6 +16,8 @@ volumes:
     name: ldt-zookeeper-data
   kafka-data:
     name: ldt-kafka-data
+  redis-data:
+    name: ldt-redis-data
   minio-data:
     name: ldt-minio-data
 
@@ -24,20 +26,14 @@ volumes:
     name: ldt-prometheus-data
   grafana-data:
     name: ldt-grafana-data
-  mlflow-data:
-    name: ldt-mlflow-data
   ml-models:
     name: ldt-ml-models
 
   # Flink volumes
   flink-jobmanager-log:
     name: ldt-flink-jobmanager-log
-  flink-jobmanager-data:
-    name: ldt-flink-jobmanager-data
   flink-taskmanager-log:
     name: ldt-flink-taskmanager-log
-  flink-taskmanager-data:
-    name: ldt-flink-taskmanager-data
   flink-checkpoints:
     name: ldt-flink-checkpoints
 
@@ -92,7 +88,7 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -104,9 +100,6 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 1000
       KAFKA_JMX_PORT: 9999
       KAFKA_JMX_HOSTNAME: localhost
-    ports:
-      - "9092:9092"
-      - "29092:29092"
     volumes:
       - kafka-data:/var/lib/kafka/data
     networks:
@@ -183,6 +176,7 @@ services:
       start_period: 30s
     environment:
       KAFKA_CLUSTERS_0_NAME: cadqstream-local
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
@@ -228,6 +222,37 @@ services:
           memory: 256M
 
   # =============================================================================
+  # LAYER 1b: Redis — required by IEC for adaptive threshold caching
+  # =============================================================================
+
+  redis:
+    image: redis:7-alpine
+    container_name: ldt-redis
+    hostname: redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    command:
+      - redis-server
+      - --requirepass
+      - "${REDIS_PASSWORD}"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # =============================================================================
   # LAYER 2: Storage Services
   # =============================================================================
 
@@ -246,8 +271,8 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_PROMETHEUS_AUTH_TYPE: public
     volumes:
       - minio-data:/data
@@ -275,8 +300,8 @@ services:
       - ./minio/init-scripts:/scripts:ro
     environment:
       MC_HOST: http://minio:9000
-      MC_USER: minioadmin
-      MC_PASS: minioadmin123
+      MC_USER: ${MC_MINIO_USER}
+      MC_PASS: ${MC_MINIO_PASSWORD}
       MC_ALIAS: local
 
   # =============================================================================
@@ -284,9 +309,12 @@ services:
   # =============================================================================
 
   flink-jobmanager:
-    image: ldt-flink:1.17.1-py
+    image: ldt-flink:1.18.1-py
     container_name: ldt-flink-jobmanager
     hostname: flink-jobmanager
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8081/overview || exit 1"]
       interval: 20s
@@ -306,8 +334,8 @@ services:
         state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
         state.checkpoints.num-retained: 3
         # ── S3A / MinIO credentials (Hadoop S3A filesystem) ──────────────────
-        s3.access-key: minioadmin
-        s3.secret-key: minioadmin123
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
         s3.endpoint: http://minio:9000
         s3.path.style.access: true
         # ── Checkpointing (enabled for exactly-once) ────────────────────────────
@@ -341,15 +369,19 @@ services:
         rest.address: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_DEFAULT_REGION: us-east-1
       S3_ENDPOINT: http://minio:9000
       S3_PATH_STYLE_ACCESS: "true"
       FLINK_ENV: production
-      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
     ports:
       - "8081:8081"
     volumes:
@@ -367,10 +399,12 @@ services:
           memory: 2G
 
   flink-taskmanager:
-    image: ldt-flink:1.17.1-py
+    image: ldt-flink:1.18.1-py
     container_name: ldt-flink-taskmanager
     hostname: flink-taskmanager
     depends_on:
+      redis:
+        condition: service_healthy
       flink-jobmanager:
         condition: service_healthy
     healthcheck:
@@ -391,8 +425,8 @@ services:
         state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
         state.checkpoints.num-retained: 3
         # ── S3A / MinIO credentials ──────────────────────────────────────────────
-        s3.access-key: minioadmin
-        s3.secret-key: minioadmin123
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
         s3.endpoint: http://minio:9000
         s3.path.style.access: true
         state.backend.rocksdb.memory.managed: true
@@ -410,15 +444,19 @@ services:
         rest.address: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_DEFAULT_REGION: us-east-1
       S3_ENDPOINT: http://minio:9000
       S3_PATH_STYLE_ACCESS: "true"
       FLINK_ENV: production
-      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
     volumes:
       - flink-taskmanager-log:/opt/flink/log
       - flink-checkpoints:/opt/flink/checkpoints
@@ -436,7 +474,7 @@ services:
     shm_size: 256m
 
   flink-init:
-    image: ldt-flink:1.17.1-py
+    image: ldt-flink:1.18.1-py
     container_name: ldt-flink-init
     hostname: flink-init
     depends_on:
@@ -456,10 +494,12 @@ services:
       FLINK_REST: http://flink-jobmanager:8081
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       FLINK_ENV: production
-      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
 
   # =============================================================================
   # LAYER 4b: ML Service — FastAPI for IEC strategy execution
@@ -470,11 +510,12 @@ services:
   # =============================================================================
 
   ml-service:
-    build:
-      context: ./ml-service
-      dockerfile: Dockerfile
+    image: ldt-ml-service:latest
     container_name: ldt-ml-service
     hostname: ml-service
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
       interval: 15s
@@ -484,12 +525,19 @@ services:
     ports:
       - "8000:8000"
     environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5000
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
+      # All model artifacts stored in MinIO only (no MLflow)
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       AWS_DEFAULT_REGION: us-east-1
       MINIO_ENDPOINT: minio:9000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      METRICS_API_KEY: ${METRICS_API_KEY}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_USE_TLS: "false"
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     volumes:
       - ml-models:/models
     networks:
@@ -502,7 +550,7 @@ services:
           memory: 512M
 
   # =============================================================================
-  # LAYER 4c: Action Replay Worker — retries failed IEC actions
+  # LAYER 5b: Action Replay Worker — retries failed IEC actions
   # Consumes from: iec-action-replay
   # Executes via: ml-service:8000
   # DLQ: iec-action-dlq after 10 retries
@@ -528,81 +576,7 @@ services:
           cpus: "0.25"
           memory: 256M
 
-  # =============================================================================
-  # LAYER 5: ML Platform
-  # =============================================================================
-
-  mlflow:
-    image: ghcr.io/mlflow/mlflow:latest
-    container_name: ldt-mlflow
-    hostname: mlflow
-    healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import socket; s=socket.socket(); s.connect(('127.0.0.1',5000)); s.close()\""]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5000
-      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
-      AWS_ACCESS_KEY_ID: minioadmin
-      AWS_SECRET_ACCESS_KEY: minioadmin123
-      AWS_DEFAULT_REGION: us-east-1
-      AWS_S3_ENDPOINT_URL: http://minio:9000
-      AWS_S3_PATH_STYLE_ACCESS: "true"
-      MLFLOW_ARTIFACT_ROOT: s3://cadqstream-checkpoints/mlflow-artifacts/
-      MLFLOW_SERVER_FILESYSTEM_S3_IGNORE_ENVVARS: "true"
-    ports:
-      - "5000:5000"
-    volumes:
-      - mlflow-data:/mlflow
-    networks:
-      - cadqstream-net
-    restart: unless-stopped
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5000
-      --default-artifact-root s3://cadqstream-checkpoints/mlflow-artifacts/
-      --artifacts-destination s3://cadqstream-checkpoints/mlflow-artifacts/
-      --workers 2
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 2G
-
-  # MLflow Prometheus Metrics Exporter
-  # MLflow doesn't expose /metrics natively, so we use a sidecar that:
-  # 1. Scrapes MLflow's tracking API to get experiment/run metrics
-  # 2. Exposes them in Prometheus format at :9251/metrics
-  mlflow-exporter:
-    build:
-      context: ./mlflow
-      dockerfile: Dockerfile.mlflow-exporter
-    container_name: ldt-mlflow-exporter
-    hostname: mlflow-exporter
-    depends_on:
-      mlflow:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:9251/metrics || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    environment:
-      MLFLOW_TRACKING_URI: http://mlflow:5000
-    ports:
-      - "9251:9251"
-    networks:
-      - cadqstream-net
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.2"
-          memory: 256M
+  # ml-service: all model artifacts stored in MinIO only (no MLflow)
 
   # =============================================================================
   # LAYER 6: Observability
@@ -653,7 +627,7 @@ services:
       start_period: 30s
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: changeme  # NOTE: Change changeme to a secure password in production
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
       GF_SECURITY_ADMIN_EMAIL: admin@cadqstream.local
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_USERS_ALLOW_ORG_CREATE: "false"
@@ -668,8 +642,7 @@ services:
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-      - ./grafana/dashboards:/etc/grafana/dashboards
-      - ./grafana/provisioning/datasources/prometheus.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
       - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
     depends_on:
       prometheus:
@@ -770,8 +743,8 @@ services:
     restart: unless-stopped
     environment:
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin123
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       METRICS_URL: http://cadqstream-metrics:9250/metrics
       INTERVAL_SECONDS: "60"
     deploy:

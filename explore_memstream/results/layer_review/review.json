@@ -1,0 +1,304 @@
+{
+  "input": {
+    "layer_name": "Input Layer (Raw Kafka -> Taxi Records)",
+    "checks": [
+      {
+        "id": "IN-1",
+        "category": "schema",
+        "check": "Schema: 19 fields present and correctly typed",
+        "severity": "critical"
+      },
+      {
+        "id": "IN-2",
+        "category": "datetime",
+        "check": "tpep_pickup_datetime parseable, monotonic",
+        "severity": "critical"
+      },
+      {
+        "id": "IN-3",
+        "category": "numeric",
+        "check": "fare_amount >= 0, trip_distance >= 0",
+        "severity": "critical"
+      },
+      {
+        "id": "IN-4",
+        "category": "zone",
+        "check": "PULocationID, DOLocationID in [1, 265]",
+        "severity": "warning"
+      },
+      {
+        "id": "IN-5",
+        "category": "ratecode",
+        "check": "RateCodeID in [1,2,3,4,5,6,99]",
+        "severity": "warning"
+      },
+      {
+        "id": "IN-6",
+        "category": "null",
+        "check": "Critical fields: < 5% null rate",
+        "severity": "warning"
+      },
+      {
+        "id": "IN-7",
+        "category": "latency",
+        "check": "Latency: < 100ms from taxi pickup to Kafka publish",
+        "severity": "info"
+      }
+    ],
+    "auto_results": [
+      {
+        "check_id": "IN-AUTO-1",
+        "category": "auto",
+        "status": "pass",
+        "detail": "FEATURE_NAMES defined: 25 features"
+      }
+    ],
+    "timestamp": "2026-05-14T14:19:44.537523"
+  },
+  "layer1": {
+    "layer_name": "Layer 1 (Schema Validation + Hard Rules)",
+    "checks": [
+      {
+        "id": "L1-1",
+        "category": "schema_violations",
+        "check": "Schema violations are correctly flagged",
+        "severity": "critical"
+      },
+      {
+        "id": "L1-2",
+        "category": "hard_rules",
+        "check": "Hard rules (fare < 0, speed > 100 mph) catch edge cases",
+        "severity": "critical"
+      },
+      {
+        "id": "L1-3",
+        "category": "watermark",
+        "check": "Watermark: late data handled correctly (within 5 min)",
+        "severity": "warning"
+      },
+      {
+        "id": "L1-4",
+        "category": "throughput",
+        "check": "Throughput: 10k+ records/sec sustained",
+        "severity": "info"
+      },
+      {
+        "id": "L1-5",
+        "category": "output",
+        "check": "Output: clean_records, schema_violations, hard_rule_violations",
+        "severity": "critical"
+      }
+    ],
+    "auto_results": [],
+    "timestamp": "2026-05-14T14:19:44.538501"
+  },
+  "features": {
+    "layer_name": "Feature Extraction Layer",
+    "checks": [
+      {
+        "id": "FE-1",
+        "category": "dimensions",
+        "check": "All 34 features extracted correctly (match FEATURE_NAMES)",
+        "severity": "critical"
+      },
+      {
+        "id": "FE-2",
+        "category": "zone_mapping",
+        "check": "Zone-to-grid mapping: 16x17 grid -> 272 cells",
+        "severity": "warning"
+      },
+      {
+        "id": "FE-3",
+        "category": "borough",
+        "check": "Borough encoding: 10 neighborhoods",
+        "severity": "warning"
+      },
+      {
+        "id": "FE-4",
+        "category": "cyclic",
+        "check": "Cyclic features: hour_sin/cos, dow_sin/cos correct",
+        "severity": "critical"
+      },
+      {
+        "id": "FE-5",
+        "category": "ratios",
+        "check": "Ratio features: fare_per_mile, fare_per_min computed",
+        "severity": "critical"
+      },
+      {
+        "id": "FE-6",
+        "category": "normalization",
+        "check": "Normalization: mean/std from warmup only (no leakage)",
+        "severity": "critical"
+      },
+      {
+        "id": "FE-7",
+        "category": "nan_handling",
+        "check": "NaN/inf handled: replaced with 0 or safe defaults",
+        "severity": "warning"
+      },
+      {
+        "id": "FE-8",
+        "category": "output_shape",
+        "check": "Output: 34D feature vector per record",
+        "severity": "critical"
+      }
+    ],
+    "auto_results": [],
+    "timestamp": "2026-05-14T14:19:44.538501"
+  },
+  "memstream": {
+    "layer_name": "MemStream Scoring Layer",
+    "checks": [
+      {
+        "id": "MS-1",
+        "category": "architecture",
+        "check": "AE encoder: 34D -> 68D (2x)",
+        "severity": "critical"
+      },
+      {
+        "id": "MS-2",
+        "category": "noise",
+        "check": "DAE noise: Gaussian sigma=0.1",
+        "severity": "warning"
+      },
+      {
+        "id": "MS-3",
+        "category": "knn",
+        "check": "kNN scoring: L1 distance, K nearest in memory",
+        "severity": "critical"
+      },
+      {
+        "id": "MS-4",
+        "category": "score_formula",
+        "check": "Score: sum(gamma^(i-1) * dist_i) / sum(gamma^(i-1))",
+        "severity": "critical"
+      },
+      {
+        "id": "MS-5",
+        "category": "threshold",
+        "check": "beta threshold: from percentile 95 of warmup scores",
+        "severity": "critical"
+      },
+      {
+        "id": "MS-6",
+        "category": "context_beta",
+        "check": "ContextBeta: 80 thresholds (10 neighborhoods x 8 cells)",
+        "severity": "critical"
+      },
+      {
+        "id": "MS-7",
+        "category": "memory_update",
+        "check": "Memory update: FIFO, only if score < beta",
+        "severity": "critical"
+      },
+      {
+        "id": "MS-8",
+        "category": "gamma",
+        "check": "gamma self-recovery: enabled (gamma=0.5)",
+        "severity": "warning"
+      },
+      {
+        "id": "MS-9",
+        "category": "latency",
+        "check": "Latency: p99 < 100ms per record",
+        "severity": "info"
+      }
+    ],
+    "auto_results": [
+      {
+        "check_id": "MS-AUTO-1",
+        "category": "auto",
+        "status": "pass",
+        "detail": "ContextBeta shape: (10, 8) (expected 10x8)"
+      },
+      {
+        "check_id": "MS-AUTO-2",
+        "category": "auto",
+        "status": "pass",
+        "detail": "gamma-weighted kNN scoring implemented"
+      }
+    ],
+    "timestamp": "2026-05-14T14:19:44.539514"
+  },
+  "iec": {
+    "layer_name": "IEC Layer (Concept Drift Handling)",
+    "checks": [
+      {
+        "id": "IE-1",
+        "category": "adwin",
+        "check": "10 ADWIN instances (1 per neighborhood)",
+        "severity": "critical"
+      },
+      {
+        "id": "IE-2",
+        "category": "delta",
+        "check": "ADWIN delta: 0.002 (conservative)",
+        "severity": "warning"
+      },
+      {
+        "id": "IE-3",
+        "category": "circuit_breaker",
+        "check": "Circuit breaker: in BroadcastState (checkpointable)",
+        "severity": "critical"
+      },
+      {
+        "id": "IE-4",
+        "category": "hmac",
+        "check": "Beta update: HMAC signed, verified before apply",
+        "severity": "critical"
+      },
+      {
+        "id": "IE-5",
+        "category": "redis",
+        "check": "Redis: authenticated + TLS",
+        "severity": "warning"
+      },
+      {
+        "id": "IE-6",
+        "category": "drift_action",
+        "check": "Drift detection -> memory reset + retrain trigger",
+        "severity": "critical"
+      }
+    ],
+    "auto_results": [],
+    "timestamp": "2026-05-14T14:19:44.539514"
+  },
+  "output": {
+    "layer_name": "Output Layer (Anomalies -> MinIO/Sinks)",
+    "checks": [
+      {
+        "id": "OUT-1",
+        "category": "anomaly_bucket",
+        "check": "Anomaly records written to cadqstream-anomalies bucket",
+        "severity": "critical"
+      },
+      {
+        "id": "OUT-2",
+        "category": "metrics_bucket",
+        "check": "Metrics written to cadqstream-metrics bucket",
+        "severity": "critical"
+      },
+      {
+        "id": "OUT-3",
+        "category": "dlq",
+        "check": "DLQ records written to cadqstream-dlq bucket",
+        "severity": "warning"
+      },
+      {
+        "id": "OUT-4",
+        "category": "kafka_sink",
+        "check": "Kafka sink: anomaly events published to output topic",
+        "severity": "warning"
+      },
+      {
+        "id": "OUT-5",
+        "category": "retention",
+        "check": "Retention: 30-day on metrics, 90-day on anomalies",
+        "severity": "info"
+      }
+    ],
+    "auto_results": [],
+    "timestamp": "2026-05-14T14:19:44.539514"
+  }
+}

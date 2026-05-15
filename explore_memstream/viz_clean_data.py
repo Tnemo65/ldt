@@ -122,7 +122,7 @@ def main():
     parser.add_argument('--data', type=str, required=True)
     parser.add_argument('--output', type=str, default='results/viz')
     parser.add_argument('--n', type=int, default=100000, help='Sample size')
-    parser.add_argument('--style', type=str, default='seaborn-v0_8-darkgrid')
+    parser.add_argument('--style', type=str, default='darkgrid')
     args = parser.parse_args()
 
     print("Loading data...")

@@ -194,7 +194,7 @@ def main():
 
     print(f"Loaded {len(results)} ablation results")
 
-    sns.set_style('seaborn-v0_8-darkgrid')
+    sns.set_style('darkgrid')
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     fig.suptitle('MemStream NYC Taxi: Detection Results', fontsize=16, fontweight='bold')
 

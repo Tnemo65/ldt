@@ -1,6 +1,5 @@
 # Grafana dashboard provisioning provider
-# This file must be inside the dashboards directory (/etc/grafana/dashboards)
-# so that relative path "." resolves to the JSON files alongside it.
+# Dashboards mounted via ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
 apiVersion: 1
 
 providers:
@@ -12,4 +11,4 @@ providers:
     editable: true
     allowUiUpdates: true
     options:
-      path: /etc/grafana/dashboards
+      path: /etc/grafana/provisioning/dashboards

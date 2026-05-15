@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-05-14T15:37:03.602026",
+  "fraud_type": "mixed",
+  "n_warmup": 150000,
+  "n_test": 150000,
+  "n_anomalies": 4500,
+  "anomaly_rate": 0.03,
+  "warmup_frac": 0.5,
+  "results": [
+    {
+      "auc_roc": 0.5184102878961436,
+      "auc_pr": 0.043603262255204646,
+      "optimal_threshold": 1023.6913269042968,
+      "precision": 0.09066666666666667,
+      "recall": 0.1511111111111111,
+      "f1": 0.11333333333333334,
+      "fpr": 0.04687285223367697,
+      "tp": 680,
+      "fp": 6820,
+      "tn": 138680,
+      "fn": 3820,
+      "n_detected": 7500,
+      "fixed_thresholds": {
+        "thresh_0.5": {
+          "precision": 0.03,
+          "recall": 1.0,
+          "f1": 0.058252427184466014
+        },
+        "thresh_1.0": {
+          "precision": 0.03,
+          "recall": 1.0,
+          "f1": 0.058252427184466014
+        },
+        "thresh_2.0": {
+          "precision": 0.03,
+          "recall": 1.0,
+          "f1": 0.058252427184466014
+        }
+      },
+      "memory_fill": 15000,
+      "beta_shape": [
+        10,
+        8
+      ],
+      "beta_populated_cells": 80,
+      "beta_total_cells": 80,
+      "score_mean": 1067.52880859375,
+      "score_std": 47401.26171875,
+      "score_min": 711.54638671875,
+      "score_max": 18359360.0,
+      "score_p95": 1023.6913452148438,
+      "score_p99": 1102.43701171875,
+      "anomaly_rate": 0.03,
+      "name": "mem50k_g0_k10_b0p5",
+      "config": {
+        "name": "mem50k_g0_k10_b0p5",
+        "memory_len": 50000,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      }
+    }
+  ]
+}

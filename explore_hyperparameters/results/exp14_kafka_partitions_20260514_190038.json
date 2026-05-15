@@ -1,0 +1,49 @@
+{
+  "experiment": "exp14_kafka_partitions",
+  "hyperparameter": "kafka_partitions",
+  "timestamp": "20260514_190038",
+  "priority": "LOW",
+  "primary_metric": "Consumer_lag",
+  "grid": [
+    4,
+    8,
+    16
+  ],
+  "results": [
+    {
+      "n_partitions": 4,
+      "throughput_per_partition": 256.7876870351086,
+      "effective_throughput": 1027.1507481404344,
+      "simulated_latency_ms": 0.8323938958976262,
+      "consumer_lag_seconds": 10.0,
+      "overhead_factor": 1.03,
+      "batch_latency_ms_per_record": 0.9735669294993083
+    },
+    {
+      "n_partitions": 8,
+      "throughput_per_partition": 128.3938435175543,
+      "effective_throughput": 1027.1507481404344,
+      "simulated_latency_ms": 0.8647198724373399,
+      "consumer_lag_seconds": 10.0,
+      "overhead_factor": 1.07,
+      "batch_latency_ms_per_record": 0.9735669294993083
+    },
+    {
+      "n_partitions": 16,
+      "throughput_per_partition": 64.19692175877715,
+      "effective_throughput": 1027.1507481404344,
+      "simulated_latency_ms": 0.929371825516767,
+      "consumer_lag_seconds": 10.0,
+      "overhead_factor": 1.15,
+      "batch_latency_ms_per_record": 0.9735669294993083
+    }
+  ],
+  "gpu_performance": {
+    "mean_latency_ms": 0.808149413492841,
+    "p99_latency_ms": 1.7230070231016728,
+    "throughput_records_per_sec": 1027.1507481404344,
+    "total_test_records": 15000,
+    "total_time_s": 14.603503942489624
+  },
+  "recommendation": "Kafka partitions should match GPU throughput. 8 partitions recommended for balanced parallelism."
+}

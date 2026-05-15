@@ -1,0 +1,49 @@
+Config 1/8: best_c1_grid_best_ld34_ep20_CB (mem=128, k=20, g=0.9, ld=34, ep=20, CB=True)
+  AUC-ROC=0.9843 AUC-PR=0.5857 F1=0.8484 Prec=0.7527 Rec=0.9721
+  TP=697 FP=229 TN=14054 FN=20
+  Sep=3.53x (anom=15.0 norm=4.2) 29.22525429725647s
+Config 2/8: best_c2_grid_best_ld60_ep20_CB (mem=128, k=20, g=0.9, ld=60, ep=20, CB=True)
+  AUC-ROC=0.9825 AUC-PR=0.5809 F1=0.8440 Prec=0.7541 Rec=0.9582
+  TP=687 FP=224 TN=14059 FN=30
+  Sep=2.20x (anom=14.2 norm=6.5) 28.58693265914917s
+Config 3/8: best_c3_hyp_noCB (mem=256, k=50, g=0.0, ld=60, ep=100, CB=False)
+  AUC-ROC=0.9956 AUC-PR=0.9419 F1=0.8865 Prec=0.8698 Rec=0.9038
+  TP=648 FP=97 TN=14186 FN=69
+  Sep=10.56x (anom=8199.5 norm=776.5) 41.56846022605896s
+Config 4/8: best_c4_hyp_CB (mem=256, k=50, g=0.0, ld=60, ep=100, CB=True)
+  AUC-ROC=0.9846 AUC-PR=0.5851 F1=0.7193 Prec=0.7333 Rec=0.7057
+  TP=506 FP=184 TN=14099 FN=211
+  Sep=0.32x (anom=12.2 norm=38.1) 44.17841911315918s
+Config 5/8: best_c5_hybrid_g09_CB (mem=256, k=50, g=0.9, ld=60, ep=100, CB=True)
+  AUC-ROC=0.9847 AUC-PR=0.5877 F1=0.8602 Prec=0.7758 Rec=0.9651
+  TP=692 FP=200 TN=14083 FN=25
+  Sep=1.83x (anom=13.2 norm=7.2) 44.22499465942383s
+Config 6/8: best_c6_large_k100_CB (mem=256, k=100, g=0.9, ld=60, ep=100, CB=True)
+  AUC-ROC=0.9847 AUC-PR=0.5877 F1=0.8600 Prec=0.7764 Rec=0.9637
+  TP=691 FP=199 TN=14084 FN=26
+  Sep=1.82x (anom=13.2 norm=7.3) 45.879791498184204s
+Config 7/8: best_c7_grid_ep50_CB (mem=128, k=20, g=0.9, ld=34, ep=50, CB=True)
+  AUC-ROC=0.9850 AUC-PR=0.5890 F1=0.8584 Prec=0.7793 Rec=0.9554
+  TP=685 FP=194 TN=14089 FN=32
+  Sep=3.24x (anom=14.9 norm=4.6) 32.56385350227356s
+Config 8/8: best_c8_grid_ep100_CB (mem=128, k=20, g=0.9, ld=34, ep=100, CB=True)
+  AUC-ROC=0.9850 AUC-PR=0.5892 F1=0.8612 Prec=0.7775 Rec=0.9651
+  TP=692 FP=198 TN=14085 FN=25
+  Sep=3.19x (anom=14.7 norm=4.6) 44.164292097091675s
+
+RESULTS (sorted by F1)
+  Name                                           AUC-ROC   AUC-PR     F1   Prec    Rec    TP
+  --------------------------------------------------------------------------------
+  best_c3_hyp_noCB                                0.9956   0.9419 0.8865 0.8698 0.9038   648
+  best_c8_grid_ep100_CB                           0.9850   0.5892 0.8612 0.7775 0.9651   692
+  best_c5_hybrid_g09_CB                           0.9847   0.5877 0.8602 0.7758 0.9651   692
+  best_c6_large_k100_CB                           0.9847   0.5877 0.8600 0.7764 0.9637   691
+  best_c7_grid_ep50_CB                            0.9850   0.5890 0.8584 0.7793 0.9554   685
+  best_c1_grid_best_ld34_ep20_CB                  0.9843   0.5857 0.8484 0.7527 0.9721   697
+  best_c2_grid_best_ld60_ep20_CB                  0.9825   0.5809 0.8440 0.7541 0.9582   687
+  best_c4_hyp_CB                                  0.9846   0.5851 0.7193 0.7333 0.7057   506
+
+  BEST: best_c3_hyp_noCB (F1=0.8865, AUC-ROC=0.9956)
+
+  Saved: C:\proj\ldt\explore_hyperparameters\results\best_config_combined_20260514_214622.json
+DONE

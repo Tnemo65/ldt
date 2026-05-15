@@ -165,7 +165,7 @@ def check_consumer_lag(
 
 def check_minio_write_rate(
     duration_sec: int = 30,
-    bucket: str = 'clean-zone'
+    bucket: str = 'cadqstream-anomalies'
 ):
     """Measure MinIO write rate via Kafka consumer throughput."""
     print(f"\n=== MinIO Write Rate (via Kafka consumer throughput) ===")

@@ -1,12 +1,12 @@
 # =============================================================================
 # CA-DQStream Custom Flink Image
-# Based on Apache Flink 1.17.1 with Python 3.10 support, Kafka connector,
+# Based on Apache Flink 1.18.1 with Python 3.10 support, Kafka connector,
 # and all required ML libraries. MinIO used for all persistent storage.
 # Build context: C:\proj\ldt (project root)
-# Run from project root: docker build -t ldt-flink:1.17.1-py -f deployment/flink/Dockerfile .
+# Run from project root: docker build -t ldt-flink:1.18.1-py -f deployment/flink/Dockerfile .
 # =============================================================================
 
-FROM flink:1.17.1
+FROM flink:1.18.1-scala_2.12-java11
 
 USER root
 
@@ -26,7 +26,6 @@ RUN mkdir -p /opt/flink/pyflink_extracted && \
 
 # ── Connector JARs ─────────────────────────────────────────────────────────
 COPY deployment/flink/flink-connector-kafka-1.17.1.jar /opt/flink/lib/
-COPY deployment/flink/flink-connector-jdbc-3.1.1-1.17.jar /opt/flink/lib/
 COPY deployment/flink/kafka-clients-3.5.1.jar /opt/flink/lib/
 # S3/S3A filesystem for MinIO lakehouse writes
 COPY deployment/flink/flink-s3-fs-hadoop-1.17.1.jar /opt/flink/lib/
@@ -55,9 +54,15 @@ RUN python3 -m venv /opt/venv && \
     requests==2.31.0 \
     fastapi==0.104.1 \
     river==0.21.0 \
-    redis==5.0.1 && \
-    /opt/venv/bin/pip install torch==2.1.0 --index-url https://download.pytorch.org/whl/cpu || \
-    echo "torch install failed, continuing without torch"
+    redis==5.0.1 \
+    pydantic>=2.5.0 \
+    boto3 \
+    minio \
+    torch>=2.0.0
+
+
+# Verify torch installation
+RUN /opt/venv/bin/python3 -c "import torch; assert torch.__version__.startswith('2.')"
 
 # Add venv python to PATH and set PYTHONPATH
 ENV PATH=/opt/venv/bin:$PATH

@@ -257,7 +257,7 @@ uvx mcp-grafana --help
 
 **Creating a Service Account Token**:
 
-1. Open Grafana at `http://localhost:3000` (admin / admin123)
+1. Open Grafana at `http://localhost:3000` (admin / ${GRAFANA_PASSWORD} from deployment/.env)
 2. Go to **Administration → Service Accounts → Add service account**
 3. Name: `mcp-server`, Role: `Admin`
 4. Click **Add service account token**, copy the token

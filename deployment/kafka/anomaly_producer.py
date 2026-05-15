@@ -55,7 +55,7 @@ TRIP_PROFILES = [
 
 # ─── Anomaly Generators ────────────────────────────────────────────────────────
 
-def gen_base_trip(hour=12, counter=0):
+def gen_base_trip(counter=0, elapsed_seconds=0):
     """Generate a normal NYC taxi trip record."""
     profile = random.choice(TRIP_PROFILES)
     name, d_min, d_max, f_min, f_max, du_min, du_max = profile
@@ -70,18 +70,15 @@ def gen_base_trip(hour=12, counter=0):
     total = round(fare + extra + mta_tax + tip + tolls + 1.0 + 2.5, 2)
     dur_h = dur_sec / 3600.0
 
-    pu_hour = hour % 24
-    pu_min = random.randint(0, 59)
-    pu_sec = random.randint(0, 59)
-    do_min_total = int(pu_min + dur_sec / 60.0)
-    do_hour = (pu_hour + do_min_total // 60) % 24
-    do_min = do_min_total % 60
-    day = (hour // 24) + 1
+    base_date = datetime(2024, 1, 1) + timedelta(seconds=elapsed_seconds)
+    pickup_str = base_date.strftime("%Y-%m-%dT%H:%M:%S")
+    dropoff_date = base_date + timedelta(seconds=int(dur_sec))
+    dropoff_str = dropoff_date.strftime("%Y-%m-%dT%H:%M:%S")
 
     return {
         "VendorID": random.choice([1, 2]),
-        "tpep_pickup_datetime": f"2024-01-{day:02d}T{pu_hour:02d}:{pu_min:02d}:{pu_sec:02d}",
-        "tpep_dropoff_datetime": f"2024-01-{day:02d}T{do_hour:02d}:{do_min:02d}:{pu_sec:02d}",
+        "tpep_pickup_datetime": pickup_str,
+        "tpep_dropoff_datetime": dropoff_str,
         "passenger_count": float(random.choice([1, 2, 3, 4, 5, 6])),
         "trip_distance": distance,
         "RatecodeID": 1.0,
@@ -291,7 +288,7 @@ def run_continuous(bootstrap, anomaly_rate, run_forever=True, max_records=None,
         if max_records and counter[0] > max_records:
             break
 
-        trip = gen_base_trip(hour=(counter[0] // 100) % 24, counter=counter[0])
+        trip = gen_base_trip(counter=counter[0], elapsed_seconds=counter[0] / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         trip['_producer_hour'] = counter[0] // 100
 
@@ -339,7 +336,7 @@ def run_burst(bootstrap, burst_count=200, normal_before=500, normal_after=500,
     metrics = AnomalyMetrics()
 
     for i in range(normal_before):
-        trip = gen_base_trip(counter=i)
+        trip = gen_base_trip(counter=i, elapsed_seconds=i / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         metrics.record_normal()
         producer.send(raw_topic, trip)
@@ -347,7 +344,7 @@ def run_burst(bootstrap, burst_count=200, normal_before=500, normal_after=500,
     print(f"[producer] Sending {burst_count} anomaly burst...")
     burst_start = time.time()
     for i in range(burst_count):
-        trip = gen_base_trip(counter=normal_before + i)
+        trip = gen_base_trip(counter=normal_before + i, elapsed_seconds=(normal_before + i) / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         injector = choose_anomaly()
         trip = injector(trip)
@@ -359,7 +356,7 @@ def run_burst(bootstrap, burst_count=200, normal_before=500, normal_after=500,
     print(f"[producer] Burst complete: {burst_count} anomalies in {burst_elapsed:.1f}s")
 
     for i in range(normal_after):
-        trip = gen_base_trip(counter=normal_before + burst_count + i)
+        trip = gen_base_trip(counter=normal_before + burst_count + i, elapsed_seconds=(normal_before + burst_count + i) / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         metrics.record_normal()
         producer.send(raw_topic, trip)
@@ -383,14 +380,14 @@ def run_drift_inject(bootstrap, base_fare=15.0, drift_multiplier=10.0,
     metrics.record_drift()
 
     for i in range(drift_start_record):
-        trip = gen_base_trip(counter=i)
+        trip = gen_base_trip(counter=i, elapsed_seconds=i / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         metrics.record_normal()
         producer.send(raw_topic, trip)
 
     print(f"[producer] DRIFT SPIKE START at record {drift_start_record}")
     for i in range(drift_duration):
-        trip = gen_base_trip(counter=drift_start_record + i)
+        trip = gen_base_trip(counter=drift_start_record + i, elapsed_seconds=(drift_start_record + i) / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         # Multiply fare by drift_multiplier
         trip['fare_amount'] = round(trip['fare_amount'] * drift_multiplier, 2)
@@ -408,7 +405,7 @@ def run_drift_inject(bootstrap, base_fare=15.0, drift_multiplier=10.0,
     print(f"[producer] DRIFT SPIKE END at record {drift_start_record + drift_duration}")
 
     for i in range(100):
-        trip = gen_base_trip(counter=drift_start_record + drift_duration + i)
+        trip = gen_base_trip(counter=drift_start_record + drift_duration + i, elapsed_seconds=(drift_start_record + drift_duration + i) / 10.0)
         trip['_producer_ts'] = datetime.utcnow().isoformat()
         trip['_post_drift'] = True
         metrics.record_normal()

@@ -5,6 +5,7 @@ import time
 import sys
 import random
 import logging
+from datetime import datetime, timedelta
 from kafka import KafkaProducer
 
 LOGGER = logging.getLogger('cadqstream-producer')
@@ -56,12 +57,16 @@ def gen_trip(hour):
     do_min_total = int(pu_min + dur_sec / 60.0)
     do_hour = (pu_hour + do_min_total // 60) % 24
     do_min = do_min_total % 60
-    day = (hour // 24) + 1
+
+    base_date = datetime(2024, 1, 1) + timedelta(hours=hour)
+    pickup_str = base_date.strftime("%Y-%m-%dT%H:%M:%S")
+    dropoff_date = base_date + timedelta(seconds=int(dur_sec))
+    dropoff_str = dropoff_date.strftime("%Y-%m-%dT%H:%M:%S")
 
     return {
         "VendorID": random.choice(VENDOR_IDS),
-        "tpep_pickup_datetime": "2024-01-%02dT%02d:%02d:%02d" % (day, pu_hour, pu_min, pu_sec),
-        "tpep_dropoff_datetime": "2024-01-%02dT%02d:%02d:%02d" % (day, do_hour, do_min, pu_sec),
+        "tpep_pickup_datetime": pickup_str,
+        "tpep_dropoff_datetime": dropoff_str,
         "passenger_count": float(random.choice(PASSENGER_COUNTS)),
         "trip_distance": distance,
         "RatecodeID": float(random.choice(RATECODE_IDS)),

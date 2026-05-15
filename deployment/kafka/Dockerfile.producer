@@ -5,4 +5,4 @@ COPY anomaly_producer.py /app/anomaly_producer.py
 # Default: continuous mode with 8% anomaly rate
 # For drift testing: python anomaly_producer.py --mode drift_inject
 # For burst testing: python anomaly_producer.py --mode burst
-CMD ["python3", "/app/anomaly_producer.py", "--mode", "continuous", "--rate", "0.08", "--bootstrap", "kafka:9092", "--raw-topic", "taxi-nyc-raw"]
+CMD ["python3", "/app/anomaly_producer.py", "--mode", "continuous", "--rate", "0.08", "--bootstrap", "kafka:9092", "--raw-topic", "taxi-nyc-raw-v2"]

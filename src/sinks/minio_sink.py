@@ -8,13 +8,15 @@ Flink's StreamingFileSink provides:
   - Roll condition: size OR time (whichever hits first)
 
 Bucket layout (created by deployment/minio/init-scripts/01-create-buckets.sh):
-  raw-zone/         → taxi_trips_raw         (valid records from Layer 1)
-  quarantine-zone/  → schema_violations       (Layer 1 parse/schema failures)
-                      → canary_violations     (Layer 2 canary rule failures)
-  clean-zone/       → anomaly_scores          (Layer 2 ML scoring results)
-                      → meta_metrics           (Layer 3 windowed meta-metrics)
-                      → drift_events           (Layer 4 IEC decisions)
-                      → alerts                (IEC + pipeline alerts)
+  cadqstream-raw/       → taxi_trips_raw         (valid records from Layer 1)
+  cadqstream-violations/ → schema_violations      (Layer 1 parse/schema failures)
+                          → canary_violations     (Layer 2 canary rule failures)
+  cadqstream-anomalies/  → anomaly_scores          (Layer 2 ML scoring results)
+  cadqstream-metrics/   → meta_metrics            (Layer 3 windowed meta-metrics)
+                          → pipeline_stats         (stats-writer aggregates)
+  cadqstream-drift/     → drift_events            (Layer 4 IEC decisions)
+                          → alerts                (IEC + pipeline alerts)
+  cadqstream-checkpoints/ → ML model artifacts + Flink checkpoints
 
 Env vars:
   S3_ENDPOINT       e.g. http://minio:9000

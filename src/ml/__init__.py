@@ -14,7 +14,8 @@ from src.ml.memstream_core import (
     MemStreamConfig,
     MemStreamAE,
     MemoryModule,
-    ADWIN,
+    ContextBeta,
+    SimpleADWIN,
     BARController,
     set_determinism,
 )
@@ -24,7 +25,8 @@ __all__ = [
     'MemStreamConfig',
     'MemStreamAE',
     'MemoryModule',
-    'ADWIN',
+    'ContextBeta',
+    'SimpleADWIN',
     'BARController',
     'set_determinism',
 ]

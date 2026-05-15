@@ -1,0 +1,5 @@
+[
+    {"name": "mem512_g05", "memory_len": 512, "gamma": 0.5},
+    {"name": "mem1024_g05", "memory_len": 1024, "gamma": 0.5},
+    {"name": "mem1024_g05_k10", "memory_len": 1024, "gamma": 0.5, "k": 10}
+]

@@ -41,8 +41,8 @@ echo "[flink-init] Setting up environment variables..."
 export PYTHONPATH="${PYTHON_PATH}"
 export KAFKA_BOOTSTRAP_SERVERS="kafka:9092"
 export MINIO_ENDPOINT="minio:9000"
-export MINIO_ACCESS_KEY="minioadmin"
-export MINIO_SECRET_KEY="minioadmin123"
+export MINIO_ACCESS_KEY="${MINIO_ROOT_USER}"
+export MINIO_SECRET_KEY="${MINIO_ROOT_PASSWORD}"
 export FLINK_ENV="production"
 
 cd /opt/flink/e2e

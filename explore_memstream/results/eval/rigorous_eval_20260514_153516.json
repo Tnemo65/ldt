@@ -1,0 +1,187 @@
+{
+  "timestamp": "2026-05-14T15:35:16.905595",
+  "fraud_type": "mixed",
+  "n_warmup": 150000,
+  "n_test": 150000,
+  "n_anomalies": 4500,
+  "anomaly_rate": 0.03,
+  "warmup_frac": 0.5,
+  "results": [
+    {
+      "name": "mem256",
+      "config": {
+        "name": "mem256",
+        "memory_len": 256,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem512",
+      "config": {
+        "name": "mem512",
+        "memory_len": 512,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024",
+      "config": {
+        "name": "mem1024",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem2048",
+      "config": {
+        "name": "mem2048",
+        "memory_len": 2048,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_g0",
+      "config": {
+        "name": "mem1024_g0",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_g05",
+      "config": {
+        "name": "mem1024_g05",
+        "memory_len": 1024,
+        "gamma": 0.5,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_g07",
+      "config": {
+        "name": "mem1024_g07",
+        "memory_len": 1024,
+        "gamma": 0.7,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_g09",
+      "config": {
+        "name": "mem1024_g09",
+        "memory_len": 1024,
+        "gamma": 0.9,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_k5",
+      "config": {
+        "name": "mem1024_k5",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 5,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_k15",
+      "config": {
+        "name": "mem1024_k15",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 15,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_k20",
+      "config": {
+        "name": "mem1024_k20",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 20,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_b0p1",
+      "config": {
+        "name": "mem1024_b0p1",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.1
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_b0p5",
+      "config": {
+        "name": "mem1024_b0p5",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_b1p0",
+      "config": {
+        "name": "mem1024_b1p0",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 1.0
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "mem1024_b2p0",
+      "config": {
+        "name": "mem1024_b2p0",
+        "memory_len": 1024,
+        "gamma": 0.0,
+        "k": 10,
+        "default_beta": 2.0
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    },
+    {
+      "name": "best_balanced",
+      "config": {
+        "name": "best_balanced",
+        "memory_len": 1024,
+        "gamma": 0.5,
+        "k": 10,
+        "default_beta": 0.5
+      },
+      "error": "'MemStreamCore' object has no attribute 'context_beta'"
+    }
+  ]
+}

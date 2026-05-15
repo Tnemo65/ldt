@@ -33,7 +33,7 @@ scrape_configs:
   # ── Node Exporter - Host-Level Infrastructure ───────────────────────────────
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ['ldt-node-exporter:9100']
     metrics_path: /metrics
     relabel_configs:
       - source_labels: [__address__]
@@ -43,7 +43,7 @@ scrape_configs:
   # ── Kafka Exporter ─────────────────────────────────────────────────────────
   - job_name: 'kafka-exporter'
     static_configs:
-      - targets: ['kafka-exporter:9308']
+      - targets: ['ldt-kafka-exporter:9308']
     metrics_path: /metrics
     relabel_configs:
       - source_labels: [__address__]
@@ -55,7 +55,7 @@ scrape_configs:
   # registered via runtime_context.get_metrics_group() in MapFunctions.
   - job_name: 'flink-jobmanager'
     static_configs:
-      - targets: ['flink-jobmanager:9248']
+      - targets: ['ldt-flink-jobmanager:9248']
     metrics_path: /metrics
     relabel_configs:
       - source_labels: [__address__]
@@ -67,7 +67,7 @@ scrape_configs:
   # Used by memstream-alerts.yaml rules (e.g. FlinkTaskManagerDown).
   - job_name: 'flink-taskmanager'
     static_configs:
-      - targets: ['flink-taskmanager:9249']
+      - targets: ['ldt-flink-taskmanager:9249']
     metrics_path: /metrics
     relabel_configs:
       - source_labels: [__address__]
@@ -78,7 +78,7 @@ scrape_configs:
   # MinIO exposes Prometheus metrics on the main API port (9000)
   - job_name: 'minio'
     static_configs:
-      - targets: ['minio:9000']
+      - targets: ['ldt-minio:9000']
     metrics_path: /minio/v2/metrics/cluster
     scrape_interval: 30s
     relabel_configs:
@@ -86,28 +86,15 @@ scrape_configs:
         target_label: instance
         replacement: 'minio'
 
-  # ── MLflow Exporter ─────────────────────────────────────────────────────────
-  # Note: MLflow doesn't expose /metrics natively, so we scrape the mlflow-exporter
-  # sidecar which aggregates MLflow metrics from the tracking API
-  - job_name: 'mlflow'
-    static_configs:
-      - targets: ['mlflow-exporter:9251']
-    metrics_path: /metrics
-    scrape_interval: 30s
-    scrape_timeout: 15s
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'mlflow'
-
-  # ── ML Service (FastAPI) ───────────────────────────────────────────────────
+  # Cadqstream Pipeline Application Metrics
   # Custom ML service metrics (inference latency, request counts, model load time)
   - job_name: 'ml-service'
     static_configs:
-      - targets: ['ml-service:8000']
+      - targets: ['ldt-ml-service:8000']
     metrics_path: /metrics
     scrape_interval: 30s
     scrape_timeout: 15s
+    bearer_token: 'changeme-metrics-api-key!!'
     relabel_configs:
       - source_labels: [__address__]
         target_label: instance
@@ -118,7 +105,7 @@ scrape_configs:
   # HTTP POSTs from the Flink pipeline and exposes them for Prometheus.
   - job_name: 'cadqstream-app'
     static_configs:
-      - targets: ['cadqstream-metrics:9250']
+      - targets: ['ldt-cadqstream-metrics:9250']
     metrics_path: /metrics
     scrape_interval: 15s
     scrape_timeout: 10s

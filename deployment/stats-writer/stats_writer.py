@@ -5,7 +5,7 @@ Stats Writer — polls cadqstream-metrics and writes pipeline_stats to MinIO.
 Runs as a sidecar service. Every 60 seconds:
 1. GET cadqstream-metrics:9250/metrics
 2. Parse Prometheus text format for cadqstream_* counters
-3. Write aggregated stats as JSONL to clean-zone/pipeline_stats in MinIO
+3. Write aggregated stats as JSONL to cadqstream-metrics/pipeline_stats in MinIO
 
 Also runs as a one-shot via environment variable for Flink checkpoint events.
 
@@ -86,7 +86,7 @@ def fetch_metrics(url: str) -> dict:
 
 
 def write_to_minio(stats: dict, endpoint: str, access_key: str, secret_key: str):
-    """Write a JSON stats record to MinIO clean-zone/pipeline_stats."""
+    """Write a JSON stats record to MinIO cadqstream-metrics/pipeline_stats."""
     try:
         from minio import Minio
         client = Minio(
@@ -95,7 +95,7 @@ def write_to_minio(stats: dict, endpoint: str, access_key: str, secret_key: str)
             secret_key=secret_key,
             secure=False
         )
-        bucket = 'clean-zone'
+        bucket = 'cadqstream-metrics'
         # Ensure bucket exists
         try:
             client.stat_object(bucket, '.placeholder')

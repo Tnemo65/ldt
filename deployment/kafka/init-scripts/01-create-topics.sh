@@ -6,7 +6,8 @@ KAFKA_PORT="${KAFKA_PORT:-9092}"
 BOOTSTRAP="${KAFKA_HOST}:${KAFKA_PORT}"
 
 echo "[kafka-init] Waiting for Kafka at ${BOOTSTRAP}..."
-until kafka-topics --bootstrap-server "${BOOTSTRAP}" --list > /dev/null 2>&1; do
+until kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --list > /dev/null 2>&1; do
     echo "[kafka-init] Kafka not ready, waiting 5s..."
     sleep 5
 done
@@ -14,19 +15,19 @@ echo "[kafka-init] Kafka is ready!"
 
 echo "[kafka-init] Creating Kafka topics..."
 
-# Input topic: raw taxi events from data producer
+# Input topic: raw taxi events from data producer (increased from 4 → 8)
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic taxi-nyc-raw \
-    --partitions 4 --replication-factor 1 \
+    --partitions 8 --replication-factor 1 \
     --config retention.ms=604800000 \
     --config cleanup.policy=delete
 
-# Output topic: processed/deduplicated records
+# Output topic: processed/deduplicated records (increased from 4 → 8)
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic dq-stream-processed \
-    --partitions 4 --replication-factor 1 \
+    --partitions 8 --replication-factor 1 \
     --config retention.ms=604800000 \
     --config cleanup.policy=delete
 
@@ -86,11 +87,19 @@ kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --config retention.ms=2592000000 \
     --config cleanup.policy=delete
 
-# ML model broadcast topic (compacted for hot-swappable model updates)
+# ML model broadcast topic (compacted for hot-swappable model updates, increased from 1 → 4)
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic if-model-updates \
-    --partitions 1 --replication-factor 1 \
+    --partitions 4 --replication-factor 1 \
+    --config retention.ms=604800000 \
+    --config cleanup.policy=compact
+
+# MemStream retrained model broadcast topic (Phase 3D: for retrained weight broadcast)
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic memstream-model-updates \
+    --partitions 4 --replication-factor 1 \
     --config retention.ms=604800000 \
     --config cleanup.policy=compact
 

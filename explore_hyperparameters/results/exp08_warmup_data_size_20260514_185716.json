@@ -1,0 +1,96 @@
+{
+  "experiment": "exp08_warmup_data_size",
+  "hyperparameter": "warmup_data_size",
+  "timestamp": "20260514_185716",
+  "priority": "HIGH",
+  "primary_metric": "Context_coverage_pct",
+  "grid": [
+    50000,
+    100000,
+    200000,
+    500000
+  ],
+  "results": [
+    {
+      "warmup_data_size": 50000,
+      "metrics": {
+        "warmup_size_used": 50000,
+        "warmup_data_size_requested": 50000,
+        "context_coverage": {
+          "total_cells": 80,
+          "cells_covered": 2,
+          "coverage_pct": 2.5,
+          "min_count": 10,
+          "max_count": 27792,
+          "mean_count": 16666.666666666668
+        },
+        "elapsed_s": 0.15722966194152832
+      }
+    },
+    {
+      "warmup_data_size": 100000,
+      "metrics": {
+        "warmup_size_used": 100000,
+        "warmup_data_size_requested": 100000,
+        "context_coverage": {
+          "total_cells": 80,
+          "cells_covered": 2,
+          "coverage_pct": 2.5,
+          "min_count": 10,
+          "max_count": 67747,
+          "mean_count": 33333.333333333336
+        },
+        "elapsed_s": 0.27994465827941895
+      }
+    },
+    {
+      "warmup_data_size": 200000,
+      "metrics": {
+        "warmup_size_used": 200000,
+        "warmup_data_size_requested": 200000,
+        "context_coverage": {
+          "total_cells": 80,
+          "cells_covered": 2,
+          "coverage_pct": 2.5,
+          "min_count": 10,
+          "max_count": 147346,
+          "mean_count": 66666.66666666667
+        },
+        "elapsed_s": 0.5013043880462646
+      }
+    },
+    {
+      "warmup_data_size": 500000,
+      "metrics": {
+        "warmup_size_used": 276301,
+        "warmup_data_size_requested": 500000,
+        "context_coverage": {
+          "total_cells": 80,
+          "cells_covered": 2,
+          "coverage_pct": 2.5,
+          "min_count": 10,
+          "max_count": 215267,
+          "mean_count": 92100.33333333333
+        },
+        "elapsed_s": 0.6604554653167725
+      }
+    }
+  ],
+  "best_config": {
+    "warmup_data_size": 50000,
+    "metrics": {
+      "warmup_size_used": 50000,
+      "warmup_data_size_requested": 50000,
+      "context_coverage": {
+        "total_cells": 80,
+        "cells_covered": 2,
+        "coverage_pct": 2.5,
+        "min_count": 10,
+        "max_count": 27792,
+        "mean_count": 16666.666666666668
+      },
+      "elapsed_s": 0.15722966194152832
+    }
+  },
+  "recommendation": "50,000 samples gives 2.5% context coverage."
+}

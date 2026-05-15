@@ -1,0 +1,7 @@
+======================================================================
+  BEST CONFIG EXPERIMENT
+  Grid search best: mem=128, k=20, gamma=0.9, latent=34, warmup=30K
+  Hyperparam best: k=50, epochs=100
+======================================================================
+
+Loading data (30K warmup, 15K test)...

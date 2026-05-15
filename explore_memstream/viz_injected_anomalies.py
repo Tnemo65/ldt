@@ -154,7 +154,7 @@ def main():
     n_anom = int(labels.sum())
     print(f"  Injected {n_anom} anomalies ({n_anom/len(df)*100:.2f}%)")
 
-    sns.set_style('seaborn-v0_8-darkgrid')
+    sns.set_style('darkgrid')
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
     fig.suptitle('NYC Taxi: Anomaly Injection Analysis', fontsize=16, fontweight='bold')
 

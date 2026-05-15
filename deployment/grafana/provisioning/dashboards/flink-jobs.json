@@ -59,7 +59,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers)",
+          "expr": "flink_jobmanager_numRegisteredTaskManagers",
           "legendFormat": "TMs",
           "refId": "A"
         }
@@ -103,7 +103,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_jobmanager_job_status{status=\"RUNNING\"})",
+          "expr": "flink_jobmanager_numRunningJobs",
           "legendFormat": "Jobs",
           "refId": "A"
         }
@@ -145,7 +145,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointDuration / 1000",
+          "expr": "flink_jobmanager_job_lastCheckpointDuration / 1000",
           "legendFormat": "Last Checkpoint Duration",
           "refId": "A"
         }
@@ -187,7 +187,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointSize",
+          "expr": "flink_jobmanager_job_lastCheckpointSize",
           "legendFormat": "Checkpoint Size",
           "refId": "A"
         }
@@ -227,7 +227,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Restarting_NumberOfRestarts",
+          "expr": "flink_jobmanager_job_numRestarts",
           "legendFormat": "Restarts",
           "refId": "A"
         }
@@ -267,7 +267,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "count(flink_taskmanager_Status_JobsRunningNumbers) * 4",
+          "expr": "flink_jobmanager_taskSlotsAvailable",
           "legendFormat": "Total Slots",
           "refId": "A"
         }
@@ -335,17 +335,17 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfCompletedCheckpoints[5m]) * 60",
+          "expr": "rate(flink_jobmanager_job_numberOfCompletedCheckpoints[5m]) * 60",
           "legendFormat": "Completed /min",
           "refId": "A"
         },
         {
-          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfFailedCheckpoints[5m]) * 60",
+          "expr": "rate(flink_jobmanager_job_numberOfFailedCheckpoints[5m]) * 60",
           "legendFormat": "Failed /min",
           "refId": "B"
         },
         {
-          "expr": "rate(flink_jobmanager_job_Checkpointing_Info_NumberOfInProgressCheckpoints[5m])",
+          "expr": "rate(flink_jobmanager_job_numberOfInProgressCheckpoints[5m])",
           "legendFormat": "In Progress",
           "refId": "C"
         }
@@ -404,14 +404,9 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_job_Checkpointing_Info_LastCheckpointSize",
+          "expr": "flink_jobmanager_job_lastCheckpointSize",
           "legendFormat": "Checkpoint Size",
           "refId": "A"
-        },
-        {
-          "expr": "\"Checkpointing enabled\"",
-          "legendFormat": "External Path",
-          "refId": "B"
         }
       ],
       "title": "Checkpoint Size Over Time",
@@ -602,22 +597,22 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_jobmanager_JobManager_Memory_Heap_Used",
+          "expr": "flink_jobmanager_Status_JVM_Memory_Heap_Used",
           "legendFormat": "JM Heap Used",
           "refId": "A"
         },
         {
-          "expr": "flink_jobmanager_JobManager_Memory_Heap_Max",
+          "expr": "flink_jobmanager_Status_JVM_Memory_Heap_Max",
           "legendFormat": "JM Heap Max",
           "refId": "B"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_Memory_Heap_Used",
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Used",
           "legendFormat": "TM Heap Used",
           "refId": "C"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_Memory_Heap_Max",
+          "expr": "flink_taskmanager_Status_JVM_Memory_Heap_Max",
           "legendFormat": "TM Heap Max",
           "refId": "D"
         }
@@ -676,12 +671,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "flink_taskmanager_TaskManager_NumberOfRunningTasks",
+          "expr": "flink_jobmanager_taskSlotsAvailable",
           "legendFormat": "Running Tasks",
           "refId": "A"
         },
         {
-          "expr": "flink_taskmanager_TaskManager_NumberOfSlots",
+          "expr": "flink_jobmanager_taskSlotsTotal",
           "legendFormat": "Available Slots",
           "refId": "B"
         }
