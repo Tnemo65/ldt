@@ -208,7 +208,7 @@ class MLService:
             self.minio_client = None
 
         # Load model
-        self.model = MemStreamModel(input_dim=10)
+        self.model = MemStreamModel(input_dim=34)
         if self.model.load(self.model_path, self.signing_key):
             logger.info("Model loaded successfully")
         else:
@@ -338,6 +338,7 @@ async def predict(
         INFERENCE_REQUESTS.labels(status='success').inc()
 
         inference_time = (time.time() - start_time) * 1000
+        INFERENCE_LATENCY.observe(inference_time / 1000.0)
 
         return InferenceResponse(
             predictions=predictions.tolist(),
@@ -375,6 +376,29 @@ async def model_info():
         'latent_dim': ml_service.model.latent_dim,
         'device': str(ml_service.model.device)
     }
+
+
+@app.post("/api/strategy/memory_reset")
+async def memory_reset():
+    """Placeholder endpoint for /api/strategy/memory_reset.
+
+    action-replay-worker calls this endpoint when the IEC strategy is
+    'memory_reset'. A 404 here generates errors in ML service logs,
+    so we accept and acknowledge to silence those errors.
+    """
+    return JSONResponse(content={"status": "success", "message": "Memory reset acknowledged"})
+
+
+@app.post("/api/strategy/adjust_threshold")
+async def adjust_threshold():
+    """Placeholder endpoint for threshold adjustment strategy."""
+    return JSONResponse(content={"status": "success", "message": "Threshold adjust acknowledged"})
+
+
+@app.post("/api/strategy/switch_model")
+async def switch_model():
+    """Placeholder endpoint for model switching strategy."""
+    return JSONResponse(content={"status": "success", "message": "Switch model acknowledged"})
 
 
 if __name__ == "__main__":

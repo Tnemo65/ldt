@@ -289,7 +289,7 @@ def get_context_id(hour, dow, ratecode):
     8 context cells: (Standard/Special) x (Day/Night) x (Weekday/Weekend)
     """
     is_special  = 1 if ratecode > 1 else 0
-    is_night    = 1 if (hour >= 18 or hour < 6) else 0
+    is_night    = 1 if (hour >= 20 or hour < 6) else 0
     is_weekend  = 1 if dow >= 5 else 0
     return (is_special << 2) | (is_night << 1) | is_weekend
 

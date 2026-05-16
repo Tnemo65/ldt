@@ -43,10 +43,31 @@ class CanaryRulesValidator(MapFunction):
             value: Record dict (already passed Layer 1 schema validation)
 
         Returns:
-            Record enriched with canary_violations list and has_violation flag
+            Record enriched with canary_violations list and has_violation flag.
+            Sentinel dict for None/malformed input (DLQ routing, never returns None).
         """
         if value is None:
-            return None
+            return {
+                '_dlq': True,
+                '_dlq_reason': 'null_input',
+                '_dlq_category': 'VALIDATION_ERROR',
+                '_dlq_operator': 'CanaryRulesValidator',
+                'trip_id': 'dlq_null',
+                'tpep_pickup_datetime': '',
+                'canary_violations': [],
+                'has_violation': False,
+            }
+        if not isinstance(value, dict):
+            return {
+                '_dlq': True,
+                '_dlq_reason': f'not_dict:{type(value).__name__}',
+                '_dlq_category': 'VALIDATION_ERROR',
+                '_dlq_operator': 'CanaryRulesValidator',
+                'trip_id': f'dlq_{type(value).__name__[:20]}',
+                'tpep_pickup_datetime': '',
+                'canary_violations': [],
+                'has_violation': False,
+            }
 
         self.rules_checked += 1
 
@@ -78,30 +99,52 @@ class CanaryRulesValidator(MapFunction):
                 violations.append('extreme_fare')
 
             # Rule 6: Extreme duration (> 24 hours)
-            pickup_dt = value.get('tpep_pickup_datetime')
-            dropoff_dt = value.get('tpep_dropoff_datetime')
+            # ROOT CAUSE FIX #1b: datetime parsing exceptions are caught specifically,
+            # logged with context, and don't cause the operator to crash.
+            pickup_dt_str = value.get('tpep_pickup_datetime')
+            dropoff_dt_str = value.get('tpep_dropoff_datetime')
 
-            if pickup_dt and dropoff_dt:
-                if isinstance(pickup_dt, str):
-                    pickup_dt = datetime.fromisoformat(pickup_dt)
-                if isinstance(dropoff_dt, str):
-                    dropoff_dt = datetime.fromisoformat(dropoff_dt)
+            if pickup_dt_str and dropoff_dt_str:
+                try:
+                    if isinstance(pickup_dt_str, str):
+                        pickup_dt = datetime.fromisoformat(pickup_dt_str)
+                    else:
+                        pickup_dt = pickup_dt_str
+                    if isinstance(dropoff_dt_str, str):
+                        dropoff_dt = datetime.fromisoformat(dropoff_dt_str)
+                    else:
+                        dropoff_dt = dropoff_dt_str
 
-                duration_hours = (dropoff_dt - pickup_dt).total_seconds() / 3600
+                    duration_hours = (dropoff_dt - pickup_dt).total_seconds() / 3600
 
-                if duration_hours > 24:
-                    violations.append('extreme_duration')
-                elif duration_hours < 0:
-                    violations.append('negative_duration')
+                    if duration_hours > 24:
+                        violations.append('extreme_duration')
+                    elif duration_hours < 0:
+                        violations.append('negative_duration')
+                except (ValueError, TypeError, AttributeError) as dt_err:
+                    # Datetime parsing failed — log and skip duration check.
+                    # Do NOT crash the operator. Record still gets processed.
+                    trip_id = value.get('trip_id', 'unknown')
+                    LOGGER.warning(
+                        "[CanaryRules] Datetime parse failed for trip_id=%s: %s",
+                        trip_id, str(dt_err)[:100]
+                    )
+                    violations.append('datetime_parse_failed')
 
             # Rule 7: Total amount should be >= fare amount
             total = float(value.get('total_amount', 0))
             if total < fare:
                 violations.append('total_less_than_fare')
 
-        except Exception as e:
-            # If rule checking fails, flag as processing error
-            violations.append(f'rule_processing_error')
+        except (ValueError, TypeError, AttributeError) as e:
+            # Catch type/conversion errors (e.g. float("N/A"), int(None)).
+            # These indicate bad data upstream — log and skip, don't crash.
+            trip_id = value.get('trip_id', 'unknown')
+            LOGGER.warning(
+                "[CanaryRules] Type/conversion error trip_id=%s: %s: %s",
+                trip_id, type(e).__name__, str(e)[:200]
+            )
+            violations.append('type_conversion_error')
 
         # Track violations
         if violations:
@@ -133,6 +176,8 @@ class ViolationFilter(FilterFunction):
         """Return True if record has violations."""
         if value is None:
             return False
+        if not isinstance(value, dict):
+            return False
 
         return value.get('has_violation', False)
 
@@ -143,6 +188,8 @@ class CleanRecordFilter(FilterFunction):
     def filter(self, value):
         """Return True if record has NO violations."""
         if value is None:
+            return False
+        if not isinstance(value, dict):
             return False
 
         return not value.get('has_violation', False)
@@ -166,7 +213,8 @@ def format_violation_record(record: dict) -> dict:
         'passenger_count': record.get('passenger_count', 0),
         'payment_type': record.get('payment_type', 0),
         'pickup_datetime': record.get('tpep_pickup_datetime', ''),
-        'timestamp': datetime.utcnow().isoformat()
+        # ROOT CAUSE FIX #1: timestamp uses event time from record, NOT datetime.utcnow()
+        'timestamp': record.get('tpep_pickup_datetime', datetime.utcnow().isoformat())
     }
 
 

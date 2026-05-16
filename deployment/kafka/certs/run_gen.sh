@@ -1,8 +1,17 @@
 #!/bin/bash
+set -e
+
 PASSWORD=changeKafkaSSL123
 CERTS_DIR=/certs
 mkdir -p "$CERTS_DIR"
 cd "$CERTS_DIR"
+
+# Idempotent guard: skip if truststore already exists
+if [ -f "$CERTS_DIR/kafka.truststore.jks" ]; then
+    echo "[kafka-certs] Certificates already exist, skipping generation"
+    exit 0
+fi
+
 openssl req -x509 -newkey rsa:4096 -keyout ca-key.pem -out ca-cert.pem -days 365 -nodes -subj /CN=Kafka-CA-DQStream
 openssl pkcs12 -export -in ca-cert.pem -inkey ca-key.pem -out ca.p12 -name kafka-ca -passout pass:"$PASSWORD"
 keytool -importkeystore -srckeystore ca.p12 -srcstoretype PKCS12 -srcstorepass "$PASSWORD" -destkeystore kafka.truststore.jks -deststoretype JKS -storepass "$PASSWORD" -noprompt
@@ -12,4 +21,5 @@ openssl pkcs12 -export -in kafka-broker-cert.pem -inkey kafka-broker-key.pem -ou
 keytool -importkeystore -srckeystore kafka-broker.p12 -srcstoretype PKCS12 -srcstorepass "$PASSWORD" -destkeystore kafka.keystore.jks -deststoretype JKS -storepass "$PASSWORD" -noprompt
 keytool -importcert -alias CARoot -file ca-cert.pem -keystore kafka.keystore.jks -storepass "$PASSWORD" -noprompt
 rm -f ca.p12 kafka-broker.p12 kafka-broker.csr ca-key.pem kafka-broker-key.pem ca-cert.srl
-echo Done
+echo "[kafka-certs] Done"
+ls -la

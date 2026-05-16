@@ -5,7 +5,6 @@ $services = @(
     @{Name="ldt-zookeeper"; Url=""; Port=2181; Protocol="tcp"; Desc="ZooKeeper"},
     @{Name="ldt-kafka"; Url=""; Port=9092; Protocol="tcp"; Desc="Kafka"},
     @{Name="ldt-minio"; Url="http://localhost:9000/minio/health/live"; Port=9000; Protocol="http"; Desc="MinIO"},
-    @{Name="ldt-mlflow"; Url="http://localhost:5000"; Port=5000; Protocol="http"; Desc="MLflow"},
     @{Name="ldt-schema-registry"; Url=""; Port=8082; Protocol="tcp"; Desc="Schema Registry"},
     @{Name="ldt-flink-jobmanager"; Url="http://localhost:8081/overview"; Port=8081; Protocol="http"; Desc="Flink UI"},
     @{Name="ldt-prometheus"; Url="http://localhost:9090/-/healthy"; Port=9090; Protocol="http"; Desc="Prometheus"},

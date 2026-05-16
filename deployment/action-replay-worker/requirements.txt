@@ -1,2 +1,4 @@
 kafka-python==2.0.2
 requests>=2.31.0
+# FIX: lz4 codec for kafka-python decompressing lz4-compressed Kafka messages
+lz4>=4.0.0

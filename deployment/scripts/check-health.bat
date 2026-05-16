@@ -71,11 +71,6 @@ call :check_container ldt-flink-taskmanager "" ""
 call :check_container ldt-flink-init "" ""
 echo.
 
-:: ML Platform
-echo [ML Platform]
-call :check_container ldt-mlflow "" "curl -s http://localhost:5000"
-echo.
-
 :: Observability
 echo [Observability]
 call :check_container ldt-prometheus "" "curl -s http://localhost:9090/-/healthy"

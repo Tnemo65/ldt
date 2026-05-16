@@ -72,11 +72,6 @@ echo -e "${BLUE}[Streaming (Flink)]${NC}"
 check_service "ldt-flink-jobmanager" "flink-jobmanager:8081" "curl -sf http://localhost:8081/overview"
 check_service "ldt-flink-taskmanager" "flink-taskmanager:8081" ""
 
-# ML Platform
-echo ""
-echo -e "${BLUE}[ML Platform]${NC}"
-check_service "ldt-mlflow" "mlflow:5000" "curl -sf http://localhost:5000"
-
 # Observability
 echo ""
 echo -e "${BLUE}[Observability]${NC}"

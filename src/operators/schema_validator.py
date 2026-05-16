@@ -33,6 +33,8 @@ class SchemaValidator(FilterFunction if _HAS_PYFLINK else object):
         """Validate record against schema constraints."""
         if value is None:
             return False
+        if not isinstance(value, dict):
+            return False
 
         for field in self.required_fields:
             if field not in value or value[field] is None:

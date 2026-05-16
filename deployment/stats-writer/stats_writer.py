@@ -96,11 +96,9 @@ def write_to_minio(stats: dict, endpoint: str, access_key: str, secret_key: str)
             secure=False
         )
         bucket = 'cadqstream-metrics'
-        # Ensure bucket exists
-        try:
-            client.stat_object(bucket, '.placeholder')
-        except Exception:
-            LOGGER.warning("Bucket %s may not exist", bucket)
+        # Ensure bucket exists (use bucket_exists, not stat_object which checks objects)
+        if not client.bucket_exists(bucket):
+            LOGGER.warning("Bucket %s does not exist", bucket)
 
         record = json.dumps({**stats, 'written_at': datetime.utcnow().isoformat()}, default=str)
         data = record.encode('utf-8')

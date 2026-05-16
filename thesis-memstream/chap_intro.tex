@@ -1,0 +1,83 @@
+\chapter{INTRODUCTION}
+
+% ================================================
+\section{Motivation}
+% ================================================
+
+Modern data-intensive systems rely on real-time data streams for decision-making, operational control, and downstream analytics. When these streams contain erroneous, incomplete, or anomalous records, the damage propagates rapidly through every dependent system in a \textbf{contamination cascade}: a single erroneous transaction contaminates payment processing, financial reporting, and fraud detection models simultaneously. Industry analysis documents eight distinct failure modes in streaming data transmission: corrupted data from encoding errors, schemaless events lacking structural metadata, invalid schemas, incompatible schema evolution, logically invalid field values, semantically incorrect values, missing events, and duplicate events \citep{confluent_2025}. The financial stakes are quantifiable: poor data quality costs organizations an average of USD 12.9 million annually \citep{ibm_data_quality_cost}, with regulatory fines in financial services alone reaching USD 4.7 billion in recent years.
+
+The shift from batch processing to streaming paradigms fundamentally changes the nature of the data quality problem. In batch processing, all records are available before validation, enabling complete statistical analysis. In streaming, records arrive continuously and must be validated with minimal latency, requiring algorithms that update incrementally and make decisions under uncertainty with incomplete information. This epistemological shift renders traditional batch-oriented DQ frameworks architecturally incompatible with streaming contexts: they require complete datasets before validation, cannot operate on individual records as they arrive, and provide no mechanisms for online adaptation to distribution shifts.
+
+Three forces converge to make streaming DQ monitoring both urgent and unsolved. First, the proliferation of high-throughput streaming platforms (Apache Kafka, Apache Flink, Confluent, Grab's Coban) means that more data is in motion than ever before, creating more attack surface for data quality failures. Second, the integration of machine learning into operational workflows means that downstream models consume streaming data directly, making ML performance contingent on streaming data quality. Third, the scale of modern deployments means that data quality issues that would be manageable in batch settings become catastrophic in streaming settings: an erroneous transaction at 10,000 events per second generates 600 errors per minute with no human review opportunity.
+
+Despite this urgency, existing open-source DQ frameworks (Great Expectations, AWS Deequ, Soda Core) operate exclusively in batch mode, focusing on schema validation and constraint checking against static or periodically refreshed datasets. Recent extensions to streaming contexts (Stream DaQ, Grab Coban, Confluent) demonstrate feasibility but share a critical limitation: they rely primarily on deterministic rule-based validation without ML-based anomaly detection for multivariate violations, lack context-aware thresholding mechanisms calibrated to the specific conditions of each observation, and provide no systematic approach to concept drift adaptation.
+
+% ================================================
+\section{Research Challenges}
+% ================================================
+
+Addressing streaming DQ monitoring with ML-based, context-aware, and drift-adaptive capabilities confronts three fundamental research challenges that existing literature has not simultaneously resolved.
+
+\textbf{Challenge 1: Context Collapse in Heterogeneous Data Streams.} Streaming data streams are inherently heterogeneous: financial transactions vary by account type and market conditions, healthcare monitoring varies by patient demographics and clinical context, and urban transportation data varies by trip type, time of day, day of week, and geographic zone. In all these domains, applying a single global threshold across heterogeneous observations causes context collapse: legitimate high-value events are misclassified as anomalies because the threshold was calibrated on the average population. The literature establishes that context-aware thresholding outperforms global thresholding in principle (DTD proves no fixed threshold is universally optimal \citep{dtd2026}; ReAD shows relative divergence metrics outperform fixed thresholds \citep{read2020}; BeSTAD demonstrates multi-dimensional behavioral profiles significantly outperform single-score approaches \citep{bestad2025}), yet no existing streaming DQ framework provides automated multi-dimensional context-aware threshold computation with drift-aware recalibration. The open question is how many contextual dimensions are necessary and sufficient, how to handle sparse context cells with insufficient training data, and how context-aware thresholds behave under concept drift.
+
+\textbf{Challenge 2: Architectural Inefficiency in Sequential Validation Pipelines.} Existing streaming DQ frameworks process records through validation stages sequentially: Schema Validation $\rightarrow$ Business Rules $\rightarrow$ ML Scoring. Every record pays the full computational cost of the slowest stage regardless of whether earlier stages could make a determination. This inefficiency is universal: Confluent's six-step pipeline, Grab Coban's FlinkSQL test runner, and Stream DaQ all process records sequentially. The key insight is that not all records require the same validation depth: most records fail early lightweight checks while a minority require expensive deep inspection. The open question is whether parallelizing heterogeneous validation stages can exploit this variation in validation complexity, and under what conditions the coordination overhead of parallelization negates its benefits.
+
+\textbf{Challenge 3: Single-Strategy Drift Adaptation for Multiple Drift Types.} Production streaming systems encounter diverse drift types: gradual seasonal shifts, sudden event-driven spikes, and recurring cyclical patterns. Existing concept drift literature provides multiple adaptation strategies (periodic retraining, incremental updates, model switching, threshold adjustment) but applies them uniformly. This wastes resources on minor shifts that could be resolved by threshold adjustment while potentially under-responding to severe shifts that require full retraining. The literature establishes that automated strategy selection based on drift characteristics is theoretically promising (DTD proves dynamic thresholds strictly outperform fixed thresholds \citep{dtd2026}; ADWIN-U demonstrates unsupervised drift detection \citep{adwinu2025}; Adaptive-Delta ADWIN shows adaptive sensitivity reduces false alarms \citep{adt2025}) yet no existing framework combines drift detection with automated strategy selection.
+
+These three challenges interact: context-aware thresholds computed from training data become stale under concept drift (Challenge 3), requiring drift monitoring; drift monitoring must operate within the throughput constraints of the processing architecture (Challenge 2); and the validation pipeline must provide enough throughput headroom to support context-aware ML scoring without blocking (Challenge 1). A unified solution must address all three simultaneously.
+
+% ================================================
+\section{Objective}
+% ================================================
+
+The primary objective of this thesis is to design, implement, and evaluate \textbf{CA-DQStream}, a \textbf{Context-Aware} framework for \textbf{Streaming Data Quality} monitoring that simultaneously addresses all three research challenges. Specifically, CA-DQStream aims to:
+
+\begin{enumerate}
+    \item Develop a \textbf{multi-dimensional context-aware thresholding framework} that partitions heterogeneous streaming data into context cells, computes individualized anomaly thresholds per cell automatically from training data, and adapts thresholds when data distributions drift. The goal is to reduce false positive rates compared to global thresholds while maintaining detection sensitivity across all context combinations.
+
+    \item Design a \textbf{fork-join pipeline architecture} that parallelizes rule-based and ML-based validation branches to exploit early exit opportunities, reducing average processing latency and increasing throughput compared to sequential pipelines. The goal is to demonstrate that parallelization of heterogeneous validation stages provides measurable performance benefits under realistic violation rates.
+
+    \item Implement a \textbf{multi-strategy self-adaptation controller} that monitors quality meta-streams via drift detection and selects from multiple adaptation strategies automatically based on observed drift characteristics. The goal is to maintain detection accuracy under concept drift while minimizing computational cost by preferring lightweight strategies.
+
+    \item Evaluate all innovations empirically on a \textbf{large-scale real-world streaming dataset}, measuring false positive rate, detection accuracy, throughput, latency, and drift adaptation effectiveness against established baselines and ablation configurations.
+\end{enumerate}
+
+% ================================================
+\section{Contribution Highlights}
+% ================================================
+
+CA-DQStream makes four primary contributions, each addressing one of the research challenges and one or more of the research questions (RQ1--RQ5) stated in Chapter 2:
+
+\begin{enumerate}
+    \item \textbf{4D Context-Aware Thresholding Framework} [RQ1, RQ5]: A multi-dimensional threshold matrix partitioning the data space by trip type, time window, day type, and neighborhood with automated per-cell threshold computation from training data and intelligent fallback for sparse cells. Significantly reduces false positive rates compared to global thresholds, particularly for high-value data segments where global thresholds fail.
+
+    \item \textbf{Rendezvous Pipeline Architecture} [RQ2]: A fork-join architecture that parallelizes a lightweight rule-based branch with a heavyweight ML-based scoring branch through a synchronization rendezvous point. Improves throughput and reduces average latency compared to sequential pipelines, with graceful degradation when the ML branch is unavailable.
+
+    \item \textbf{Intelligent Evolution Controller} [RQ3]: A multi-strategy self-adaptation system that monitors quality meta-streams via drift detection and selects from multiple adaptation strategies based on observed drift characteristics. Resolves the majority of drift events through lightweight incremental updates without full retraining.
+
+    \item \textbf{Hybrid K-Means + Online Autoencoder with Memory Module} [RQ4, RQ5]: A memory-augmented anomaly detector that learns multivariate normal patterns from ultra-clean training data and scores anomalies via reconstruction error, with continuous memory-based learning for streaming data without catastrophic forgetting. Achieves strong detection performance on multivariate anomalies.
+\end{enumerate}
+
+These contributions are not independent components but a tightly integrated system: the multi-dimensional threshold matrix provides context boundaries that the clusterer uses for assignment; the memory-augmented autoencoder scores anomalies within each context; the fork-join architecture parallelizes the scoring pipeline to meet throughput requirements; and the drift controller orchestrates model updates without pipeline interruption.
+
+% ================================================
+\section{Thesis Content}
+% ================================================
+
+This thesis is organized into seven chapters:
+
+\begin{enumerate}
+    \item \textbf{Chapter 1: Background} reviews foundational concepts including streaming data processing (Apache Kafka, Apache Flink), data quality dimensions (DAMA-DMBOK framework), anomaly detection methods (Isolation Forest, MemStream), and the MLOps maturity model. This chapter establishes the technical infrastructure and conceptual vocabulary on which subsequent chapters build.
+
+    \item \textbf{Chapter 2: Related Work} surveys four interconnected research areas: streaming data quality monitoring frameworks (Great Expectations, Soda Core, Confluent, Grab Coban, Stream DaQ), industrial streaming platform case studies (Grab Signals Marketplace, Trailblazer CDC, AutoMQ, FlinkSQL Platform), concept drift handling and ADWIN variants (ADWIN-U, Parallel ADWIN, ADWIN++, Adaptive-Delta), and context-aware anomaly detection (ReAD, BeSTAD, ICAD, DTD). This chapter identifies the specific gaps that CA-DQStream addresses.
+
+    \item \textbf{Chapter 3: Problem Definition and Research Questions} formalizes the research problem through empirical analysis of the NYC Yellow Taxi dataset, derives three research gaps from the interaction between empirical findings and existing literature, and states five open research questions (RQ1--RQ5) that guide the rest of the thesis. Each RQ addresses a specific knowledge gap rather than validating a predetermined solution.
+
+    \item \textbf{Chapter 4: CA-DQStream Architecture} presents the complete system design including the multi-dimensional context-aware thresholding framework, the fork-join pipeline architecture, the multi-strategy self-adaptation controller, and the hybrid K-Means plus Online Autoencoder with Memory Module. The chapter details the feature engineering pipeline, the four-layer processing pipeline on Apache Flink, and the fault tolerance mechanisms (checkpointing, dead-letter queues, exactly-once semantics).
+
+    \item \textbf{Chapter 5: Experiments and Evaluation} validates the four contributions through comprehensive experiments organized by Research Question (RQ1--RQ5) to demonstrate traceability between proposed innovations and empirical validation. Comparative baselines include MemStream, Isolation Forest, K-Means IF, RIFIFI, xStream, RRCF, MStream, HBOS, COPOD, ECOD, and Stream DaQ.
+
+    \item \textbf{Chapter 6: Broader Impact} discusses the implications of CA-DQStream for related domains (financial fraud detection, healthcare monitoring, IoT quality management), ethical considerations (data privacy, algorithmic transparency, false positive costs), and scalability to other streaming DQ scenarios beyond taxi data.
+
+    \item \textbf{Chapter 7: Conclusion and Future Work} summarizes the contributions, acknowledges limitations (ground truth availability, single-domain evaluation, computational overhead of context-aware thresholding), and outlines promising directions for future research.
+\end{enumerate}

@@ -15,10 +15,18 @@ echo "[kafka-init] Kafka is ready!"
 
 echo "[kafka-init] Creating Kafka topics..."
 
-# Input topic: raw taxi events from data producer (increased from 4 → 8)
+# Input topic: raw taxi events from data producer
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic taxi-nyc-raw \
+    --partitions 8 --replication-factor 1 \
+    --config retention.ms=604800000 \
+    --config cleanup.policy=delete
+
+# Input topic v2: canonical topic consumed by flink_job_complete.py
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic taxi-nyc-raw-v2 \
     --partitions 8 --replication-factor 1 \
     --config retention.ms=604800000 \
     --config cleanup.policy=delete
@@ -31,13 +39,13 @@ kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --config retention.ms=604800000 \
     --config cleanup.policy=delete
 
-# Anomaly topic: detected violations
+# Anomaly topic: detected violations (event log — use delete policy, NOT compact)
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic dq-stream-anomalies \
     --partitions 4 --replication-factor 1 \
     --config retention.ms=2592000000 \
-    --config cleanup.policy=compact
+    --config cleanup.policy=delete
 
 # Meta metrics topic: windowed aggregates per neighborhood
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
@@ -55,13 +63,13 @@ kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --config retention.ms=86400000 \
     --config cleanup.policy=delete
 
-# IEC Dead Letter Queue: failed IEC actions after max retries
+# IEC Dead Letter Queue: failed IEC actions after max retries (event log)
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --create --if-not-exists \
     --topic iec-action-dlq \
     --partitions 1 --replication-factor 1 \
     --config retention.ms=604800000 \
-    --config cleanup.policy=compact
+    --config cleanup.policy=delete
 
 # Clean canary records output topic
 kafka-topics --bootstrap-server "${BOOTSTRAP}" \
@@ -102,6 +110,45 @@ kafka-topics --bootstrap-server "${BOOTSTRAP}" \
     --partitions 4 --replication-factor 1 \
     --config retention.ms=604800000 \
     --config cleanup.policy=compact
+
+# Unified pipeline output topic (consolidates all separate output topics)
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic dq-stream-unified \
+    --partitions 4 --replication-factor 1 \
+    --config retention.ms=604800000 \
+    --config cleanup.policy=delete
+
+# ─── DLQ Topics (Dead Letter Queue — ROOT CAUSE FIX #2) ─────────────────────
+# Records that fail parsing, validation, or algorithm processing are routed here.
+# Each DLQ category gets its own topic for independent downstream analysis.
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic dlq-parse-error \
+    --partitions 2 --replication-factor 1 \
+    --config retention.ms=2592000000 \
+    --config cleanup.policy=delete
+
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic dlq-schema-error \
+    --partitions 2 --replication-factor 1 \
+    --config retention.ms=2592000000 \
+    --config cleanup.policy=delete
+
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic dlq-algorithm-error \
+    --partitions 2 --replication-factor 1 \
+    --config retention.ms=2592000000 \
+    --config cleanup.policy=delete
+
+kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+    --create --if-not-exists \
+    --topic dlq-validation-error \
+    --partitions 2 --replication-factor 1 \
+    --config retention.ms=2592000000 \
+    --config cleanup.policy=delete
 
 echo "[kafka-init] All topics created successfully!"
 kafka-topics --bootstrap-server "${BOOTSTRAP}" --list
@@ -250,6 +297,44 @@ register_schema "taxi-nyc-raw-value"         /tmp/taxi-nyc-raw-schema.json
 register_schema "dq-stream-processed-value"  /tmp/dq-stream-processed-schema.json
 register_schema "dq-meta-stream-value"       /tmp/dq-meta-stream-schema.json
 register_schema "iec-action-replay-value"    /tmp/iec-action-replay-schema.json
+# ROOT CAUSE FIX #3: Register unified topic schema
+cat > /tmp/dq-stream-unified-schema.json << 'SCHEMA_EOF'
+{
+  "type": "record",
+  "name": "DQStreamUnified",
+  "namespace": "com.cadqstream.events",
+  "doc": "Unified pipeline output with event type tagging",
+  "fields": [
+    {"name": "_event_type", "type": "string"},
+    {"name": "_raw_value", "type": ["null", "string"], "default": null}
+  ]
+}
+SCHEMA_EOF
+register_schema "dq-stream-unified-value" /tmp/dq-stream-unified-schema.json
+
+# ROOT CAUSE FIX #2: Register DLQ topic schemas
+cat > /tmp/dlq-record-schema.json << 'SCHEMA_EOF'
+{
+  "type": "record",
+  "name": "DQStreamDLQ",
+  "namespace": "com.cadqstream.events",
+  "doc": "Dead Letter Queue record with failure metadata",
+  "fields": [
+    {"name": "_dlq", "type": "boolean", "doc": "Always true for DLQ records"},
+    {"name": "_dlq_reason", "type": "string", "doc": "Human-readable failure reason"},
+    {"name": "_dlq_category", "type": "string", "doc": "PARSE_ERROR|SCHEMA_ERROR|ALGORITHM_ERROR|VALIDATION_ERROR"},
+    {"name": "_dlq_timestamp", "type": "string", "doc": "Event time from original record"},
+    {"name": "_dlq_operator", "type": "string", "doc": "Operator that produced the failure"},
+    {"name": "_dlq_original", "type": "string", "doc": "Serialized original record (JSON)"},
+    {"name": "trip_id", "type": "string"},
+    {"name": "tpep_pickup_datetime", "type": "string"}
+  ]
+}
+SCHEMA_EOF
+register_schema "dlq-parse-error-value"       /tmp/dlq-record-schema.json
+register_schema "dlq-schema-error-value"     /tmp/dlq-record-schema.json
+register_schema "dlq-algorithm-error-value"  /tmp/dlq-record-schema.json
+register_schema "dlq-validation-error-value" /tmp/dlq-record-schema.json
 
 echo "[kafka-init] Schema Registry registration complete."
 echo "[kafka-init] Registered subjects:"
@@ -258,6 +343,7 @@ curl -s "${SCHEMA_REGISTRY_URL}/subjects" | python3 -m json.tool 2>/dev/null || 
 
 # Cleanup temp schemas
 rm -f /tmp/taxi-nyc-raw-schema.json /tmp/dq-stream-processed-schema.json \
-       /tmp/dq-meta-stream-schema.json /tmp/iec-action-replay-schema.json
+       /tmp/dq-meta-stream-schema.json /tmp/iec-action-replay-schema.json \
+       /tmp/dq-stream-unified-schema.json /tmp/dlq-record-schema.json
 
 echo "[kafka-init] === Kafka initialization complete ==="

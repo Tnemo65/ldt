@@ -15,12 +15,12 @@ taskmanager.numberOfTaskSlots: ${TASK_MANAGER_NUMBER_OF_TASK_SLOTS}
 taskmanager.memory.task.off-heap.enabled: true
 parallelism.default: ${FLINK_PARALLELISM_DEFAULT}
 
-# State Backend: RocksDB with MinIO (S3) checkpoint storage
+# State Backend: RocksDB with local checkpoint storage
 # (overridden by FLINK_PROPERTIES env var in docker-compose.yml)
 state.backend: rocksdb
 state.backend.incremental: true
-state.checkpoints.dir: s3://cadqstream-checkpoints/flink/checkpoints
-state.savepoints.dir: s3://cadqstream-checkpoints/flink/savepoints
+state.checkpoints.dir: file:///opt/flink/checkpoints/flink/checkpoints
+state.savepoints.dir: file:///opt/flink/checkpoints/flink/savepoints
 state.checkpoints.num-retained: 3
 
 # RocksDB tuning
@@ -30,10 +30,13 @@ state.backend.rocksdb.writebuffer.size: 64mb
 state.backend.rocksdb.writebuffer.count: 3
 state.backend.rocksdb.predefined-options: SPINNING_DISK_OPTIMIZED_HIGH_MEM
 
-# S3 / MinIO (Hadoop S3A)
-# Note: credentials must be set via s3.access-key / s3.secret-key in FLINK_PROPERTIES
+# S3 / MinIO: only for ML model artifact loading (Python UDF level)
+# Hadoop S3A libs are NOT bundled — do NOT use s3:// URIs for checkpoint backend
 s3.endpoint: http://minio:9000
 s3.path.style.access: true
+
+# JVM Metaspace: prevent OOM from repeated Python UDF class loading
+taskmanager.memory.jvm-metaspace.size: 512m
 
 # Checkpointing
 execution.checkpointing.mode: EXACTLY_ONCE
@@ -42,16 +45,14 @@ execution.checkpointing.max-concurrent-checkpoints: 1
 execution.checkpointing.min-pause: 30000
 execution.checkpointing.timeout: 300000
 execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
-execution.checkpointing.tolerable-failed-checkpoints: 3
+execution.checkpointing.tolerable-failed-checkpoints: 0
 execution.checkpointing.aligned-checkpoint-timeout: 60000
 
 # Restart Strategy
-restart-strategy: exponential-delay
-restart-strategy.exponential-delay.initial-backoff: 10000
-restart-strategy.exponential-delay.max-backoff: 300000
-restart-strategy.exponential-delay.backoff-multiplier: 2.0
-restart-strategy.exponential-delay.reset-backoff-threshold: 600000
-restart-strategy.exponential-delay.jitter-factor: 0.1
+restart-strategy: fixed-delay
+restart-strategy.fixed-delay.initial-backoff: 5000
+restart-strategy.fixed-delay.max-attempts: 5
+restart-strategy.fixed-delay.backoff-multiplier: 1.0
 
 # REST API
 rest.port: 8081

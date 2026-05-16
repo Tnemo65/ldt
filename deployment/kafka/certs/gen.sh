@@ -1,15 +1,25 @@
 #!/bin/bash
+set -e
+
 PASSWORD=changeKafkaSSL123
 CERTS_DIR=/certs
-mkdir -p 
-cd 
+mkdir -p "$CERTS_DIR"
+cd "$CERTS_DIR"
+
+# Idempotent guard: skip if keystore already exists
+if [ -f "$CERTS_DIR/kafka.keystore.jks" ]; then
+    echo "[kafka-certs] Certificates already exist, skipping generation"
+    exit 0
+fi
+
 /usr/bin/openssl req -x509 -newkey rsa:4096 -keyout ca-key.pem -out ca-cert.pem -days 365 -nodes -subj /CN=Kafka-CA-DQStream
-/usr/bin/openssl pkcs12 -export -in ca-cert.pem -inkey ca-key.pem -out ca.p12 -name kafka-ca -passout pass:
-keytool -importkeystore -srckeystore ca.p12 -srcstoretype PKCS12 -srcstorepass  -destkeystore kafka.truststore.jks -deststoretype JKS -storepass  -noprompt
+/usr/bin/openssl pkcs12 -export -in ca-cert.pem -inkey ca-key.pem -out ca.p12 -name kafka-ca -passout pass:"$PASSWORD"
+keytool -importkeystore -srckeystore ca.p12 -srcstoretype PKCS12 -srcstorepass "$PASSWORD" -destkeystore kafka.truststore.jks -deststoretype JKS -storepass "$PASSWORD" -noprompt
 /usr/bin/openssl req -newkey rsa:4096 -keyout kafka-broker-key.pem -out kafka-broker.csr -nodes -subj /CN=kafka
 /usr/bin/openssl x509 -req -in kafka-broker.csr -CA ca-cert.pem -CAkey ca-key.pem -out kafka-broker-cert.pem -days 365
-/usr/bin/openssl pkcs12 -export -in kafka-broker-cert.pem -inkey kafka-broker-key.pem -out kafka-broker.p12 -name kafka-broker -passout pass:
-keytool -importkeystore -srckeystore kafka-broker.p12 -srcstoretype PKCS12 -srcstorepass  -destkeystore kafka.keystore.jks -deststoretype JKS -storepass  -noprompt
-keytool -importcert -alias CARoot -file ca-cert.pem -keystore kafka.keystore.jks -storepass  -noprompt
+/usr/bin/openssl pkcs12 -export -in kafka-broker-cert.pem -inkey kafka-broker-key.pem -out kafka-broker.p12 -name kafka-broker -passout pass:"$PASSWORD"
+keytool -importkeystore -srckeystore kafka-broker.p12 -srcstoretype PKCS12 -srcstorepass "$PASSWORD" -destkeystore kafka.keystore.jks -deststoretype JKS -storepass "$PASSWORD" -noprompt
+keytool -importcert -alias CARoot -file ca-cert.pem -keystore kafka.keystore.jks -storepass "$PASSWORD" -noprompt
 rm -f ca.p12 kafka-broker.p12 kafka-broker.csr ca-key.pem kafka-broker-key.pem
-ls -la 
+echo "[kafka-certs] Done"
+ls -la

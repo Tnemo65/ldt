@@ -5,49 +5,70 @@ Reallocating 'name_of_file' (item size: 1) to 9 items.
 The style file: plainnat.bst
 Reallocating 'name_of_file' (item size: 1) to 9 items.
 Database file #1: citation.bib
+Warning--I didn't find a database entry for "grab_coban_platform"
+Warning--empty journal in baier2020switching
 Warning--empty journal in bifet2007learning
+Warning--empty journal in anovox2024
+Warning--empty journal in breunig2000lof
+Warning--empty journal in confluent_dead_letter_queue
+Warning--empty journal in confluent_schema_registry
+Warning--empty journal in confluent_siemens2024
+Warning--empty journal in siemens_confluent2024
+Warning--empty journal in confluent_2025
+Warning--empty journal in ft_aed2024
 Warning--empty journal in dama2017dmbok
+Warning--empty journal in grab_coban2024
+Warning--empty journal in grab_coban2025
+Warning--empty journal in adbench2022
+Warning--empty journal in enginead2026
+Warning--empty journal in maritime2025
+Warning--empty journal in dtd_2026
+Warning--empty journal in iforest_extended
 Warning--empty journal in liu2008isolation
+Warning--empty journal in read2020
+Warning--empty journal in papastergios2025stream
 Warning--empty journal in contextdq2022
-You've used 20 entries,
+Warning--empty journal in ververica2024
+Warning--empty journal in meter_2023
+You've used 67 entries,
             2773 wiz_defined-function locations,
-            711 strings with 8675 characters,
-and the built_in function-call counts, 10029 in all, are:
-= -- 870
-> -- 677
-< -- 12
-+ -- 231
-- -- 210
-* -- 788
-:= -- 1543
-add.period$ -- 68
-call.type$ -- 20
-change.case$ -- 129
-chr.to.int$ -- 19
-cite$ -- 44
-duplicate$ -- 427
-empty$ -- 760
-format.name$ -- 234
-if$ -- 2103
-int.to.chr$ -- 2
+            963 strings with 18185 characters,
+and the built_in function-call counts, 30928 in all, are:
+= -- 2766
+> -- 1880
+< -- 47
++ -- 655
+- -- 579
+* -- 2346
+:= -- 4829
+add.period$ -- 271
+call.type$ -- 67
+change.case$ -- 382
+chr.to.int$ -- 58
+cite$ -- 158
+duplicate$ -- 1413
+empty$ -- 2430
+format.name$ -- 665
+if$ -- 6482
+int.to.chr$ -- 10
 int.to.str$ -- 1
-missing$ -- 14
-newline$ -- 114
-num.names$ -- 80
-pop$ -- 286
+missing$ -- 57
+newline$ -- 406
+num.names$ -- 268
+pop$ -- 818
 preamble$ -- 1
-purify$ -- 109
+purify$ -- 315
 quote$ -- 0
-skip$ -- 363
+skip$ -- 1114
 stack$ -- 0
-substring$ -- 289
-swap$ -- 61
-text.length$ -- 4
+substring$ -- 778
+swap$ -- 161
+text.length$ -- 10
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 220
-warning$ -- 4
-while$ -- 80
+type$ -- 737
+warning$ -- 24
+while$ -- 255
 width$ -- 0
-write$ -- 266
-(There were 4 warnings)
+write$ -- 945
+(There were 25 warnings)

@@ -50,6 +50,10 @@ class DeduplicatorFunction(MapFunction):
         Returns:
             Original record if first occurrence, None if duplicate
         """
+        if value is None:
+            return value
+        if not isinstance(value, dict):
+            return value
         trip_id = value.get('trip_id')
 
         if trip_id is None:

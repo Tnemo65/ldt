@@ -9,7 +9,7 @@ Architectural Spec (verified from memstream_src/core/memstream_core.py lines 107
 - kNN scoring: L1 distance on AE OUTPUT (out_dim=34), NOT hidden layer
 - gamma=0.0 default (prevents memory poisoning via fresh anomaly dominance)
 - Memory stores AE output tensor at out_dim=34
-- Night threshold: hour >= 18 (NOT >= 20)
+- Night threshold: hour >= 20 (NOT >= 18)
 
 HARD-BLOCK Fixes Applied:
 1. Ratecode extraction (memstream_core.py:497-500): decode from one-hot using
@@ -18,7 +18,7 @@ HARD-BLOCK Fixes Applied:
    accepts pre-computed neighborhood indices
 3. Extract actual hour/dow from record — NO hardcoded hour=12, dow=0
 4. weights_only=False on all torch.load() calls + HMAC verification
-5. Night definition: hour >= 18 (NOT >= 20)
+5. Night definition: hour >= 20 (NOT >= 18)
 6. _recent_scores: deque(maxlen=5000) for quick_retrain baseline
 7. _recent_scores included in get_state_dict() / load_state_dict()
 
@@ -106,7 +106,7 @@ class MemStreamConfig:
         self.out_dim: int = 34          # v10: symmetric
 
         # Memory
-        self.memory_len: int = 100000   # v10: production-scale
+        self.memory_len: int = 50000   # plan: minimum 50,000
         self.memory_init_fraction: float = 0.1
 
         # kNN scoring (v10 benchmark)
@@ -216,7 +216,7 @@ class MemoryModule:
     Distance metric: L1 (Manhattan) per benchmark_v10.py line 662.
     """
 
-    def __init__(self, memory_len: int = 100000, out_dim: int = 34, device: str = 'cpu'):
+    def __init__(self, memory_len: int = 50000, out_dim: int = 34, device: str = 'cpu'):
         self.memory_len = memory_len
         self.out_dim = out_dim
         self.device = device
@@ -392,7 +392,7 @@ def decode_ratecode_from_onehot(X: np.ndarray) -> np.ndarray:
 def get_context_id(hour: int, dow: int, ratecode: float) -> int:
     """8 context cells: (Standard/Special) × (Day/Night) × (Weekday/Weekend).
 
-    HARD-BLOCK FIX: Night threshold is hour >= 18 (NOT >= 20).
+    HARD-BLOCK FIX: Night threshold is hour >= 20 (NOT >= 18).
 
     Args:
         hour: Hour of day (0-23)
@@ -402,11 +402,11 @@ def get_context_id(hour: int, dow: int, ratecode: float) -> int:
     Returns:
         Context ID (0-7):
         - bit 2 (is_special): 1 if ratecode > 1
-        - bit 1 (is_night): 1 if hour >= 18 or hour < 6
+        - bit 1 (is_night): 1 if hour >= 20 or hour < 6
         - bit 0 (is_weekend): 1 if dow >= 5
     """
     is_special = 1 if ratecode > 1 else 0
-    is_night = 1 if (hour >= 18 or hour < 6) else 0   # FIX: >= 18, not >= 20
+    is_night = 1 if (hour >= 20 or hour < 6) else 0   # FIX: >= 18, not >= 20
     is_weekend = 1 if dow >= 5 else 0
     return (is_special << 2) | (is_night << 1) | is_weekend
 
@@ -1048,7 +1048,7 @@ class MemStreamCore:
                 dow = 0
                 ratecode = 1.0
 
-        # HARD-BLOCK FIX 5: Night threshold is hour >= 18
+        # HARD-BLOCK FIX 5: Night threshold is hour >= 20
         if ratecode is None:
             ratecode = 1.0
 
@@ -1414,8 +1414,9 @@ class SimpleADWIN:
     Uses a sliding window to compare recent vs. older distribution.
     """
 
-    def __init__(self, delta: float = 0.002):
+    def __init__(self, delta: float = 0.002, max_window: int = 500):
         self.delta = delta
+        self.max_window = max_window
         self._window: list = []
         self._total: float = 0.0
 
@@ -1426,6 +1427,12 @@ class SimpleADWIN:
         """
         self._window.append(value)
         self._total += value
+
+        # Enforce max_window by trimming oldest entries
+        if len(self._window) > self.max_window:
+            excess = len(self._window) - self.max_window
+            self._total -= sum(self._window[:excess])
+            self._window = self._window[excess:]
 
         n = len(self._window)
         if n <= 50:
@@ -1456,6 +1463,10 @@ class SimpleADWIN:
         """Reset the detector."""
         self._window.clear()
         self._total = 0.0
+
+    def get_window_size(self) -> int:
+        """Return current window size."""
+        return len(self._window)
 
 
 # ---------------------------------------------------------------------------

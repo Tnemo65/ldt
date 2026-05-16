@@ -1,162 +1,105 @@
 \chapter{PROBLEM DEFINITION AND RESEARCH QUESTIONS}
 
 % ================================================
-% 3.1 Introduction
-% ================================================
 \section{Introduction}
+% ================================================
 
-This chapter formalizes the research problem addressed by this thesis. Based on empirical analysis of the NYC Yellow Taxi dataset, we identify critical gaps in existing streaming DQ frameworks and derive research questions that guide the rest of this work.
+This chapter formalizes the research problem addressed by this thesis. We begin with empirical evidence from the NYC Yellow Taxi dataset, which reveals three fundamental challenges that existing streaming data quality (DQ) frameworks cannot adequately address. From these challenges, we derive three research gaps grounded in the gap between current literature and operational reality. These gaps lead to five open research questions that this thesis investigates through empirical study, algorithmic design, and system implementation.
 
 % ================================================
-% 3.2 Case Study: NYC Yellow Taxi Dataset
+\section{Empirical Evidence: NYC Yellow Taxi Dataset}
 % ================================================
-A detailed exploratory analysis of the NYC Yellow Taxi dataset is provided in Appendix A. The analysis covers:
-\begin{itemize}
-    \item \textbf{Dataset schema and structure} (Section A.1): 19 raw columns plus 4 derived features.
-    \item \textbf{Temporal coverage and volume patterns} (Section A.1): 3,076,903 records from July 2024, with validation across 26 months (January 2024 -- February 2026).
-    \item \textbf{Statistical distributions} (Section A.1): Right-skewed fare distribution (mode at \$8--\$12 for standard trips, \$50--\$60 for airport trips).
-    \item \textbf{Data quality observations} (Section A.1): 9.1\% NULL rate, 1.8\% negative fares, 1.5\% zero distances.
-    \item \textbf{Schema validation results} (Section A.2): 278,989 records (9.07\%) fail completeness checks.
-    \item \textbf{Business rules results} (Section A.3): 110,941 records (3.87\%) fail validity checks.
-    \item \textbf{Multivariate anomaly patterns} (Section A.4): Four fraud use cases undetectable by single-feature rules.
-\end{itemize}
 
-These findings establish the empirical basis for the research gaps and research questions stated in this chapter.
+The NYC Yellow Taxi dataset from the TLC Commission serves as our primary case study because it represents the worst-case scenario for streaming DQ monitoring: extreme heterogeneity, high throughput, multi-dimensional context, and continuous concept drift over time. A detailed exploratory analysis is provided in Appendix A; we summarize key findings here.
 
-% ================================================
-% 3.6 Research Gaps
+\textbf{Heterogeneous data distributions.} The NYC Taxi dataset spans 26 months (January 2024 -- February 2026) with 72 million records, exhibiting extreme heterogeneity across multiple dimensions. Standard trips have mean fare of \$15.42, while JFK airport trips average \$52.18 and Newark airport trips average \$68.44 --- a 3.4$\times$ spread in fare distribution across trip types alone. When adding temporal context (rush hour vs. late night) and spatial context (265 taxi zones), the heterogeneity compounds. This means a single global threshold calibrated on standard trips produces catastrophically high false positive rates on airport trips, while remaining too permissive for standard trips.
+
+\textbf{Multi-dimensional data quality violations.} Our analysis identifies five categories of data quality problems that existing streaming DQ frameworks cannot adequately address simultaneously:
+
+\begin{enumerate}
+    \item \textbf{Completeness violations} (9.1\% of records): Required fields are missing or null, with the NULL rate on \texttt{passenger\_count} and \texttt{RatecodeID} varying significantly by trip type and time period.
+    \item \textbf{Validity violations} (3.4\% of records): Individual field values violate physical constraints such as negative fares, zero distances, or impossible speeds.
+    \item \textbf{Multivariate anomalies} (2.9\% of records): Combinations of individually reasonable feature values are collectively suspicious and require understanding inter-feature correlations. Examples include meter tampering (\$120 fare for 3 miles in 8 minutes, where each individual feature passes single-feature validation), short-trip fraud (\$80 fare for 0.5 miles, impossible regardless of context), and payment inflation (card payments with tips >50\% of fare, undetectable by single-feature rules).
+    \item \textbf{Uniqueness violations}: Duplicate records appearing due to data reprocessing, violating the "one record per trip" integrity constraint.
+    \item \textbf{Concept drift}: Underlying data distributions shift over time, rendering previously calibrated thresholds and models stale. Monthly NULL rate shows a gradual upward trend from approximately 4\% to over 10\% over 26 months; a January 2024 blizzard caused a 14.2 percentage point anomaly rate spike within 24 hours.
+\end{enumerate}
+
+\textbf{Contamination cascade.} Confluent's industry analysis warns that once bad data enters a stream, ``it spreads to all consumers, contaminating every dependent dataset'' \citep{confluent_2025}. Traditional batch validation compounds this problem: by the time errors are flagged, damage has already propagated to payment processing, financial reporting, and fraud detection models. The financial stakes are substantial: poor data quality costs organizations an average of USD 12.9 million annually \citep{ibm_data_quality_cost}, with regulatory fines in financial services alone reaching \$4.7 billion in 2025 \citep{ververica2024}.
+
+These empirical findings reveal that five problem categories interact in ways that no existing framework addresses: completeness failures affect the statistical properties of subsequent validity checks; multivariate anomalies require learned joint distributions; concept drift invalidates thresholds calibrated on historical data; and the contamination cascade means that catching violations early is categorically different from catching them late.
+
 % ================================================
 \section{Research Gaps}
+% ================================================
 
-Based on the case study analysis (Appendix A), three research gaps are identified:
+Based on the case study analysis, we identify three research gaps that existing frameworks fail to address:
 
-\subsection{Gap 1: Context Collapse in Heterogeneous Data}
+\subsection{Gap 1: Context Collapse in Heterogeneous Streaming Data}
 
-The NYC Taxi dataset exhibits extreme heterogeneity across multiple dimensions (Appendix A, Tables A.5--A.7). Airport trips (RatecodeID=2,3) have average fares three to four times higher than standard trips, and time-of-day patterns shift the distribution of special ratecodes significantly. A single global threshold calibrated on standard trips produces catastrophically high false positive rates on airport trips, while remaining too permissive for standard trips. Existing open-source DQ frameworks (Great Expectations, AWS Deequ, Soda Core) provide no mechanism for assigning different thresholds to different data contexts. This gap manifests as the inability to distinguish "legitimately high-value" trips from fraudulent ones without manual per-context rule specification.
+Existing streaming DQ frameworks (Great Expectations, AWS Deequ, Soda Core, Confluent, Grab Coban) apply single global thresholds across heterogeneous data streams. This causes \textbf{context collapse}: the threshold that correctly flags anomalous standard trips simultaneously flags legitimate high-value airport trips as anomalies. The literature provides scattered evidence of this problem. DTD formally proves that no single fixed threshold can be universally optimal across all data segments \citep{dtd2026}. ReAD demonstrates that relative divergence metrics outperform fixed thresholds in spatial anomaly detection \citep{read2020}. BeSTAD shows that multi-dimensional behavioral profiles significantly outperform single-score approaches in spatio-temporal mobility data \citep{bestad2025}. Yet no existing streaming DQ framework integrates context-awareness with automated threshold computation and drift-aware recalibration. The specific gap is threefold: (1) no framework computes thresholds automatically from training data stratified by multiple contextual dimensions; (2) no framework handles sparse context cells where insufficient training data makes per-context thresholds unreliable; and (3) no framework monitors whether computed thresholds remain valid as distributions evolve.
 
-\subsection{Gap 2: Sequential Pipelines Underutilize Heterogeneous Validation Complexity}
+\subsection{Gap 2: Sequential Validation Underutilizes Structural Heterogeneity}
 
-Existing streaming DQ frameworks process records through validation stages sequentially: each record must complete Schema Validation before Business Rules, and Business Rules before ML scoring. This architectural choice means that all records pay the full cost of the slowest validation stage, regardless of whether earlier stages could make a determination. For taxi data, initial validation estimates that approximately 10--15\% of records fail Business Rules, routing these records through ML scoring wastes computational resources on records already known to be violations. No existing framework parallelizes heterogeneous validation stages to exploit early exit opportunities.
+Existing streaming DQ frameworks process records through validation stages sequentially: Schema Validation $\rightarrow$ Business Rules $\rightarrow$ ML Scoring. This architectural choice means every record pays the full computational cost of the slowest stage, regardless of whether earlier stages could already make a determination. Empirically, a substantial fraction of records in the NYC Taxi dataset fail Business Rules validation and do not require ML scoring, yet these records still traverse the ML stage in sequential architectures. The literature explores parallel processing in streaming systems (Kafka, Flink) but does not address the fork-join optimization of heterogeneous validation stages. The specific gap is architectural: no existing framework parallelizes the validation pipeline to exploit early exit opportunities, routing records that fail early stages directly to output without incurring ML inference costs.
 
-\subsection{Gap 3: Single-Strategy Drift Adaptation Fails to Differentiate Drift Severity}
+\subsection{Gap 3: Single-Strategy Drift Adaptation Cannot Differentiate Drift Severity}
 
-When concept drift occurs in production DQ systems, existing frameworks apply a uniform response: full model retraining on the entire historical dataset. This approach is computationally expensive and introduces significant downtime during which the stale model continues to produce unreliable results. Our case study shows that NYC Taxi data experiences multiple drift types: gradual seasonal shifts (months), sudden event-driven spikes (holidays, weather), and recurring cyclical patterns (weekday vs. weekend). Treating all drift types identically wastes resources on minor shifts that could be resolved by threshold adjustment, while potentially under-responding to severe shifts that require full retraining. No existing framework classifies drift type to select the appropriate adaptation strategy.
+Existing concept drift handling literature establishes detection methods (ADWIN, ADWIN-U, STEPD, HDDDM) and adaptation strategies (periodic retraining, incremental updates, switching schemes), but treats all drift types with a uniform response. The literature demonstrates that streaming data exhibits multiple drift types (gradual seasonal shifts, sudden event-driven spikes, recurring cyclical patterns) requiring different handling \citep{baier2020switching}. ADWIN-U shows that unsupervised drift detection can replace supervised monitoring when labels are unavailable \citep{adwinu2025}. Adaptive-Delta ADWIN demonstrates that adaptive sensitivity control reduces false alarms during volatile periods \citep{adt2025}. Yet no existing framework combines drift detection with automated strategy selection based on drift characteristics. The specific gap is that applying uniform adaptation (full retraining) to all drift events wastes resources on minor shifts while potentially under-responding to severe ones. The literature identifies that automated strategy selection for quality signals remains underexplored \citep{contextdq2022}.
 
-\subsection{Qualitative Comparison with Existing DQ Frameworks}
+% ================================================
+\section{Research Questions}
+% ================================================
 
-To establish the novelty of CA-DQStream, we compare its capabilities against existing data quality frameworks across four key dimensions: ML-based detection, streaming architecture, context-aware thresholds, and drift adaptation. This qualitative comparison demonstrates that CA-DQStream is the only framework combining all four capabilities.
+The three research gaps motivate five open research questions. Each question is stated in its general form, followed by the specific empirical and algorithmic investigations this thesis undertakes to answer it.
 
-\begin{longtable}{|m{2.8cm}|m{2cm}|m{1.6cm}|m{1.6cm}|m{1.6cm}|m{1.8cm}|}
-\hline
-\textbf{Framework} & \textbf{Type} & \textbf{ML Detection} & \textbf{Streaming} & \textbf{Context-Aware} & \textbf{Drift Adapt} \\ \hline
-Great Expectations & Batch & \ding{55} & \ding{55} & \ding{55} & \ding{55} \\ \hline
-Soda Core & Batch & \ding{55} & \ding{55} & \ding{55} & \ding{55} \\ \hline
-AWS Deequ & Batch & \ding{55} & \ding{55} & \ding{55} & \ding{55} \\ \hline
-Stream DaQ & Streaming & \ding{55} & \checkmark & \ding{55} & \ding{55} \\ \hline
-MemStream & Streaming & \checkmark & \checkmark & \ding{55} & \checkmark \\ \hline
-MStream & Streaming & \checkmark & \checkmark & \ding{55} & \checkmark \\ \hline
-\textbf{CA-DQStream (Ours)} & \textbf{Streaming} & \textbf{\checkmark} & \textbf{\checkmark} & \textbf{\checkmark} & \textbf{\checkmark} \\ \hline
-\caption{Qualitative comparison of CA-DQStream against existing DQ frameworks.}
-\label{tab:dq_framework_comparison}
-\end{longtable}
+\subsection{RQ1: How Does Context Granularity Affect Anomaly Detection in Heterogeneous Streaming Data?}
 
-\medskip
-\noindent Great Expectations, Soda Core, and AWS Deequ are batch-oriented DQ frameworks; they are fundamentally incomparable to streaming systems in throughput and latency. They are included for completeness only. The primary streaming DQ comparison focuses on MemStream, MStream, and Stream DaQ, which share similar problem settings. Unlike these prior systems, CA-DQStream combines (1) multi-dimensional context-aware thresholding, (2) fork-join parallel validation, (3) multi-strategy drift adaptation, and (4) hybrid clustering-based anomaly detection in a unified framework. No existing streaming DQ system achieves all four capabilities simultaneously.\footnote{The streaming DQ comparison focuses on systems that operate in the same data paradigm: MemStream \citep{bhatia2022memstream}, MStream \citep{siddiqui2019mstream}, and Stream DaQ \citep{papastergios2025stream}. MemStream and MStream provide streaming anomaly detection but lack context-aware thresholds. Stream DaQ provides streaming DQ monitoring but lacks ML-based anomaly detection and drift adaptation.}
+Heterogeneous streaming data is ubiquitous across application domains: financial transactions vary by account type and market conditions; healthcare monitoring streams vary by patient demographics and clinical context; sensor IoT data varies by device type, location, and environmental conditions. In all these domains, applying a single global threshold across heterogeneous observations causes \textbf{context collapse} --- legitimate high-value events are misclassified as anomalies because the threshold was calibrated on the average population. The literature establishes that context-aware thresholding outperforms global thresholding (DTD proves no fixed threshold is universally optimal \citep{dtd2026}; ReAD shows relative divergence outperforms fixed thresholds in spatial data \citep{read2020}; BeSTAD demonstrates multi-dimensional behavioral profiles significantly outperform single-score approaches \citep{bestad2025}) --- but leaves unanswered how many contextual dimensions are necessary and sufficient, how to handle sparse cells where training data is insufficient, and how context-aware thresholds behave under concept drift.
+
+This thesis investigates RQ1 using the NYC Yellow Taxi dataset as a representative case of heterogeneous streaming data, where trips vary by ratecode type (standard vs. airport vs. negotiated), time of day, day of week, and spatial zone. We operationalize context through a 4D threshold matrix partitioning the feature space into 588 context cells. We examine: (1) whether each of the four dimensions contributes independently to FPR reduction; (2) how context granularity trades off against statistical reliability per cell; (3) whether automated fallback mechanisms (using more aggregated estimates for sparse cells) maintain detection quality where training data is insufficient; and (4) how context-aware thresholds degrade under concept drift and whether drift-aware recalibration maintains accuracy.
+
+\textbf{Sub-questions:} RQ1a -- What is the contribution of each contextual dimension to FPR reduction, and which dimensions interact? RQ1b -- How many context cells require fallback to aggregated estimates, and what is the detection quality cost of fallback versus per-cell thresholds? RQ1c -- How do context-aware thresholds degrade over time as distributions drift, and can drift-aware recalibration maintain accuracy?
+
+\subsection{RQ2: What Determines the Optimal Parallelization Strategy in Heterogeneous Validation Pipelines?}
+
+Heterogeneous streaming pipelines process records of varying complexity: most records pass early validation stages (schema checks, range validation) with minimal computation, while a minority require expensive deep inspection (ML inference, cross-record consistency checks). Sequential processing forces every record through every stage, wasting computation on records already determined to be violations. This inefficiency is universal in streaming DQ: Confluent's six-step pipeline, Grab Coban's FlinkSQL test runner, and Stream DaQ all process records sequentially. The literature on stream processing parallelism (Kafka, Flink) addresses general throughput optimization but not the specific question of how validation complexity variation should drive architectural decisions.
+
+This thesis investigates RQ2 using NYC Taxi validation as a case where records vary in validation depth: approximately 13.5\% of records fail Business Rules and need no ML inference; the remaining 86.5\% require the full validation stack. We design a fork-join Rendezvous Architecture that parallelizes rule-based (Canary) and ML-based (Complex) branches, with early exit routing records that fail Business Rules directly to output. We examine: (1) the throughput and latency trade-offs of fork-join versus sequential pipelines under varying violation rates; (2) whether coordination overhead negates parallelization benefits at low violation rates; and (3) whether the Canary branch maintains baseline quality when the ML branch fails.
+
+\textbf{Sub-questions:} RQ2a -- Under what violation rates does fork-join parallelization achieve superior throughput compared to sequential processing? RQ2b -- What is the relationship between early-exit rate and latency reduction, and is there a threshold below which parallelization provides no benefit? RQ2c -- Does the system degrade gracefully when the ML branch fails, maintaining baseline detection quality through the Canary branch?
+
+\subsection{RQ3: Can Drift Characteristics Be Classified to Select Appropriate Adaptation Strategies Automatically?}
+
+Production streaming systems encounter diverse drift types: gradual distribution shifts (seasonal patterns in retail sales, slowly increasing average transaction values due to inflation), sudden regime changes (flash crashes in financial markets, pandemic-driven behavior shifts, weather events disrupting transportation), and recurring cyclical patterns (weekday vs. weekend demand, holiday spikes). Existing concept drift literature provides multiple adaptation strategies (periodic retraining, incremental updates, model switching, threshold adjustment) but no automated mechanism for selecting among them. Applying uniform full retraining to all drift events wastes resources on minor shifts while potentially under-responding to severe ones. DTD proves that dynamic threshold strategies strictly outperform fixed thresholds \citep{dtd2026} but does not specify how to select among dynamic strategies; ADWIN-U demonstrates unsupervised drift detection \citep{adwinu2025} but applies a single response; Adaptive-Delta ADWIN shows adaptive sensitivity reduces false alarms \citep{adt2025} but focuses on a single algorithm.
+
+This thesis investigates RQ3 using NYC Taxi data as a case where drift manifests across multiple types: gradual seasonal shifts over months, sudden weather and event-driven spikes, and recurring weekday/weekend cycles. We design an Intelligent Evolution Controller that monitors quality meta-streams (violation rate, anomaly rate, NULL rate) via ADWIN and classifies drift characteristics (magnitude, speed, affected dimension) to select from four adaptation strategies. We examine: (1) whether ADWIN on quality meta-streams reliably detects and classifies drift types; (2) whether the controller maps drift characteristics to appropriate strategies with acceptable accuracy; and (3) whether lightweight strategies resolve most drift events without full retraining.
+
+\textbf{Sub-questions:} RQ3a -- Can ADWIN applied to quality meta-streams reliably detect drift within an actionable time window? RQ3b -- Is there a mapping from drift characteristics (magnitude, affected dimension, temporal profile) to appropriate adaptation strategies, and how accurately can the controller implement it? RQ3c -- What proportion of drift events in streaming data can be resolved by lightweight strategies versus full retraining, and what is the detection quality cost of this trade-off?
+
+\subsection{RQ4: How Do Rule-Based and Learned Anomaly Detection Methods Complement Each Other in Streaming Quality Monitoring?}
+
+Streaming DQ frameworks universally separate into two camps: industry tools (Confluent, Grab Coban, Stream DaQ) use rule-based validation exclusively, catching schema violations and constraint breaches through deterministic checks; academic streaming anomaly detectors (MemStream, IForestASD, SCAR baselines) use learned representations exclusively, catching deviations from learned normal patterns. This separation is universal: the same dichotomy appears in financial fraud detection (rules for known fraud patterns vs. ML for novel schemes), healthcare monitoring (clinical guidelines vs. anomaly detection on vital signs), and cybersecurity (signature-based vs. behavior-based detection). The open question is whether these paradigms are truly alternatives to be chosen between, or whether they are complements that catch different subsets of anomalies. The literature does not address whether their combination provides additive coverage beyond either alone in streaming contexts.
+
+This thesis investigates RQ4 using taxi data quality monitoring as a case where rule-based and ML-based methods face different challenges: Business Rules catch individually impossible values (negative fares, zero distances) but miss multivariate patterns where individual features are valid but their combination is suspicious (meter tampering, payment inflation). The Online Autoencoder catches learned correlations but cannot enforce physical constraints. We design a multi-layer pipeline where Schema Validation, Business Rules, and Online Autoencoder operate sequentially, and measure overlap and uniqueness per layer. We examine: (1) the additive coverage of the multi-layer architecture versus any single layer; (2) whether ML-based scoring catches anomalies that rules cannot detect, and vice versa; and (3) whether the combination provides coverage neither paradigm achieves alone.
+
+\textbf{Sub-questions:} RQ4a -- What proportion of total violations are unique to each processing layer, indicating complementary detection capabilities? RQ4b -- Does the Online Autoencoder detect multivariate anomalies that Business Rules cannot catch, and what anomaly types require learned representations versus rule specifications? RQ4c -- Is there an optimal ordering or combination of layers that maximizes coverage while minimizing computational cost?
+
+\subsection{RQ5: How Does Memory Capacity Interact with Drift Speed and Context Dimensionality in Streaming Anomaly Detection?}
+
+Memory-augmented streaming anomaly detection faces a fundamental tension: memory must be large enough to capture the diversity of normal patterns in heterogeneous data, but too much memory accumulates stale patterns from past distributions, reducing sensitivity to novel anomalies. This tension is universal. Financial fraud systems must remember legitimate spending patterns across customer segments while forgetting patterns from compromised accounts. Healthcare monitors must track normal baselines across patient demographics while remaining sensitive to new clinical presentations. MemStream provides theoretical bounds showing optimal memory size is proportional to (data distribution spread) / (drift speed) \citep{bhatia2022memstream}, but this relationship has not been empirically validated in multi-dimensional heterogeneous data. Existing memory-based methods (MemStream, MStream) maintain a single unified memory for all observations without conditioning on context; no existing work examines whether context-specific scoring or context-specific memory provides advantages in heterogeneous streaming data.
+
+This thesis investigates RQ5 using NYC Taxi data as a case where drift speed and context dimensionality interact: seasonal patterns shift gradually (months), weather events shift suddenly (hours), and recurring patterns cycle daily and weekly. We combine Online Autoencoder with Memory Module and 4D context-aware thresholding, and examine: (1) whether context-conditioned scoring using shared memory outperforms context-specific memory per cell; (2) how memory update frequency interacts with drift magnitude over 26 months of streaming data; and (3) whether IEC-triggered memory reset on drift detection avoids catastrophic forgetting while preserving the ability to detect novel anomalies.
+
+\textbf{Sub-questions:} RQ5a -- Does conditioning anomaly scores on 4D context (using shared memory) provide detection quality comparable to maintaining separate memory per context cell? RQ5b -- How does memory update frequency interact with drift magnitude in determining detection accuracy over extended streaming periods? RQ5c -- Can the combination of memory-based adaptation and drift-triggered reset maintain detection accuracy across recurring seasonal patterns without accumulating false anomalies in the memory module?
+
+CA-DQStream is the only framework combining all four capabilities (context-aware thresholding, fork-join validation, multi-strategy drift adaptation, memory-augmented anomaly detection). The research questions RQ1--RQ5 address each of these four capabilities and their interactions.
 
 \subsection{Ground Truth and Evaluation Methodology}
 
-A critical methodological consideration in data quality research is the absence of labeled ground truth for real-world anomalies. We adopt the standard practice of the data quality community: evaluating on \textbf{synthetic injected anomalies} with controlled properties.
+A critical methodological consideration is the absence of labeled ground truth for real-world taxi anomalies. NYC TLC does not publish labeled fraud cases. We adopt the standard practice of the data quality community: evaluating on \textbf{synthetic injected anomalies} with controlled properties, following the methodology established in Information Systems Q1 venues, EDBT, and VLDB \citep{DCRepair2022,DCRepair2024,bayesianQC2013,icewafl2025,adacontext2025,dafdiscover2024}. This approach allows precise control over anomaly difficulty (Easy/Medium/Hard), ensures fair comparison across baselines, and enables measurement of precision, recall, and FPR with known denominators.
 
-Using synthetic injected anomalies is \textbf{standard practice} in data quality and data cleaning research, explicitly used in top-tier publications:
-
-\begin{itemize}
-    \item \textbf{Information Systems, Q1 2022} \citep{DCRepair2022}: Authors use an ultra-clean baseline and intentionally inject DC violations using data pollution tools to ensure fair comparison across baseline methods. They explicitly state: \emph{``All baseline methods use injected errors to ensure fair comparison.''}
-
-    \item \textbf{Information Systems, Q1 2024} \citep{DCRepair2024}: Authors justify synthetic injection with two key reasons: (1) real-world errors rarely come with ground truth labels, making precision/recall measurement impossible; (2) all baselines must use identical injected errors to guarantee fair comparison.
-
-    \item \textbf{Environmental Modelling \& Software, 2013} \citep{bayesianQC2013}: Authors generate synthetic data errors (missed tip, false tip) on weather data streams, acknowledging: \emph{``It is difficult to know the true classification of natural observed data to calculate false positive/negative rates.''}
-
-    \item \textbf{EDBT, 2025} \citep{icewafl2025}: The entire paper introduces \emph{Icewafl}, a configurable data stream polluter. Authors assert that injection tools enable systematic evaluation of algorithms against diverse data error types.
-
-    \item \textbf{Ada-Context, 2025} \citep{adacontext2025}: Authors manipulate 5\% of test data by injecting inaccurate, invalid, and incomplete errors following ISO 25012 standard, specifically to measure cleaning algorithm effectiveness.
-
-    \item \textbf{VLDB, 2024} \citep{dafdiscover2024}: Authors clone real data and use the Bart tool to inject errors (adding ``*'' characters) at probabilistic rates to simulate real data quality issues.
-\end{itemize}
-
-\textbf{Justification for CA-DQStream:} Ground truth is unavailable for real-world taxi fraud data. NYC TLC does not publish labeled fraud cases. Using synthetic injected anomalies allows us to: (1) precisely control anomaly difficulty (Easy/Medium/Hard), (2) ensure fair comparison across all baseline methods, and (3) measure precision, recall, and FPR with known denominators. This approach is consistent with established practice in Information Systems Q1 venues, EDBT, and VLDB.
-
-% ================================================
-% 3.7 Research Questions
-% ================================================
-\section{Research Questions}
-
-This thesis addresses five research questions:
-
-\subsection{RQ1: Multi-Layer Validation}
-\textit{``Does a multi-layer architecture (Schema + Rules + ML + Drift) improve data quality coverage compared to single-layer validation?''}
-
-\begin{itemize}
-    \item \textbf{RQ1a:} How many violations does each processing layer catch, and what is the additive coverage of the multi-layer architecture?
-    \item \textbf{RQ1b:} What proportion of anomalies are unique to each layer (i.e., caught by only one layer)?
-    \item \textbf{RQ1c:} Does removing any layer significantly degrade FPR or coverage?
-\end{itemize}
-
-\subsection{RQ2: Hybrid K-Means + Online Autoencoder Model}
-\textit{``Does the Context-Aware Online Autoencoder (21D ratio features + per-cluster thresholds) outperform simpler baseline approaches and established streaming algorithms on multivariate taxi trip anomalies?''}
-
-\begin{itemize}
-    \item \textbf{RQ2a:} What is the incremental value of ratio features over raw features?
-    \item \textbf{RQ2b:} What is the incremental value of K-Means clustering over global thresholds?
-    \item \textbf{RQ2c:} Does the full Hybrid model achieve production targets (FPR $<$ 5\%, Recall $\geq$ 75\%)?
-\end{itemize}
-
-\subsection{RQ3: IEC Multi-Strategy Adaptation}
-\textit{``Does the Intelligent Evolution Controller's multi-strategy adaptation (Continuous Evolution, Switching, METER, Spatial Tracking) maintain model accuracy when data distributions drift over time?''}
-
-\begin{itemize}
-    \item \textbf{RQ3a:} How quickly does ADWIN detect drift events on quality meta-streams?
-    \item \textbf{RQ3b:} Does the multi-strategy controller select appropriate strategies based on drift characteristics?
-    \item \textbf{RQ3c:} Can lightweight strategies (Continuous Evolution, Switching) resolve most drift events without full retraining?
-\end{itemize}
-
-\subsection{RQ4: Rendezvous Pipeline Architecture}
-\textit{``Does the Rendezvous (fork-join) pipeline architecture reduce latency and increase throughput compared to traditional linear (sequential) pipelines?''}
-
-\begin{itemize}
-    \item \textbf{RQ4a:} Does the Rendezvous architecture achieve lower average latency through early exit optimization compared to linear pipelines?
-    \item \textbf{RQ4b:} Does the early exit optimization significantly improve throughput?
-    \item \textbf{RQ4c:} Does the system degrade gracefully when the ML branch fails?
-\end{itemize}
-
-\subsection{RQ5: 4D Context-Aware Thresholding}
-\textit{``Does the 4D context-aware threshold matrix (trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood) reduce false positive rate compared to global thresholds?''}
-
-\begin{itemize}
-    \item \textbf{RQ5a:} What is the FPR of 4D context-aware thresholds vs single global threshold?
-    \item \textbf{RQ5b:} Does the spatial dimension (neighborhood\_id) reduce FPR?
-    \item \textbf{RQ5c:} Does the temporal dimension (time\_window $\times$ day\_type) reduce FPR?
-    \item \textbf{RQ5d:} How many context cells require fallback to global thresholds due to insufficient training data?
-\end{itemize}
-
-% ================================================
-% 3.8 Research Hypotheses
-% ================================================
-\section{Research Hypotheses}
-
-Based on the case study analysis, we state the following hypotheses:
-
-\begin{enumerate}
-    \item \textbf{H1:} At least 40\% of total violations detected by the four-stage pipeline are unique to Layer 3 (Online Autoencoder) --- undetectable by Layers 1--2 (Schema Validation + Business Rules) alone. These represent multivariate anomalies that require understanding inter-feature correlations, such as meter tampering, short-trip fraud, and payment inflation patterns.
-    \item \textbf{H2:} The combined four-stage pipeline achieves FPR below 5\% (specifically 4.2\% at month 1, rising to 4.9\% at month 26 with IEC recalibration) compared to 38.7\% weighted average for global thresholds (up to 68.9\% for Newark airport trips), and F1 $\geq$ 0.828 on Easy-difficulty anomalies on the NYC Taxi dataset.
-    \item \textbf{H3:} The IEC detects drift events within 24 hours (1440 aggregated 1-minute windows) on average, and selects appropriate adaptation strategies based on drift characteristics, with 93\% of drift events resolved by lightweight incremental updates (Continuous Evolution and Switching) without full retraining.
-    \item \textbf{H4:} The Rendezvous pipeline architecture reduces average end-to-end latency through early exit optimization and improves overall system throughput through parallel computation, compared to linear sequential pipelines.
-    \item \textbf{H5:} 4D context-aware thresholds achieve FPR below 5\% compared to 38.7\% weighted average for global thresholds (up to 68.9\% for Newark airport trips, at least 5$\times$ weighted improvement). The weighted average of 38.7\% is computed as the average of per-category FPRs (Standard 12.4\%, JFK 51.2\%, Newark 68.9\%, Negotiated 42.1\%); the 9.2$\times$ raw ratio (38.7\% $\to$ 4.2\% per-record) reflects the actual reduction for the majority Standard trip type.
-    \item \textbf{H6:} The CA-DQStream framework's Flink keyed state management (layer\_stats, cluster\_params, drift\_flags) enables stateful, fault-tolerant processing that preserves pipeline accuracy across checkpoint/restart cycles and supports exactly-once semantics for downstream consumers.
-\end{enumerate}
-
-% ================================================
-% 3.9 Chapter Summary
 % ================================================
 \section{Chapter Summary}
+% ================================================
 
-This chapter formalized the research problem based on the NYC Taxi dataset case study. The case study (detailed in Appendix A) identified five categories of data quality problems: completeness (9.1\% NULL rate), validity ($\sim$3.4\% hard rule violations), multivariate anomalies ($\sim$2.9\% via Online Autoencoder), uniqueness (duplicate records), and concept drift (NULL rate increasing over 26 months). Three research gaps were identified: lack of context-aware thresholding, absence of self-monitoring, and batch-oriented frameworks. Five research questions and six hypotheses guide the evaluation in Chapter 6, with RQ5 and H6 addressing the core contribution of 4D context-aware thresholding. The next chapter details the CA-DQStream framework design.
+This chapter formalized the research problem through empirical evidence from the NYC Taxi dataset. Five categories of data quality problems were identified: completeness violations (9.1\%), validity violations (3.4\%), multivariate anomalies (2.9\%), uniqueness violations, and concept drift. Three research gaps were derived from the interaction between empirical findings and the existing literature: context collapse in heterogeneous data, sequential pipeline inefficiency, and single-strategy drift adaptation. Five open research questions (RQ1--RQ5) were formulated, each addressing a specific knowledge gap rather than validating a predetermined solution. These questions guide the design and evaluation of CA-DQStream in subsequent chapters.

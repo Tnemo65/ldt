@@ -24,7 +24,7 @@ mc anonymous set none "${MC_ALIAS}/cadqstream-metrics" 2>/dev/null || true
 
 echo "[minio-init] Creating buckets..."
 
-# ── Flink checkpoints + MLflow artifacts ──
+# ── Flink checkpoints (MinIO S3A) ──
 mc mb "${MC_ALIAS}/cadqstream-checkpoints" --ignore-existing
 
 # ── Flink StreamingFileSink buckets (must match minio_sink.py) ──

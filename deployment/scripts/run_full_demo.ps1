@@ -157,7 +157,6 @@ $services = @(
     @{Name="ldt-minio";                  Desc="MinIO";                   MaxWait=60;  Interval=5}
     @{Name="ldt-cadqstream-metrics";     Desc="cadqstream-metrics";      MaxWait=60;  Interval=5}
     @{Name="ldt-ml-service";            Desc="ML Service (FastAPI)";     MaxWait=60;  Interval=5}
-    @{Name="ldt-mlflow";                Desc="MLflow";                  MaxWait=120; Interval=10}
     @{Name="ldt-stats-writer";          Desc="Stats Writer";            MaxWait=30;  Interval=5}
     @{Name="ldt-action-replay-worker";   Desc="Action Replay Worker";     MaxWait=30;  Interval=5}
 )
@@ -167,7 +166,6 @@ foreach ($svc in $services) {
 }
 
 Wait-ForHttp -Url "http://localhost:8081/overview"  -Desc "Flink REST API"   -MaxWait 180
-Wait-ForHttp -Url "http://localhost:5000/"         -Desc "MLflow"           -MaxWait 60
 
 # =============================================================================
 # PHASE 4: INIT CONTAINERS (Kafka topics, MinIO buckets)
@@ -584,7 +582,6 @@ Write-Host "Flink UI           http://localhost:8081         (no auth)" -Foregro
 Write-Host "Kafka UI           http://localhost:8080         (no auth)" -ForegroundColor White
 Write-Host "Prometheus         http://localhost:9090         (no auth)" -ForegroundColor White
 Write-Host "MinIO Console      http://localhost:9001         minioadmin / minioadmin123" -ForegroundColor White
-Write-Host "MLflow             http://localhost:5000        (no auth)" -ForegroundColor White
 Write-Host "ML Service         http://localhost:8000         FastAPI /docs" -ForegroundColor White
 Write-Host "cadqstream-metrics localhost:9250/metrics        Prometheus scrape" -ForegroundColor White
 Write-Host ""

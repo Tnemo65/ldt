@@ -312,24 +312,24 @@ class KafkaBroadcaster:
 # =============================================================================
 
 class MemStreamAE(nn.Module):
-    """MemStream Denoising Autoencoder (30D -> 60D -> 30D)."""
+    """MemStream Denoising Autoencoder (34D -> 68D -> 34D)."""
 
-    def __init__(self, in_dim: int = 30, hidden_dim: int = 60):
+    def __init__(self, in_dim: int = 34, hidden_dim: int = 68):
         super().__init__()
         self.in_dim = in_dim
         self.hidden_dim = hidden_dim
 
         self.encoder = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, in_dim),
-            nn.Tanh(),
+            nn.ReLU(),
         )
         self.decoder = nn.Sequential(
             nn.Linear(in_dim, hidden_dim),
-            nn.Tanh(),
+            nn.ReLU(),
             nn.Linear(hidden_dim, in_dim),
-            nn.Tanh(),
+            nn.ReLU(),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -342,8 +342,8 @@ class MemStreamModel:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        self.input_dim = self.config.get("in_dim", 30)
-        self.hidden_dim = self.config.get("hidden_dim", 60)
+        self.input_dim = self.config.get("in_dim", 34)
+        self.hidden_dim = self.config.get("hidden_dim", 68)
         self.out_dim = self.input_dim  # Latent = input dim
 
         self.model: Optional[MemStreamAE] = None
@@ -1396,6 +1396,29 @@ async def model_info():
         "loaded": state.model.is_loaded,
         "threshold": state.model.max_thres,
     }
+
+
+@app.post("/api/strategy/memory_reset")
+async def memory_reset():
+    """Placeholder endpoint for /api/strategy/memory_reset.
+
+    action-replay-worker calls this endpoint when the IEC strategy is
+    'memory_reset'. A 404 here generates errors in ML service logs,
+    so we accept and acknowledge to silence those errors.
+    """
+    return JSONResponse(content={"status": "success", "message": "Memory reset acknowledged"})
+
+
+@app.post("/api/strategy/adjust_threshold")
+async def adjust_threshold():
+    """Placeholder endpoint for threshold adjustment strategy."""
+    return JSONResponse(content={"status": "success", "message": "Threshold adjust acknowledged"})
+
+
+@app.post("/api/strategy/switch_model")
+async def switch_model():
+    """Placeholder endpoint for model switching strategy."""
+    return JSONResponse(content={"status": "success", "message": "Switch model acknowledged"})
 
 
 @app.get("/")

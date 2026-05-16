@@ -43,7 +43,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 3, "w": 3, "x": 0, "y": 1 },
+      "gridPos": { "h": 3, "w": 24, "x": 0, "y": 1 },
       "id": 2,
       "options": {
         "colorMode": "value",
@@ -60,284 +60,12 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(kafka_consumer_group_lag{consumergroup=~\"cadqstream.*\"})",
+          "expr": "sum(kafka_consumergroup_lag{consumergroup=~\"cadqstream.*\"})",
           "legendFormat": "Total Lag",
           "refId": "A"
         }
       ],
       "title": "Kafka Consumer Lag",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "Bps"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 3, "y": 1 },
-      "id": 3,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec{topic=\"taxi-nyc-raw\"}[5m]))",
-          "legendFormat": "Events/sec",
-          "refId": "A"
-        }
-      ],
-      "title": "Raw Input Rate",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 6, "y": 1 },
-      "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m]))",
-          "legendFormat": "Records/sec",
-          "refId": "A"
-        }
-      ],
-      "title": "Flink Throughput",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 9, "y": 1 },
-      "id": 5,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "count(flink_jobmanager_job_status{status=\"RUNNING\"})",
-          "legendFormat": "Jobs",
-          "refId": "A"
-        }
-      ],
-      "title": "Flink Jobs",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 12, "y": 1 },
-      "id": 6,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "red", "value": 15 }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 15, "y": 1 },
-      "id": 7,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_operator_KafkaConsumer_records_consumed_total[5m])) / sum(rate(flink_taskmanager_job_task_operator_KafkaProducer_records_send_total[5m])) * 100",
-          "legendFormat": "Anomaly Rate",
-          "refId": "A"
-        }
-      ],
-      "title": "Anomaly Detection Rate",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 18, "y": 1 },
-      "id": 8,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec{topic=\"dq-stream-anomalies\"}[5m]))",
-          "legendFormat": "Anomalies/sec",
-          "refId": "A"
-        }
-      ],
-      "title": "Anomaly Output Rate",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 5 }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 3, "w": 3, "x": 21, "y": 1 },
-      "id": 9,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "cadqstream_iec_drift_detected_total",
-          "legendFormat": "Drift Events",
-          "refId": "A"
-        }
-      ],
-      "title": "IEC Drift Events",
       "type": "stat"
     },
     {
@@ -347,134 +75,6 @@
       "panels": [],
       "title": "Layer 1: Baseline Validation (Kafka Source -> Schema -> Dedup)",
       "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
-      "id": 11,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec{topic=\"taxi-nyc-raw\"}[5m]))",
-          "legendFormat": "Raw Input (taxi-nyc-raw)",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsInPerSecond_sum{task_name=~\".*Source.*\"}[5m]))",
-          "legendFormat": "Flink Source In",
-          "refId": "B"
-        }
-      ],
-      "title": "L1: Raw Event Input Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-      "id": 12,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m]))",
-          "legendFormat": "Output Throughput",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_operator_KafkaProducer_records_send_total[5m]))",
-          "legendFormat": "Kafka Sink Throughput",
-          "refId": "B"
-        }
-      ],
-      "title": "L1: Deduplication & Schema Validation Throughput",
-      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -537,7 +137,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(rate(cadqstream_records_violation_total{type=\"canary\"}[5m])) / sum(rate(cadqstream_records_valid_total{layer=\"L1\"}[5m])) * 100",
+          "expr": "sum(rate(cadqstream_violation_records_total[5m])) / sum(rate(cadqstream_records_valid_total[5m])) * 100",
           "legendFormat": "Canary Violation Rate",
           "refId": "A"
         }
@@ -598,7 +198,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(rate(cadqstream_anomalies_ml_total[5m])) / sum(rate(cadqstream_records_valid_total{layer=\"L2\"}[5m])) * 100",
+          "expr": "sum(rate(cadqstream_anomalies_canary_total[5m])) / sum(rate(cadqstream_records_valid_total[5m])) * 100",
           "legendFormat": "ML Anomaly Rate",
           "refId": "A"
         }
@@ -615,253 +215,12 @@
       "type": "row"
     },
     {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 23 },
-      "id": 17,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsOut{job_name=~\".*source.*\"}[5m])) or sum(rate(flink_taskmanager_job_task_operator_KafkaConsumer_records_consumed_total[5m]))",
-          "legendFormat": "Meta Volume (records/sec)",
-          "refId": "A"
-        }
-      ],
-      "title": "L3: Meta-Metrics Window Volume",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "percent"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 23 },
-      "id": 18,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_numRecordsIn{task_name=~\".*source.*\"}[5m])) - sum(rate(flink_taskmanager_job_task_numRecordsOut{task_name=~\".*source.*\"}[5m]))",
-          "legendFormat": "Dropped Records",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(rate(flink_taskmanager_job_task_backPressuredTimeMsPerSecond{task_name=~\".*\"}[5m]))",
-          "legendFormat": "Backpressure (ms/s)",
-          "refId": "B"
-        }
-      ],
-      "title": "L3: Null Rate & Delta Score",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 23 },
-      "id": 19,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "sum(rate(kafka_server_BrokerTopicMetrics_MessagesInPerSec{topic=\"dq-meta-stream\"}[5m]))",
-          "legendFormat": "Meta Stream Output",
-          "refId": "A"
-        }
-      ],
-      "title": "L3: Meta Stream Output Rate",
-      "type": "timeseries"
-    },
-    {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
       "id": 20,
       "panels": [],
       "title": "Layer 4: IEC (Intelligent Evolution Controller)",
       "type": "row"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 32 },
-      "id": 21,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max", "last"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "cadqstream_iec_drift_detected_total",
-          "legendFormat": "Drifts Detected",
-          "refId": "A"
-        }
-      ],
-      "title": "L4: ADWIN-U Drift Detection",
-      "type": "timeseries"
     },
     {
       "datasource": "Prometheus",
@@ -897,7 +256,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 32 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
       "id": 22,
       "options": {
         "legend": {
@@ -914,88 +273,15 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "cadqstream_iec_decisions_total{strategy=\"retrain_model\"}",
-          "legendFormat": "retrain",
-          "refId": "A"
-        },
-        {
-          "expr": "cadqstream_iec_decisions_total{strategy=\"adjust_threshold\"}",
-          "legendFormat": "adjust_threshold",
-          "refId": "B"
-        },
-        {
-          "expr": "cadqstream_iec_decisions_total{strategy=\"switch_model\"}",
-          "legendFormat": "switch_model",
-          "refId": "C"
-        },
-        {
-          "expr": "cadqstream_iec_decisions_total{strategy=\"do_nothing\"}",
-          "legendFormat": "do_nothing",
-          "refId": "D"
-        }
-      ],
-      "title": "L4: IEC Strategy Execution Distribution",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 20,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 32 },
-      "id": 23,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "pluginVersion": "10.1.0",
-      "targets": [
-        {
-          "expr": "1 - (sum(rate(flink_taskmanager_job_task_idleTimeMsPerSecond[5m])) / (sum(rate(flink_taskmanager_job_task_busyTimeMsPerSecond[5m])) + sum(rate(flink_taskmanager_job_task_idleTimeMsPerSecond[5m])))",
-          "legendFormat": "IEC Decision Confidence (proxy)",
+          "expr": "sum(rate(cadqstream_anomalies_canary_total[5m]))",
+          "legendFormat": "Canary Anomaly Rate",
           "refId": "A"
         }
       ],
-      "title": "L4: IEC Strategy Confidence",
+      "title": "L2: Canary Anomaly Detection Rate",
       "type": "timeseries"
-    },
+    }
+  ],
   "refresh": "15s",
   "schemaVersion": 38,
   "style": "dark",

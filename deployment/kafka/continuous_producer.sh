@@ -1,8 +1,13 @@
 #!/bin/bash
-# Continuous producer wrapper
+# Continuous producer wrapper using continuous_data_simulator.py
+# Reads from local parquet/CSV and loops indefinitely
 while true; do
-    echo "[$(date)] Starting Kafka producer..."
-    python3 /app/fast_producer.py 100 kafka:9092 taxi-nyc-raw || true
-    echo "[$(date)] Producer exited, restarting in 5s..."
+    echo "[$(date)] Starting continuous data simulator..."
+    python3 /app/continuous_data_simulator.py \
+        --input /data/nyc_taxi_300k.parquet \
+        --topic "${TOPIC_RAW:-taxi-nyc-raw-v2}" \
+        --delay 0.05 \
+        || true
+    echo "[$(date)] Simulator exited, restarting in 5s..."
     sleep 5
 done

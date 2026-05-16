@@ -46,6 +46,7 @@ import logging
 import os
 import pickle
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -59,8 +60,13 @@ LOGGER = logging.getLogger('memstream-scoring')
 # Environment & Configuration
 # =============================================================================
 
-# MinIO / S3 configuration
-MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', os.getenv('S3_ENDPOINT', 'http://minio:9000'))
+# MinIO / S3 configuration — normalize endpoint: strip whitespace, ensure http:// prefix
+_MINIO_ENDPOINT_RAW = os.getenv('MINIO_ENDPOINT', os.getenv('S3_ENDPOINT', 'http://minio:9000'))
+_MINIO_ENDPOINT_STRIPPED = _MINIO_ENDPOINT_RAW.strip()
+if _MINIO_ENDPOINT_STRIPPED and not _MINIO_ENDPOINT_STRIPPED.startswith(('http://', 'https://')):
+    MINIO_ENDPOINT = 'http://' + _MINIO_ENDPOINT_STRIPPED
+else:
+    MINIO_ENDPOINT = _MINIO_ENDPOINT_STRIPPED
 MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', os.getenv('AWS_ACCESS_KEY_ID', 'minioadmin'))
 MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', os.getenv('AWS_SECRET_ACCESS_KEY', 'minioadmin'))
 MINIO_BUCKET = os.getenv('MEMSTREAM_MINIO_BUCKET', 'cadqstream-drift')
@@ -106,7 +112,7 @@ DEFAULT_CONFIG = {
     'in_dim': 34,
     'hidden_dim': 68,
     'out_dim': 34,
-    'memory_len': 100000,    # Production scale
+    'memory_len': 50000,    # plan: minimum 50,000
     'k_neighbors': 10,
     'gamma': 0.0,
     'warmup_epochs': 500,    # Production warmup
@@ -177,7 +183,7 @@ def get_context_id_from_record(record: Dict) -> int:
 
     Context cells: (Standard/Special) x (Day/Night) x (Weekday/Weekend)
     - is_special: ratecode > 1
-    - is_night: hour >= 18 or hour < 6
+    - is_night: hour >= 20 or hour < 6
     - is_weekend: dow >= 5
     """
     dt_str = record.get('tpep_pickup_datetime', '')
@@ -193,7 +199,7 @@ def get_context_id_from_record(record: Dict) -> int:
 
     ratecode = float(record.get('RatecodeID', 1))
     is_special = 1 if ratecode > 1 else 0
-    is_night = 1 if (hour >= 18 or hour < 6) else 0
+    is_night = 1 if (hour >= 20 or hour < 6) else 0
     is_weekend = 1 if dow >= 5 else 0
     return (is_special << 2) | (is_night << 1) | is_weekend
 
@@ -238,9 +244,16 @@ def _get_minio_client():
         read_timeout=30.0,
         s3={'addressing_style': 'path'},
     )
+
+    raw_endpoint = MINIO_ENDPOINT.strip()
+    if raw_endpoint and not raw_endpoint.startswith(('http://', 'https://')):
+        endpoint_url = 'http://' + raw_endpoint
+    else:
+        endpoint_url = raw_endpoint
+
     return boto3.client(
         's3',
-        endpoint_url=MINIO_ENDPOINT,
+        endpoint_url=endpoint_url,
         aws_access_key_id=MINIO_ACCESS_KEY,
         aws_secret_access_key=MINIO_SECRET_KEY,
         config=cfg,
@@ -304,11 +317,21 @@ class MemStreamScoringOperator(MapFunction):
         # MinIO client (lazy)
         self._minio_client = None
 
+        # Async checkpoint thread
+        self._checkpoint_pending = False
+
         # Statistics
         self._total_scored = 0
         self._total_anomalies = 0
         self._total_memory_updates = 0
         self._beta_staleness_violations = 0
+
+        # Warmup state
+        self._warmup_complete = False
+        self._warmup_failed = False
+        self._warmup_buffer: List[Dict] = []
+        self._warmup_buffer_limit = 4096
+        self._records_seen = 0
 
         # Flink state descriptor for memory checkpoint
         self._memory_state = None
@@ -334,23 +357,37 @@ class MemStreamScoringOperator(MapFunction):
     def open(self, runtime_context):
         """Initialize MemStream core, load checkpoint, setup Flink state."""
         from src.ml.memstream_core import MemStreamCore, MemStreamConfig, set_determinism
-        from src.features.vectorizer import FeatureVectorizer
+        from src.features.memstream_vectorizer import MemStreamVectorizer
 
         LOGGER.info("[MemStreamScoring] Initializing...")
 
         # Set determinism
         set_determinism(self.config.get('seed', 42))
 
-        # Initialize 34D feature vectorizer
-        self._vectorizer = FeatureVectorizer()
+        # Initialize 34D MemStreamVectorizer
+        self._vectorizer = MemStreamVectorizer()
         LOGGER.info("[MemStreamScoring] Feature vectorizer initialized (34D)")
 
-        # Create MemStream config
+        # Verify dimension compatibility
         cfg = MemStreamConfig()
         cfg.in_dim = self.config.get('in_dim', 34)
         cfg.hidden_dim = self.config.get('hidden_dim', 68)
         cfg.out_dim = self.config.get('out_dim', 34)
-        cfg.memory_len = self.config.get('memory_len', 100000)
+        expected_dim = cfg.in_dim
+        actual_dim = self._vectorizer.num_features
+        if actual_dim != expected_dim:
+            raise ValueError(
+                f"[MemStream] CRITICAL: Vectorizer output {actual_dim}D "
+                f"!= MemStreamCore expected {expected_dim}D. "
+                f"Check vectorizer configuration."
+            )
+        LOGGER.info(
+            f"[MemStreamScoring] Dimension check passed: "
+            f"vectorizer({actual_dim}D) == MemStreamCore({expected_dim}D)"
+        )
+
+        # Create MemStream config
+        cfg.memory_len = self.config.get('memory_len', 50000)
         cfg.warmup_epochs = self.config.get('warmup_epochs', 500)
         cfg.warmup_batch_size = self.config.get('warmup_batch_size', 256)
         cfg.warmup_noise_std = self.config.get('warmup_noise_std', 0.1)
@@ -486,125 +523,252 @@ class MemStreamScoringOperator(MapFunction):
 
         return False
 
-    def _save_checkpoint(self):
-        """Save memory state to MinIO with HMAC verification."""
-        if self._ms_core is None:
+    def _trigger_checkpoint(self):
+        """Capture state snapshot and save async to avoid blocking record processing."""
+        if self._ms_core is None or not self.checkpoint_bucket:
             return
-        if not self.checkpoint_bucket:
+
+        if self._checkpoint_pending:
+            LOGGER.debug("[MemStreamScoring] Checkpoint already pending, skipping")
+            self._checkpoint_counter = 0
             return
 
         try:
             import torch
 
-            # Serialize state
             state = self._ms_core.get_state_dict()
             buf = io.BytesIO()
             torch.save(state, buf, pickle_module=pickle)
             data = buf.getvalue()
 
-            # Compute HMAC
             hmac_hex = hmac.new(
                 MODEL_SIGNING_KEY.encode(),
                 data,
                 hashlib.sha256
             ).hexdigest()
 
-            # Upload state + HMAC
-            key = f"{self.checkpoint_prefix}memstream_memory.pt"
-            hmac_key = f"{key}.hmac"
-
-            client = self._get_minio_client()
-            client.put_object(
-                Bucket=self.checkpoint_bucket,
-                Key=key,
-                Body=data,
-                ContentType='application/octet-stream',
-            )
-            client.put_object(
-                Bucket=self.checkpoint_bucket,
-                Key=hmac_key,
-                Body=hmac_hex.encode('utf-8'),
-                ContentType='text/plain',
-            )
-
-            # Save beta overrides
             beta_overrides = {
                 NEIGHBORHOOD_NAMES[nb_idx]: beta
                 for nb_idx, beta in self._current_betas.items()
                 if beta != self._default_beta
             }
-            if beta_overrides:
-                beta_data = json.dumps(beta_overrides).encode('utf-8')
-                beta_hmac = hmac.new(
-                    MODEL_SIGNING_KEY.encode(),
-                    beta_data,
-                    hashlib.sha256
-                ).hexdigest()
-                beta_key = f"{self.checkpoint_prefix}beta_overrides.json"
-                client.put_object(
-                    Bucket=self.checkpoint_bucket,
-                    Key=beta_key,
-                    Body=beta_data,
-                    ContentType='application/json',
-                )
-                client.put_object(
-                    Bucket=self.checkpoint_bucket,
-                    Key=f"{beta_key}.hmac",
-                    Body=beta_hmac.encode('utf-8'),
-                    ContentType='text/plain',
-                )
+            beta_data = json.dumps(beta_overrides).encode('utf-8') if beta_overrides else None
+            beta_hmac = (
+                hmac.new(MODEL_SIGNING_KEY.encode(), beta_data, hashlib.sha256).hexdigest()
+                if beta_data else None
+            )
 
-            # Update Flink ValueState
+            ckpt_key = f"{self.checkpoint_prefix}memstream_memory.pt"
+            hmac_key = f"{ckpt_key}.hmac"
+            beta_key = f"{self.checkpoint_prefix}beta_overrides.json"
+            beta_hmac_key = f"{beta_key}.hmac"
+
+            self._checkpoint_pending = True
+
+            def _async_save():
+                try:
+                    client = self._get_minio_client()
+                    client.put_object(
+                        Bucket=self.checkpoint_bucket, Key=ckpt_key,
+                        Body=data, ContentType='application/octet-stream')
+                    client.put_object(
+                        Bucket=self.checkpoint_bucket, Key=hmac_key,
+                        Body=hmac_hex.encode('utf-8'), ContentType='text/plain')
+                    if beta_data:
+                        client.put_object(
+                            Bucket=self.checkpoint_bucket, Key=beta_key,
+                            Body=beta_data, ContentType='application/json')
+                        client.put_object(
+                            Bucket=self.checkpoint_bucket, Key=beta_hmac_key,
+                            Body=beta_hmac.encode('utf-8'), ContentType='text/plain')
+                    LOGGER.info("[MemStreamScoring] Checkpoint saved to MinIO")
+                except Exception as e:
+                    LOGGER.error("[MemStreamScoring] Async checkpoint failed: %s", e)
+                finally:
+                    self._checkpoint_pending = False
+                    self._checkpoint_counter = 0
+
+            t = threading.Thread(target=_async_save, daemon=True)
+            t.start()
+            LOGGER.debug("[MemStreamScoring] Checkpoint thread started")
+
             if self._memory_state is not None:
                 self._memory_state.update(data)
 
-            LOGGER.info("[MemStreamScoring] Checkpoint saved to MinIO")
+        except Exception as e:
+            LOGGER.error("[MemStreamScoring] Checkpoint trigger failed: %s", e)
             self._checkpoint_counter = 0
 
+    def _save_checkpoint(self):
+        self._trigger_checkpoint()
+
+    def _try_warmup(self) -> bool:
+        """Attempt MemStream warmup with buffered records.
+
+        Returns True if warmup succeeded, False otherwise.
+        After a successful warmup, buffered records are discarded (they were
+        used only for training, not scoring — warmup trains on a fixed dataset).
+        After a failed warmup, the buffer is cleared so we stop trying.
+        """
+        if self._warmup_complete or self._warmup_failed:
+            return not self._warmup_failed
+
+        if len(self._warmup_buffer) < self._warmup_buffer_limit:
+            return False
+
+        features_list = []
+        nb_ids = []
+        hours = []
+        dows = []
+        ratecodes = []
+
+        for rec in self._warmup_buffer:
+            try:
+                f = self._vectorizer.transform(rec)
+                if f is None:
+                    continue
+                features_list.append(f)
+                nb_name, nb_idx = get_neighborhood(rec)
+                nb_ids.append(nb_idx)
+                dt_str = rec.get('tpep_pickup_datetime', '')
+                h, d = 12, 0
+                if dt_str:
+                    try:
+                        dt = datetime.fromisoformat(dt_str.replace('/', '-'))
+                        h, d = dt.hour, dt.weekday()
+                    except Exception:
+                        pass
+                hours.append(h)
+                dows.append(d)
+                ratecodes.append(extract_ratecode_from_record(rec))
+            except Exception:
+                continue
+
+        if len(features_list) < self._warmup_buffer_limit:
+            self._warmup_failed = True
+            self._warmup_buffer.clear()
+            LOGGER.warning(
+                "[MemStreamScoring] Warmup: only %d/%d valid features after vectorization",
+                len(features_list), self._warmup_buffer_limit
+            )
+            return False
+
+        X = np.array(features_list, dtype=np.float32)
+        nb_arr = np.array(nb_ids, dtype=np.int64)
+        LOGGER.info(
+            "[MemStreamScoring] Starting warmup with %d records (limit=%d)",
+            len(X), self._warmup_buffer_limit
+        )
+
+        try:
+            self._ms_core.warmup(X, neighborhood_ids=nb_arr)
+            self._warmup_complete = True
+            self._warmup_buffer.clear()
+            LOGGER.info("[MemStreamScoring] Warmup COMPLETE — ML scoring ENABLED")
+            return True
         except Exception as e:
-            LOGGER.error("[MemStreamScoring] Failed to save checkpoint: %s", e)
+            self._warmup_failed = True
+            self._warmup_buffer.clear()
+            LOGGER.error(
+                "[MemStreamScoring] Warmup FAILED (%s) — falling back to degraded scoring. "
+                "Require >= %d clean records.",
+                e, self._warmup_buffer_limit
+            )
+            return False
 
     def map(self, value):
         """Score a record using MemStream with ContextBeta ratio method.
 
-        CRITICAL: Extracts ACTUAL hour/dow from record — NOT hardcoded.
+        During warmup (<= 4096 records): buffer for training, pass through with
+        default score and is_warmup=True. After warmup: real inference, pass
+        through with actual score and is_warmup=False.
         """
+        self._records_seen += 1
+
         if value is None:
-            return None
+            return {
+                '_dlq': True,
+                '_dlq_reason': 'null_input',
+                '_dlq_category': 'VALIDATION_ERROR',
+                '_dlq_operator': 'MemStreamScoringOperator',
+                'trip_id': 'dlq_null',
+                'tpep_pickup_datetime': '',
+            }
 
+        nb_name, nb_idx = get_neighborhood(value) if isinstance(value, dict) else ('unknown', 9)
+        dt_str = value.get('tpep_pickup_datetime', '') if isinstance(value, dict) else ''
+        hour, dow = 12, 0
+        if dt_str:
+            try:
+                dt = datetime.fromisoformat(dt_str.replace('/', '-'))
+                hour, dow = dt.hour, dt.weekday()
+            except Exception:
+                pass
+
+        if not self._warmup_complete:
+            self._warmup_buffer.append(value)
+            return {
+                **value,
+                'anomaly_score': 0.0,
+                'threshold': 1.0,
+                'is_anomaly': False,
+                'is_warmup': True,
+                'context_key': nb_name,
+                'neighborhood': nb_name,
+                'neighborhood_idx': nb_idx,
+                'context_id': get_context_id_from_record(value) if isinstance(value, dict) else 0,
+                'ml_model': 'memstream_v10',
+                'scoring_latency_ms': 0.0,
+                'beta_staleness_violations': self._beta_staleness_violations,
+                'pickup_hour': hour,
+                'pickup_dow': dow,
+            }
+
+        # Warmup is complete — attempt warmup if buffer is full
+        if not self._warmup_complete and not self._warmup_failed:
+            self._try_warmup()
+            # If warmup just succeeded, we are now in ML mode
+            # If warmup failed, we are in degraded mode but warmup_complete stays False
+            # Either way the record must pass through
+            if self._warmup_complete:
+                # Warmup succeeded on the last buffered record; score this one normally
+                pass
+            else:
+                # Warmup still not ready or failed; score in degraded mode
+                return {
+                    **value,
+                    'anomaly_score': 0.5,
+                    'threshold': 1.0,
+                    'is_anomaly': False,
+                    'is_warmup': False,
+                    'context_key': nb_name,
+                    'neighborhood': nb_name,
+                    'neighborhood_idx': nb_idx,
+                    'context_id': get_context_id_from_record(value) if isinstance(value, dict) else 0,
+                    'ml_model': 'memstream_v10',
+                    'scoring_latency_ms': -1.0,
+                    'beta_staleness_violations': self._beta_staleness_violations,
+                    'pickup_hour': hour,
+                    'pickup_dow': dow,
+                    'scoring_error': 'warmup_incomplete',
+                }
+
+        # ── Normal scoring path (warmup complete) ───────────────────────────
         try:
-            # ── Extract actual hour/dow from record (NOT hardcoded) ──────────
-            dt_str = value.get('tpep_pickup_datetime', '')
-            hour = 12
-            dow = 0
-            if dt_str:
-                try:
-                    dt = datetime.fromisoformat(dt_str.replace('/', '-'))
-                    hour = dt.hour
-                    dow = dt.weekday()
-                except Exception:
-                    pass
-
             # ── Poll MinIO for updated beta (with cache) ────────────────────
             if self._ms_core is not None:
-                neighborhood_name, neighborhood_idx = get_neighborhood(value)
-                cache_key = f"{neighborhood_idx}"
+                cache_key = f"{nb_idx}"
 
                 now = time.time()
                 cache_hit = False
                 if cache_key in self._beta_cache:
                     cached_beta, cache_ts = self._beta_cache[cache_key]
                     if now - cache_ts < BETA_CACHE_TTL_SECONDS:
-                        if cached_beta != self._current_betas.get(
-                            neighborhood_idx, self._default_beta
-                        ):
-                            self._ms_core.set_beta_for_neighborhood(
-                                neighborhood_idx, cached_beta
-                            )
-                            self._current_betas[neighborhood_idx] = cached_beta
+                        if cached_beta != self._current_betas.get(nb_idx, self._default_beta):
+                            self._ms_core.set_beta_for_neighborhood(nb_idx, cached_beta)
+                            self._current_betas[nb_idx] = cached_beta
                         cache_hit = True
 
-                # Track staleness
                 if cache_key in self._beta_last_poll:
                     staleness = now - self._beta_last_poll[cache_key]
                     if staleness > BETA_MAX_STALENESS_SECONDS:
@@ -612,24 +776,23 @@ class MemStreamScoringOperator(MapFunction):
 
                 if not cache_hit:
                     self._beta_last_poll[cache_key] = now
-                    self._poll_beta_from_minio(neighborhood_name, neighborhood_idx)
+                    self._poll_beta_from_minio(nb_name, nb_idx)
 
-            # ── Extract features (34D) ──────────────────────────────────────
+            # ── Extract features (34D) ─────────────────────────────────────
             features = self._vectorizer.transform(value)
             if features is None:
-                return self._error_result(value, 'feature_extraction_failed')
+                return self._error_result(value, nb_name, nb_idx, 'feature_extraction_failed')
 
             # ── Extract temporal + ratecode from record ─────────────────────
-            neighborhood_name, neighborhood_idx = get_neighborhood(value)
             context_id = get_context_id_from_record(value)
             ratecode = extract_ratecode_from_record(value)
 
-            # ── Score with MemStream (using ACTUAL hour/dow) ───────────────
+            # ── Score with MemStream ────────────────────────────────────────
             score = self._ms_core.score_one(
                 features,
-                neighborhood_id=neighborhood_idx,
-                hour=hour,      # ACTUAL extracted hour
-                dow=dow,        # ACTUAL extracted dow
+                neighborhood_id=nb_idx,
+                hour=hour,
+                dow=dow,
                 ratecode=ratecode
             )
 
@@ -645,9 +808,9 @@ class MemStreamScoringOperator(MapFunction):
             if not is_anomaly:
                 self._ms_core.memory_update(
                     features,
-                    neighborhood_id=neighborhood_idx,
-                    hour=hour,    # ACTUAL extracted hour
-                    dow=dow,      # ACTUAL extracted dow
+                    neighborhood_id=nb_idx,
+                    hour=hour,
+                    dow=dow,
                     ratecode=ratecode
                 )
                 self._total_memory_updates += 1
@@ -657,30 +820,26 @@ class MemStreamScoringOperator(MapFunction):
             if self._checkpoint_counter >= MEMORY_CHECKPOINT_INTERVAL:
                 self._save_checkpoint()
 
-            # ── Build result ─────────────────────────────────────────────────
             return {
                 **value,
                 'anomaly_score': float(score),
                 'threshold': 1.0,
                 'is_anomaly': bool(is_anomaly),
-                'context_key': neighborhood_name,
-                'neighborhood': neighborhood_name,
-                'neighborhood_idx': neighborhood_idx,
+                'is_warmup': False,
+                'context_key': nb_name,
+                'neighborhood': nb_name,
+                'neighborhood_idx': nb_idx,
                 'context_id': context_id,
                 'ml_model': 'memstream_v10',
                 'scoring_latency_ms': 0.0,
                 'beta_staleness_seconds': self._beta_staleness_violations,
-                'pickup_hour': hour,     # Include actual hour for downstream
-                'pickup_dow': dow,       # Include actual dow for downstream
+                'pickup_hour': hour,
+                'pickup_dow': dow,
             }
 
         except Exception as e:
             LOGGER.error("[MemStreamScoring] Error scoring record: %s", e)
-            try:
-                err_nb_name, err_nb_idx = get_neighborhood(value)
-            except Exception:
-                err_nb_name, err_nb_idx = 'unknown', 9
-            return self._error_result(value, err_nb_name, err_nb_idx, str(e))
+            return self._error_result(value, nb_name, nb_idx, str(e))
 
     def _poll_beta_from_minio(
         self,
@@ -742,10 +901,11 @@ class MemStreamScoringOperator(MapFunction):
         error_msg: str
     ):
         return {
-            **(value or {}),
+            **value,
             'anomaly_score': 0.5,
             'threshold': 1.0,
             'is_anomaly': False,
+            'is_warmup': self._warmup_complete,
             'context_key': neighborhood_name,
             'neighborhood': neighborhood_name,
             'neighborhood_idx': neighborhood_idx,
@@ -763,6 +923,11 @@ class MemStreamScoringOperator(MapFunction):
             'checkpoint_counter': self._checkpoint_counter,
             'anomaly_rate': self._total_anomalies / max(self._total_scored, 1),
             'beta_staleness_violations': self._beta_staleness_violations,
+            'warmup_complete': self._warmup_complete,
+            'warmup_failed': self._warmup_failed,
+            'warmup_buffer_size': len(self._warmup_buffer),
+            'warmup_buffer_limit': self._warmup_buffer_limit,
+            'records_seen': self._records_seen,
             'current_betas': {
                 NEIGHBORHOOD_NAMES[nb]: f"{beta:.4f}"
                 for nb, beta in self._current_betas.items()
@@ -773,8 +938,17 @@ class MemStreamScoringOperator(MapFunction):
         if self._ms_core is not None:
             self._save_checkpoint()
             LOGGER.info(
-                "[MemStreamScoring] Closed. Scored: %s, Anomalies: %s, "
-                "Memory updates: %s, Beta staleness violations: %s",
-                self._total_scored, self._total_anomalies,
-                self._total_memory_updates, self._beta_staleness_violations
+                "[MemStreamScoring] Closed. Records: %d, Scored: %d, Anomalies: %d, "
+                "Memory updates: %d, Beta staleness violations: %d, "
+                "Warmup: complete=%s failed=%s buffer=%d/%d",
+                self._records_seen, self._total_scored, self._total_anomalies,
+                self._total_memory_updates, self._beta_staleness_violations,
+                self._warmup_complete, self._warmup_failed,
+                len(self._warmup_buffer), self._warmup_buffer_limit
+            )
+        else:
+            LOGGER.info(
+                "[MemStreamScoring] Closed. Records: %d, Warmup: complete=%s buffer=%d/%d",
+                self._records_seen, self._warmup_complete,
+                len(self._warmup_buffer), self._warmup_buffer_limit
             )

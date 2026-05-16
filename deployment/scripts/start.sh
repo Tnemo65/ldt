@@ -42,21 +42,20 @@ if command -v docker-compose &> /dev/null; then
     docker-compose -f "$DEPLOYMENT_DIR/docker-compose.yml" down -v --remove-orphans 2>/dev/null || true
 fi
 
-log_info "Stopping all running containers..."
-docker stop $(docker ps -q) 2>/dev/null || true
+log_info "Stopping CA-DQStream containers..."
+docker stop $(docker ps -q --filter "name=ldt-") 2>/dev/null || true
 
-log_info "Removing all containers..."
-docker rm -f $(docker ps -aq) 2>/dev/null || true
+log_info "Removing CA-DQStream containers..."
+docker rm -f $(docker ps -aq --filter "name=ldt-") 2>/dev/null || true
 
-log_info "Removing old networks..."
+log_info "Removing CA-DQStream networks..."
 docker network rm cadqstream-net 2>/dev/null || true
 docker network rm ldt_cadqstream-net 2>/dev/null || true
 docker network rm deployment_cadqstream-net 2>/dev/null || true
 docker network rm deployment-cadqstream-net 2>/dev/null || true
-docker network prune -f 2>/dev/null || true
 
-log_info "Pruning Docker system (images, volumes, build cache)..."
-docker system prune -af --volumes 2>/dev/null || true
+log_info "Pruning unused Docker resources (images, build cache only)..."
+docker image prune -af 2>/dev/null || true
 
 log_ok "Docker reset complete."
 
@@ -64,8 +63,8 @@ log_ok "Docker reset complete."
 # STEP 0b: Verify ports are free
 # ═══════════════════════════════════════════════════════════════════════════
 log_step "STEP 0b: Verifying required ports are available..."
-REQUIRED_PORTS=(2181 9092 8081 8080 8082 3000 9090 9100 9308 9000 9001 5000)
-PORT_NAMES=("Zookeeper" "Kafka" "Flink UI" "Kafka UI" "Schema Registry" "Grafana" "Prometheus" "Node Exporter" "Kafka Exporter" "MinIO API" "MinIO Console" "MLflow")
+REQUIRED_PORTS=(2181 9092 8081 8080 8082 3000 9090 9100 9308 9000 9001)
+PORT_NAMES=("Zookeeper" "Kafka" "Flink UI" "Kafka UI" "Schema Registry" "Grafana" "Prometheus" "Node Exporter" "Kafka Exporter" "MinIO API" "MinIO Console")
 
 for i in "${!REQUIRED_PORTS[@]}"; do
     port="${REQUIRED_PORTS[$i]}"
@@ -241,10 +240,6 @@ else
     log_warn "Flink REST API may still be starting — check http://localhost:8081 manually"
 fi
 
-# Start MLflow
-docker compose -f "$DEPLOYMENT_DIR/docker-compose.yml" up -d mlflow
-log_info "MLflow started"
-
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 9: Initialize Flink Artifacts
 # ═══════════════════════════════════════════════════════════════════════════
@@ -311,7 +306,6 @@ echo "  Flink UI             http://localhost:8081                   (no auth)"
 echo "  Grafana              http://localhost:3000                    admin / \${GRAFANA_PASSWORD}"
 echo "  Prometheus           http://localhost:9090                   (no auth)"
 echo "  MinIO Console        http://localhost:9001                    \${MINIO_ROOT_USER} / \${MINIO_ROOT_PASSWORD}"
-echo "  MLflow               http://localhost:5000                   (no auth)"
 echo ""
 echo "  ${CYAN}Data Connections${NC}"
 echo "  ─────────────────────────────────────────────────────────────────────────────────"

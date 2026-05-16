@@ -314,18 +314,6 @@ groups:
           summary: "MinIO is down"
           description: "MinIO object storage has been unreachable for 2 minutes."
 
-      # MLflow Down
-      - alert: MLflowDown
-        expr: up{job="mlflow"} == 0
-        for: 5m
-        labels:
-          severity: warning
-          service: mlflow
-          component: tracking
-        annotations:
-          summary: "MLflow is down"
-          description: "MLflow tracking server has been unreachable for 5 minutes."
-
   - name: memstream_alerts
     interval: 30s
     rules:

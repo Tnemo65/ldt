@@ -41,6 +41,10 @@ from kafka.errors import KafkaError
 
 DEFAULT_BOOTSTRAP = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
 BASE_ANOMALY_RATE = float(os.getenv('ANOMALY_RATE', '0.08'))
+# FIX: Bounded rate limiting to prevent unbounded accumulation and consumer lag
+# Set to 0 for unlimited (as-fast-as-possible). Recommended: 500-1000 records/sec.
+PRODUCE_RATE_LIMIT = int(os.getenv('KAFKA_PRODUCE_RATE_LIMIT', '0'))  # 0 = unlimited
+PRODUCE_SLEEP_INTERVAL = 1.0 / float(os.getenv('KAFKA_PRODUCE_INTERVAL', '1.0')) if PRODUCE_RATE_LIMIT > 0 else 0.0
 
 NYC_ZONE_MIN, NYC_ZONE_MAX = 1, 263
 
@@ -252,7 +256,7 @@ def create_producer(bootstrap):
             acks='all',
             retries=3,
             max_in_flight_requests_per_connection=5,
-            compression_type='gzip',
+            compression_type='lz4',
             linger_ms=5,
             batch_size=65536,
         )
@@ -265,7 +269,7 @@ def create_producer(bootstrap):
 # ─── Mode: Continuous ─────────────────────────────────────────────────────────
 
 def run_continuous(bootstrap, anomaly_rate, run_forever=True, max_records=None,
-                    raw_topic='taxi-nyc-raw', violation_topic='dq-hard-rule-violations'):
+                    raw_topic=os.getenv('TOPIC_RAW', 'taxi-nyc-raw-v2'), violation_topic='dq-hard-rule-violations'):
     """Send records continuously, injecting anomalies at anomaly_rate."""
     print(f"[producer] Starting continuous mode (rate={anomaly_rate:.1%})")
     producer = create_producer(bootstrap)
@@ -318,6 +322,10 @@ def run_continuous(bootstrap, anomaly_rate, run_forever=True, max_records=None,
                   f"anomalies: {metrics.anomalies_sent:,} ({metrics.anomalies_sent/max(1,counter[0]):.1%})")
             last_report = now
 
+        # FIX: Bounded rate limiting to prevent unbounded Kafka accumulation
+        if PRODUCE_RATE_LIMIT > 0:
+            time.sleep(PRODUCE_SLEEP_INTERVAL)
+
     producer.flush()
     producer.close()
     metrics.emit()
@@ -329,7 +337,7 @@ def run_continuous(bootstrap, anomaly_rate, run_forever=True, max_records=None,
 # ─── Mode: Burst ───────────────────────────────────────────────────────────────
 
 def run_burst(bootstrap, burst_count=200, normal_before=500, normal_after=500,
-              raw_topic='taxi-nyc-raw', violation_topic='dq-hard-rule-violations'):
+              raw_topic=os.getenv('TOPIC_RAW', 'taxi-nyc-raw-v2'), violation_topic='dq-hard-rule-violations'):
     """Send normal records, then a burst of anomalies, then more normal records."""
     print(f"[producer] Starting burst mode: {normal_before} normal, {burst_count} anomaly burst, {normal_after} normal")
     producer = create_producer(bootstrap)
@@ -371,7 +379,7 @@ def run_burst(bootstrap, burst_count=200, normal_before=500, normal_after=500,
 
 def run_drift_inject(bootstrap, base_fare=15.0, drift_multiplier=10.0,
                      drift_start_record=1000, drift_duration=300,
-                     raw_topic='taxi-nyc-raw'):
+                     raw_topic=os.getenv('TOPIC_RAW', 'taxi-nyc-raw-v2')):
     """Inject a drift spike: 10x fare increase for a window of records."""
     print(f"[producer] Starting drift inject mode: base_fare={base_fare}, "
           f"drift_start={drift_start_record}, drift_multiplier={drift_multiplier}x")
@@ -429,12 +437,17 @@ def main():
                         help=f'Base anomaly injection rate 0.0-1.0 (default: {BASE_ANOMALY_RATE})')
     parser.add_argument('--records', type=int, default=None,
                         help='Max records for continuous mode (default: unlimited)')
-    parser.add_argument('--raw-topic', default='taxi-nyc-raw',
-                        help='Raw data topic (default: taxi-nyc-raw)')
+    parser.add_argument('--raw-topic', default=os.getenv('TOPIC_RAW', 'taxi-nyc-raw-v2'),
+                        help=f'Raw data topic (default: taxi-nyc-raw-v2)')
     parser.add_argument('--violation-topic', default='dq-hard-rule-violations',
                         help='Violation topic (default: dq-hard-rule-violations)')
 
     args = parser.parse_args()
+
+    if PRODUCE_RATE_LIMIT > 0:
+        print(f"[producer] Rate limiting: max {PRODUCE_RATE_LIMIT} records/sec (KAFKA_PRODUCE_RATE_LIMIT set)")
+    else:
+        print(f"[producer] Rate limiting: DISABLED (unlimited, KAFKA_PRODUCE_RATE_LIMIT=0 or unset)")
 
     print(f"[producer] Bootstrap: {args.bootstrap}")
     print(f"[producer] Mode: {args.mode}")

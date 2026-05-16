@@ -101,7 +101,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(kafka_consumer_group_lag)",
+          "expr": "sum(kafka_consumergroup_lag)",
           "legendFormat": "Total Lag",
           "refId": "A"
         }
@@ -479,7 +479,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(kafka_consumer_group_lag) by (consumergroup, topic)",
+          "expr": "sum(kafka_consumergroup_lag) by (consumergroup, topic)",
           "legendFormat": "{{consumergroup}} / {{topic}}",
           "refId": "A"
         }
@@ -538,7 +538,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(kafka_consumer_group_current_offset) by (consumergroup, topic)",
+          "expr": "sum(kafka_consumergroup_current_offset) by (consumergroup, topic)",
           "legendFormat": "{{consumergroup}} / {{topic}}",
           "refId": "A"
         }

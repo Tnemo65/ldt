@@ -103,9 +103,11 @@ scrape_configs:
   # Cadqstream Pipeline Application Metrics (custom cadqstream_* metrics)
   # Scraped from cadqstream-metrics service (port 9250) which aggregates
   # HTTP POSTs from the Flink pipeline and exposes them for Prometheus.
+  # ROOT CAUSE FIX: Removed bearer_token — the /metrics endpoint is public.
+  # Previous bearer_token caused 401/403 errors and empty scrape results.
   - job_name: 'cadqstream-app'
     static_configs:
-      - targets: ['ldt-cadqstream-metrics:9250']
+      - targets: ['cadqstream-metrics:9250']
     metrics_path: /metrics
     scrape_interval: 15s
     scrape_timeout: 10s

@@ -34,8 +34,6 @@ Kafka's retention mechanism stores events durably for as long as needed (configu
 
 The Kafka Streams API \citep{kafkastreams2024} enables implementing stream processing applications and microservices with higher-level functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Kafka Streams partitions data for processing using the same partitioning as Kafka's storage layer, enabling data locality, elasticity, scalability, high performance, and fault tolerance.
 
-In the context of the CA-DQStream framework, Kafka serves as the distributed event streaming backbone. NYC TLC Parquet files are ingested via Kafka Producer into the \texttt{taxi-nyc-raw} topic, and the six output/meta topics (\texttt{dq-schema-violations}, \texttt{dq-hard-rule-violations}, \texttt{dq-if-anomalies}, \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}, and \texttt{if-model-updates}) form the streaming pipeline. The Kafka topics and consumer groups configuration is illustrated in Chapter 5, Figure~\ref{fig:kafka_topics_ui_architect}.
-
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.7\linewidth]{figs/kafka-streams-overview-v26.jpg}}
@@ -70,7 +68,7 @@ The Flink architecture is built around four critical concepts \citep{flinkdocs20
     \item \textbf{Stateful stream processing:} Flink operations can be stateful---how one event is handled can depend on the accumulated effect of all events that came before it. A Flink application running in parallel is effectively a sharded key-value store: each parallel instance of a stateful operator is responsible for handling events for a specific group of keys, with state kept locally for high throughput and low latency.
 \end{itemize}
 
-Flink provides exactly-once state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies. The Flink Web UI displaying the CA-DQStream job execution, task status, and task manager metrics is illustrated in Chapter 5, Figure~\ref{fig:flink_job_execution}.
+Flink provides exactly-once state consistency through a combination of state snapshots (checkpoints) and stream replay. These snapshots capture the entire state of the distributed pipeline---recording offsets into input queues as well as state throughout the job graph. When a failure occurs, sources are rewound, state is restored, and processing resumes. Flink's asynchronous and incremental checkpointing algorithm ensures minimal impact on processing latencies.
 
 Flink supports both \textit{unbounded streams} (continuous, no defined end, must be continuously processed) and \textit{bounded streams} (batch processing with a defined start and end). Bounded streams are internally processed by algorithms and data structures specifically designed for fixed-size datasets, yielding excellent performance. This makes Flink a unified batch-stream processing engine.
 
@@ -117,7 +115,7 @@ The essential MLOps system components are:
     \item \textbf{Monitoring:} Production model performance, data drift, concept drift detection.
 \end{itemize}
 
-MLflow \citep{mlflow2024} is the industry-standard open-source platform for MLOps, providing experiment tracking, model versioning, model registry, and serving capabilities. CA-DQStream uses MLflow for experiment tracking and model lifecycle management.
+MLflow \citep{mlflow2024} is the industry-standard open-source platform for MLOps, providing experiment tracking, model versioning, model registry, and serving capabilities for ML system lifecycle management.
 
 \subsection{MLOps Maturity Levels}
 
@@ -129,7 +127,7 @@ The MLOps maturity model \citep{googlemlops2024} defines three progressive level
     \item \textbf{Level 2 (Automated ML with CI/CD):} The ML pipeline is automated with a robust CI/CD system. Data scientists can rapidly explore new features, algorithms, and model architectures. The system automatically builds, tests, and deploys new pipeline components. This level enables rapid iteration and production-grade reliability.
 \end{itemize}
 
-CA-DQStream targets MLOps Level 2, with automated ML training triggered by ADWIN drift detection, CI/CD via containerized deployment, experiment tracking with MLflow, and continuous monitoring of model performance in production.
+CA-DQStream targets MLOps Level 2, as detailed in Chapter 4.
 
 % ================================================
 % 1.4 DAMA-DMBOK Data Quality Dimensions
@@ -147,88 +145,10 @@ The Data Management Association (DAMA) and the Data Management Body of Knowledge
     \item \textbf{Uniqueness:} No duplicate records exist. Detected through key-based deduplication.
 \end{enumerate}
 
-CA-DQStream addresses all six dimensions through its layered architecture, as detailed in Chapter 3.
+CA-DQStream addresses all six dimensions through its layered architecture, as detailed in Chapter 4.
 
-% ================================================
-% 1.5 Related Works
-% ================================================
-\section{Related Works}
-
-\subsection{Context-Aware Data Quality}
-
-\textbf{Foundational Context-Aware Computing:} The concept of context-awareness originates from \citep{dey2001understanding}, which defines context as any information that can be used to characterize the situation of entities. This foundational work established that context includes not just the data itself, but the circumstances under which data was collected and will be used---a principle directly applicable to data quality thresholding.
-
-\textbf{Context Modeling:} Prior work on context-aware DQ includes systematic literature reviews \citep{contextdq2022} that identify context as a critical but under-defined concept in DQ management. While practitioners intuitively understand that data quality thresholds vary by context (e.g., ``a \$50 fare is high \emph{for a standard trip} but normal \emph{for an airport trip}''), formal mathematical models for context-aware thresholding in streaming systems are scarce.
-
-\textbf{Context Dimensions:} Research on multi-dimensional context modeling in data quality has explored spatial context (location-dependent thresholds), temporal context (time-of-day, seasonality), and categorical context (entity types, transaction categories). However, these approaches typically use \textbf{manual threshold specification} per context cell or \textbf{separate models per context}, leading to scalability and maintenance challenges. CA-DQStream's 4D threshold matrix ($7 \times 4 \times 3 \times 7 = 588$ cells) with automatic baseline computation and fallback strategy addresses these limitations.
-
-\textbf{Threshold Adaptation:} Traditional DQ systems use fixed global thresholds that require manual tuning and become stale as data distributions evolve. Recent work on adaptive thresholding has explored percentile-based methods and statistical process control, but these approaches still collapse heterogeneous data into a single threshold. CA-DQStream's contribution is the integration of \textbf{multi-dimensional context with automated threshold computation} ($\mu_{\text{cell}} + 2\sigma_{\text{cell}}$) and intelligent fallback for sparse cells.
-
-\textbf{Gap:} No existing streaming DQ framework combines (1) multi-dimensional context-aware thresholding, (2) automated threshold computation from training data, and (3) drift-aware threshold recalibration. CA-DQStream fills this gap with the 4D context-aware threshold matrix that significantly reduces False Positive Rate compared to baseline methods (detailed benchmark results in Chapter 6). The 4D Context-Aware thresholding combined with adaptive ML inference achieves higher precision in distinguishing genuine anomalies from legitimate contextual outliers.
-
-\textbf{Recent Streaming DQ Frameworks:} While batch-oriented DQ frameworks (Great Expectations, AWS Deequ, Soda Core) have dominated the landscape, recent works have extended DQ monitoring to streaming contexts. Stream DaQ (Papastergios \& Gounaris) employs continuous windowing mechanisms with dynamic constraint adaptation. Grab's Coban system uses FlinkSQL for real-time semantic validation through Kafka stream contracts. Rapidash (Liu et al., 2024) addresses complex multi-record violations using spatial indexing. MemStream utilizes memory-based architecture for streaming anomaly detection. CA-DQStream distinguishes itself through multi-dimensional 4D Context-Aware modeling combined with adaptive ML inference and an Intelligent Evolution Controller for continuous model adaptation.
-
-\subsection{Rendezvous and Fork-Join Patterns}
-
-\textbf{Stream Processing Architectures:} Traditional streaming data quality pipelines use \textbf{linear (sequential) architectures} where records flow through validation stages in series: Schema $\to$ Rules $\to$ ML $\to$ Sink. This design suffers from latency accumulation (each stage adds delay) and cascading failure (downstream failure blocks upstream).
-
-\textbf{Fork-Join Parallelism:} The \textbf{Rendezvous pattern} (also known as fork-join or branch-and-merge) has been studied in distributed systems and stream processing for workload parallelization. The pattern splits a stream into parallel branches, processes them independently, and merges results at a synchronization point (rendezvous). Prior work has demonstrated latency reduction and throughput improvement in general stream processing, but not specifically for data quality validation.
-
-\textbf{Application to DQ:} CA-DQStream applies Rendezvous to data quality validation by forking the stream into a \textbf{Canary branch} (fast rule-based checks) and a \textbf{Complex branch} (slow ML-based scoring). This design enables:
-\begin{itemize}
-    \item \textbf{Early exit optimization:} 3.4\% of Schema-passing records (89,230 records) bypass ML scoring; combined with 10.1\% Schema pre-filtering, 13.5\% of total records avoid the Complex branch
-    \item \textbf{Parallel execution:} Clean records are validated by both branches simultaneously
-    \item \textbf{Graceful degradation:} System continues with Canary alone if Complex fails
-\end{itemize}
-
-Experiment 7 validates latency reduction and throughput improvement through early exit optimization and parallel execution compared to linear pipelines.
-
-\textbf{Gap:} No existing DQ framework uses Rendezvous architecture for validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use sequential processing. CA-DQStream applies fork-join parallelism adapted from distributed stream processing paradigms (Flink, Spark Streaming) to the specific domain of data quality validation. While fork-join patterns have been used in general stream processing (e.g., Kappa/Lambda architectures, Grab's Coban system), CA-DQStream is, to our knowledge, the first to apply this pattern specifically to heterogeneous DQ validation stages combining schema checks, business rules, context-aware thresholds, and ML-based anomaly detection within a unified rendezvous architecture.
-
-\subsection{Drift Detection}
-
-Concept drift detection is well-studied in machine learning \citep{gama2014survey, lu2018learning}. \textbf{ADWIN (Adaptive Windowing)} \citep{bifet2007learning, adwin2025} is a state-of-the-art drift detection algorithm. ADWIN maintains a variable-length window $W$ of recent observations and adaptively splits it into two sub-windows $W_0$ (older) and $W_1$ (newer). At each step, ADWIN tests whether the means of $W_0$ and $W_1$ differ by more than a threshold $\epsilon_{\text{cut}}$:
-
-\begin{equation}
-|\hat{\mu}_{W_0} - \hat{\mu}_{W_1}| \geq \epsilon_{\text{cut}}, \quad \text{where } \epsilon_{\text{cut}} = \sqrt{\frac{1}{2m} \cdot \ln \frac{4n}{\delta}}
-\end{equation}
-
-where $n = |W|$, $m = \frac{1}{1/|W_0| + 1/|W_1|}$ is the harmonic mean of sub-window sizes, and $\delta$ is the confidence parameter controlling the false positive rate of drift detection. A smaller $\delta$ requires stronger evidence before declaring drift. When the condition holds, $W_0$ is dropped and the window shrinks, adapting to the new distribution.
-
-ADWIN provides the following theoretical guarantees \citep{bifet2007learning}:
-\begin{itemize}
-    \item \textbf{False positive bound:} $P(\text{false alarm}) \leq \delta$ at any time step
-    \item \textbf{Detection delay:} $O\left(\frac{1}{\alpha \epsilon^2} \ln \frac{1}{\delta}\right)$ observations after a change of magnitude $\epsilon$, where $\alpha \in (0, 1]$ is the regularization parameter governing the fraction of the window affected by the change (smaller $\alpha$ implies gradual drift spread over more of the window, requiring more observations to detect)
-    \item \textbf{Memory:} $O(\log W)$ using exponential histogram compression
-\end{itemize}
-
-\textbf{On Gradual Drift:} Gradual drift unfolds over extended periods (days to months). ADWIN's sliding window (configured at 1 minute for real-time responsiveness) detects when the \textbf{cumulative effect} of gradual drift produces a statistically significant shift in violation/null rate. The 1-minute window provides rapid responsiveness; drift that develops over weeks is detected as a series of incremental statistical flags, each corresponding to a meaningful change point.
-
-CA-DQStream applies ADWIN to quality meta-streams (aggregated metrics such as violation\_rate, anomaly\_rate, null\_rate) rather than raw data, enabling self-monitoring of the DQ system itself.
-
-\subsection{ML-Based Anomaly Detection}
-
-\textbf{Isolation Forest} \citep{liu2008isolation} is a production-proven anomaly detection algorithm used at Uber and Grab for real-time anomaly detection. Unlike distance-based methods (LOF, $k$-NN), Isolation Forest explicitly isolates anomalies rather than profiling normal instances.
-
-The algorithm builds an ensemble of $T$ random binary trees (Isolation Trees). Each tree is constructed by recursively selecting a random feature $q$ and a random split value $p$ (uniformly drawn between the feature's min and max), then partitioning data points accordingly. For a data point $\mathbf{x}$, the \textbf{path length} $h(\mathbf{x})$ is the number of edges from the root to the terminating node. The anomaly score is defined as:
-
-\begin{equation}
-s(\mathbf{x}, n) = 2^{-\frac{E[h(\mathbf{x})]}{c(n)}}
-\end{equation}
-
-where $E[h(\mathbf{x})]$ is the average path length over $T$ trees, and $c(n)$ is a normalization factor based on the average path length of unsuccessful searches in a Binary Search Tree:
-
-\begin{equation}
-c(n) = 2 H(n-1) - \frac{2(n-1)}{n}, \quad H(i) = \ln(i) + \gamma \text{ (Euler's constant)}
-\end{equation}
-
-The score $s \in [0, 1]$: values close to 1 indicate anomalies (short paths, easily isolated), values close to 0.5 indicate normal points, and values below 0.5 indicate dense normal regions. Training complexity is $O(T \cdot \psi \cdot \log \psi)$ where $\psi$ is the sub-sampling size, making it efficient for large-scale streaming applications.
-
-CA-DQStream integrates Isolation Forest into the Flink processing pipeline to detect multivariate anomalies that business rules cannot express.
-
-% ================================================
-% 1.5 Chapter Summary
 % ================================================
 \section{Chapter Summary}
+% ================================================
 
-This chapter reviewed the foundational concepts and related works for this thesis. Streaming data processing with Kafka and Flink provides the infrastructure for real-time DQ monitoring. Existing DQ frameworks (Great Expectations, AWS Deequ, Soda Core, Stream DaQ) provide baseline capabilities but only support basic deterministic rules. The DAMA-DMBOK framework defines six core DQ dimensions, all addressed by CA-DQStream. The next chapter formalizes the research problem, grounded in empirical analysis of the NYC Yellow Taxi dataset, and states the research questions.
+This chapter reviewed the foundational concepts for this thesis. Streaming data processing with Apache Kafka and Apache Flink provides the distributed infrastructure for real-time DQ monitoring. The MLOps maturity model establishes the operational context in which CA-DQStream operates (Level 2 automation with drift-triggered retraining). The DAMA-DMBOK framework defines six core DQ dimensions, all of which CA-DQStream addresses through its layered architecture. The next chapter surveys the existing literature to identify specific gaps that this thesis addresses.

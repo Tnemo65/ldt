@@ -9,7 +9,7 @@ Context Cell Definition:
     Cell ID = (is_special << 2) | (is_night << 1) | is_weekend
 
     is_special = ratecode > 1
-    is_night = hour >= 18 or hour < 6  (UNIFIED: matches runtime)
+    is_night = hour >= 20 or hour < 6  (UNIFIED: >= 20)
     is_weekend = dow >= 5
 
 8 Context Cells:
@@ -276,8 +276,8 @@ class ContextBeta:
         """
         Compute context cell ID from temporal and fare attributes.
 
-        UNIFIES night definition to hour >= 18 (matching runtime).
-        Previous bug: context_aware.py used hour >= 20.
+        UNIFIES night definition to hour >= 20.
+        Previous bug: context_aware.py used hour >= 18.
 
         Cell ID = (is_special << 2) | (is_night << 1) | is_weekend
 
@@ -290,7 +290,7 @@ class ContextBeta:
             Context cell ID (0-7)
         """
         is_special = 1 if float(ratecode) > 1.0 else 0
-        is_night = 1 if (hour >= 18 or hour < 6) else 0  # UNIFIED: hour >= 18
+        is_night = 1 if (hour >= 20 or hour < 6) else 0  # UNIFIED: hour >= 20
         is_weekend = 1 if int(dow) >= 5 else 0
 
         return (is_special << 2) | (is_night << 1) | is_weekend
@@ -449,7 +449,7 @@ def get_context_id(
     """
     Compute context cell ID (standalone utility).
 
-    UNIFIES night definition to hour >= 18 (matching runtime).
+    UNIFIES night definition to hour >= 20.
 
     Args:
         hour: Hour of day (0-23)

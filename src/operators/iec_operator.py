@@ -265,15 +265,15 @@ class IECOperator(MapFunction):
 
         return iec_decision
 
-    def _emit_iec_metrics(self, meta_metrics: dict, drifts: list, strategy: str, 
+    def _emit_iec_metrics(self, meta_metrics: dict, drifts: list, strategy: str,
                           confidence: float, severity: str):
         """Emit IEC metrics to cadqstream-metrics for Prometheus scraping.
 
         Sends these metrics:
-          - memstream_iec_decisions_total{strategy}  (counter)
-          - memstream_iec_drift_detected_total{neighborhood}  (counter)
-          - memstream_iec_confidence{neighborhood}  (gauge)
-          - memstream_meta_anomaly_rate{neighborhood}  (gauge)
+          - cadqstream_iec_decisions_total{strategy}  (counter)
+          - cadqstream_iec_drift_detected_total{neighborhood}  (counter)
+          - cadqstream_iec_confidence{neighborhood}  (gauge)
+          - cadqstream_meta_anomaly_rate{neighborhood}  (gauge)
 
         Args:
             meta_metrics: Current window meta-metrics
@@ -290,12 +290,13 @@ class IECOperator(MapFunction):
             neighborhoods = list(meta_metrics.keys())
             neighborhood = neighborhoods[0] if neighborhoods else 'global'
 
-            # IEC decision counter (REC-8: includes operator_id)
+            # IEC decision counter
             payload_decision = json.dumps({
-                'name': 'memstream_iec_decisions_total',
+                'name': 'iec_decisions_total',
                 'value': 1,
                 'labels': {
-                    'strategy': strategy, 
+                    'layer': 'L4',
+                    'strategy': strategy,
                     'neighborhood': neighborhood,
                     'severity': severity,
                     'operator_id': self.operator_id,  # REC-8
@@ -318,9 +319,10 @@ class IECOperator(MapFunction):
                 for drift in drifts:
                     nb = drift.get('neighborhood', neighborhood)
                     payload_drift = json.dumps({
-                        'name': 'memstream_iec_drift_detected_total',
+                        'name': 'iec_drift_detected_total',
                         'value': 1,
                         'labels': {
+                            'layer': 'L4',
                             'neighborhood': nb,
                             'metric': drift.get('metric', 'unknown'),
                         },
@@ -339,9 +341,9 @@ class IECOperator(MapFunction):
 
             # IEC confidence gauge
             payload_conf = json.dumps({
-                'name': 'memstream_iec_confidence',
+                'name': 'iec_confidence',
                 'value': float(confidence),
-                'labels': {'neighborhood': neighborhood},
+                'labels': {'layer': 'L4', 'neighborhood': neighborhood},
                 'type': 'gauge'
             }).encode('utf-8')
             req3 = urllib.request.Request(
@@ -361,9 +363,9 @@ class IECOperator(MapFunction):
                 for metric_name in ['anomaly_rate', 'null_rate', 'violation_rate', 'delta_score']:
                     value = nb_data.get(metric_name, 0.0)
                     payload_metric = json.dumps({
-                        'name': f'memstream_meta_{metric_name}',
+                        'name': f'meta_{metric_name}',
                         'value': float(value),
-                        'labels': {'neighborhood': neighborhoods[0]},
+                        'labels': {'layer': 'L3', 'neighborhood': neighborhoods[0]},
                         'type': 'gauge'
                     }).encode('utf-8')
                     req4 = urllib.request.Request(
@@ -394,9 +396,10 @@ class IECOperator(MapFunction):
             neighborhood = trigger_details.get('neighborhood', 'unknown')
             
             payload = json.dumps({
-                'name': 'memstream_retrain_trigger_total',
+                'name': 'retrain_trigger_total',
                 'value': 1,
                 'labels': {
+                    'layer': 'L4',
                     'trigger': trigger_name,
                     'neighborhood': neighborhood,
                 },

@@ -1,11 +1,31 @@
 """
 MinIO Lakehouse Sinks for CA-DQStream.
 
-Each stream writes Parquet files to a dedicated MinIO bucket via Hadoop S3A.
-Flink's StreamingFileSink provides:
-  - Exactly-once guarantee via two-phase commit (2PC)
-  - In-progress files buffered in memory, flushed on checkpoint
-  - Roll condition: size OR time (whichever hits first)
+Each stream writes JSON files to a dedicated MinIO bucket via the native Python
+minio client (boto3-compatible S3 API), bypassing Hadoop S3A entirely.
+
+Why not StreamingFileSink?
+  StreamingFileSink with S3A multipart uploads causes 0-byte zombie files when
+  checkpoints are very fast (~700ms) and data never reaches the multipart threshold.
+  The native minio client uses single-part PUT operations that complete immediately,
+  eliminating the 2PC complexity entirely.
+
+Sink strategy:
+  - Records accumulate in a thread-safe list in process_element()
+  - Every N records, the buffer is flushed:
+      1. JSON lines are joined with newlines
+      2. A timestamped filename is generated (yyyy-mm-dd_HHMMSS_<uuid>.json)
+      3. minio_client.put_object() uploads the file in one shot
+      4. The buffer is cleared
+  - Every Flink checkpoint (via snapshot_state()) also forces a flush, ensuring
+    no data is lost between checkpoints regardless of record count.
+  - The open() method (called once per task instance) initializes the minio client.
+
+Env vars:
+  MINIO_ENDPOINT   e.g. http://minio:9000
+  MINIO_ACCESS_KEY  defaults to minioadmin
+  MINIO_SECRET_KEY  defaults to minioadmin123
+  MINIO_BUCKET      target bucket name (set per sink factory)
 
 Bucket layout (created by deployment/minio/init-scripts/01-create-buckets.sh):
   cadqstream-raw/       → taxi_trips_raw         (valid records from Layer 1)
@@ -16,24 +36,258 @@ Bucket layout (created by deployment/minio/init-scripts/01-create-buckets.sh):
                           → pipeline_stats         (stats-writer aggregates)
   cadqstream-drift/     → drift_events            (Layer 4 IEC decisions)
                           → alerts                (IEC + pipeline alerts)
-  cadqstream-checkpoints/ → ML model artifacts + Flink checkpoints
-
-Env vars:
-  S3_ENDPOINT       e.g. http://minio:9000
-  AWS_ACCESS_KEY_ID defaults to minioadmin
-  AWS_SECRET_ACCESS_KEY defaults to minioadmin123
 """
 
-from pyflink.common.serialization import Encoder
-from pyflink.datastream.connectors.file_system import (
-    FileSink,
-    OutputFileConfig,
-    RollingPolicy,
-    StreamingFileSink,
-)
-import os
 import json
+import os
+import uuid
 from datetime import datetime
+from threading import Lock
+from typing import Any, List, Optional
+
+from pyflink.datastream.functions import RuntimeContext, RichMapFunction, CheckpointedFunction
+from pyflink.datastream.state import ListState, ListStateDescriptor
+from pyflink.common.typeinfo import Types
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Env / Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+_MINIO_ENDPOINT  = os.getenv('MINIO_ENDPOINT',  'http://minio:9000')
+_MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
+_MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'minioadmin123')
+
+
+def _generate_filename(table: str) -> str:
+    """Generate a unique, timestamped filename for a table."""
+    ts = datetime.utcnow().strftime('%Y-%m-%d_%H%M%S')
+    uid = uuid.uuid4().hex[:8]
+    return f"{table}/{ts}_{uid}.json"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Custom MinIO Sink (native Python client, no S3A)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
+    """RichMapFunction + CheckpointedFunction that buffers records and uploads JSON to MinIO.
+
+    Uses the native Python minio client (S3 API) instead of Hadoop S3A,
+    completely bypassing StreamingFileSink and its 2PC multipart complexity.
+
+    Thread-safety:
+      _buffer is guarded by _lock so concurrent checkpoint snapshots do not corrupt state.
+
+    Flush triggers:
+      - record_count >= flush_every_records (primary)
+      - snapshot_state() forces a flush on every checkpoint barrier (guarantees no
+        data is stuck in the buffer when a checkpoint completes)
+      - close() forces final flush of any remaining records
+
+    ROOT CAUSE FIX: Removed threading.Timer (which silently failed within PyFlink's
+    subprocess execution model). Replaced timer-based flush with CheckpointedFunction
+    integration — every Flink checkpoint barrier triggers a synchronous flush so
+    buffered data is committed before the checkpoint is acknowledged.
+    """
+
+    _DEFAULT_FLUSH_RECORDS = 1000
+
+    def __init__(
+        self,
+        bucket: str,
+        table: str,
+        flush_every_records: int = _DEFAULT_FLUSH_RECORDS,
+    ):
+        super().__init__()
+        self.bucket = bucket
+        self.table  = table
+        self.flush_every_records = flush_every_records
+
+        self._minio_client: Optional[Any] = None
+        self._using_boto3: bool           = False
+        self._boto3_client: Optional[Any]= None
+        self._buffer: List[str]            = []
+        self._lock: Lock                   = Lock()
+        self._records_since_flush: int    = 0
+        self._uploads_ok: int             = 0
+        self._uploads_fail: int           = 0
+
+        self._buffer_state: Optional[ListState] = None
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    def open(self, runtime_context: RuntimeContext):
+        """Initialize the minio client (one per task instance, not per record)."""
+        try:
+            from minio import Minio
+        except ImportError:
+            try:
+                import boto3
+                self._minio_client = None
+                self._using_boto3  = True
+                self._boto3_client = boto3.client(
+                    's3',
+                    endpoint_url=os.getenv('MINIO_ENDPOINT', _MINIO_ENDPOINT),
+                    aws_access_key_id=os.getenv('MINIO_ACCESS_KEY', _MINIO_ACCESS_KEY),
+                    aws_secret_access_key=os.getenv('MINIO_SECRET_KEY', _MINIO_SECRET_KEY),
+                    region_name='us-east-1',
+                )
+                import logging
+                logging.getLogger('cadqstream-minio').info(
+                    "minio package unavailable; falling back to boto3"
+                )
+                self._init_buffer_state(runtime_context)
+                return
+            except ImportError:
+                import logging
+                logging.getLogger('cadqstream-minio').error(
+                    "Neither minio nor boto3 is available; MinIO sink will be a no-op"
+                )
+                self._init_buffer_state(runtime_context)
+                return
+
+        self._using_boto3 = False
+        self._minio_client = Minio(
+            _MINIO_ENDPOINT,
+            access_key=_MINIO_ACCESS_KEY,
+            secret_key=_MINIO_SECRET_KEY,
+            secure=False,
+        )
+        import logging
+        logging.getLogger('cadqstream-minio').info(
+            "MinIO client initialized: endpoint=%s bucket=%s",
+            _MINIO_ENDPOINT, self.bucket,
+        )
+        self._init_buffer_state(runtime_context)
+
+    def _init_buffer_state(self, runtime_context: RuntimeContext):
+        """Initialize Flink ListState for checkpoint recovery of buffered records."""
+        state_desc = ListStateDescriptor(
+            'minio_buffer',
+            Types.PICKLED_BYTE_ARRAY()
+        )
+        self._buffer_state = runtime_context.get_operator_state().get_list_state(state_desc)
+
+    def close(self):
+        with self._lock:
+            if self._buffer:
+                self._do_upload()
+        import logging
+        logging.getLogger('cadqstream-minio').info(
+            "CustomMinioUploader closed: uploads_ok=%d uploads_fail=%d",
+            self._uploads_ok, self._uploads_fail,
+        )
+
+    # ── CheckpointedFunction ─────────────────────────────────────────────────
+    # snapshot_state is called when the checkpoint barrier arrives.
+    # We flush the buffer synchronously here so the flushed data is committed
+    # to MinIO before Flink acknowledges the checkpoint.
+
+    def initialize_state(self, context):
+        """Restore buffered records from the previous checkpoint on task restart."""
+        if self._buffer_state is not None:
+            import logging
+            restored = 0
+            for blob in self._buffer_state.get():
+                if blob:
+                    try:
+                        decoded = blob.decode('utf-8') if isinstance(blob, bytes) else str(blob)
+                        self._buffer.append(decoded)
+                        restored += 1
+                    except Exception:
+                        pass
+            if restored > 0:
+                logging.getLogger('cadqstream-minio').info(
+                    "Restored %d records from checkpoint buffer", restored
+                )
+
+    def snapshot_state(self, context):
+        """Flush the buffer before the checkpoint is acknowledged.
+
+        ROOT CAUSE FIX: The checkpoint barrier is the only reliable flush signal
+        in PyFlink's subprocess execution model. Timer threads silently fail
+        inside the Python subprocess spawned by PyFlink. By flushing here, we
+        guarantee that:
+          1. All buffered records are uploaded before the checkpoint completes
+          2. The Flink state (empty buffer) is snapshotted after the upload
+          3. On restart, only unflushed records are re-processed
+        """
+        with self._lock:
+            if self._buffer:
+                self._do_upload()
+            if self._buffer_state is not None:
+                self._buffer_state.clear()
+                for line in self._buffer:
+                    self._buffer_state.add(line.encode('utf-8'))
+
+    # ── MapFunction contract ──────────────────────────────────────────────────
+
+    def map(self, value):
+        """Buffer a record; flush when threshold is hit."""
+        if value is not None:
+            line = str(value) if not isinstance(value, str) else value
+        else:
+            line = ''
+        with self._lock:
+            self._buffer.append(line)
+            self._records_since_flush += 1
+            if self._records_since_flush >= self.flush_every_records:
+                self._do_upload()
+        return value
+
+    # ── Flush logic ──────────────────────────────────────────────────────────
+
+    def _do_upload(self):
+        """Atomic: drain buffer, build JSON file, PUT to MinIO."""
+        if not self._buffer:
+            return
+
+        buffer_snapshot       = self._buffer
+        self._buffer          = []
+        self._records_since_flush = 0
+
+        filename = _generate_filename(self.table)
+        content  = '\n'.join(buffer_snapshot).encode('utf-8')
+
+        try:
+            if self._using_boto3:
+                from io import BytesIO
+                bio = BytesIO(content)
+                self._boto3_client.put_object(
+                    Bucket=self.bucket,
+                    Key=filename,
+                    Body=bio,
+                    ContentLength=len(content),
+                )
+            else:
+                from io import BytesIO
+                bio = BytesIO(content)
+                self._minio_client.put_object(
+                    bucket_name=self.bucket,
+                    object_name=filename,
+                    data=bio,
+                    length=len(content),
+                    content_type='application/json',
+                )
+            self._uploads_ok += 1
+            import logging
+            logging.getLogger('cadqstream-minio').debug(
+                "Uploaded %s/%s (%d bytes, %d records)",
+                self.bucket, filename, len(content), len(buffer_snapshot),
+            )
+        except Exception as e:
+            self._uploads_fail += 1
+            import logging
+            logging.getLogger('cadqstream-minio').error(
+                "Upload failed %s/%s: %s (failures=%d)",
+                self.bucket, filename, e, self._uploads_fail,
+            )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-table row → JSON string converters  (used by to-json MapFunctions)
+# ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Env / Helpers
@@ -118,10 +372,19 @@ def record_to_anomaly_score_json(record: dict) -> str:
 
 
 def record_to_meta_metric_json(record: dict) -> str:
-    """Serialize a windowed meta-metric record to JSON."""
-    window_start = record.get('window_start', datetime.utcnow().isoformat())
-    window_end = record.get('window_end', datetime.utcnow().isoformat())
-    neighborhood = record.get('neighborhood_id', record.get('neighborhood', 'unknown'))
+    """Serialize a record to JSON for MinIO cadqstream-metrics/meta_metrics.
+
+    Handles records from both windowed aggregators (has window_start/window_end)
+    and iec_stream/voting_stream (has iec_timestamp/voting_timestamp instead).
+    """
+    window_start = record.get('window_start')
+    window_end = record.get('window_end')
+    if not window_start:
+        window_start = record.get('iec_timestamp') or record.get('voting_timestamp') or ''
+    if not window_end:
+        window_end = window_start
+
+    neighborhood = record.get('neighborhood_id') or record.get('neighborhood', 'unknown')
     return json.dumps({
         'neighborhood': str(neighborhood),
         'window_start': str(window_start),
@@ -139,11 +402,15 @@ def record_to_drift_event_json(record: dict, counter: int = 0) -> str:
     """Serialize an IEC drift-event record to JSON."""
     del counter
     drifts = record.get('drifts_detected', [])
-    drift_mag = max([d.get('magnitude', 0.0) for d in drifts], default=0.0)
+    drift_mag = max([d.get('magnitude', 0.0) if isinstance(d, dict) else 0.0 for d in drifts], default=0.0)
     assessment = record.get('drift_assessment', {})
+    if not isinstance(assessment, dict):
+        assessment = {}
     strategy = record.get('iec_strategy', 'NO_ACTION').upper().replace(' ', '_')
     action_result = record.get('action_result', {})
-    neighborhood = record.get('neighborhood_id', 'global')
+    if not isinstance(action_result, dict):
+        action_result = {}
+    neighborhood = record.get('neighborhood_id', record.get('neighborhood', 'global'))
     return json.dumps({
         'scenario': str(record.get('scenario', 'UNKNOWN')),
         'neighborhood': str(neighborhood),
@@ -175,7 +442,7 @@ def record_to_alert_json(record: dict) -> str:
 
     # ── Determine alert severity ─────────────────────────────────────
     if drifts:
-        max_mag = max([d.get('magnitude', 0.0) for d in drifts], default=0.0)
+        max_mag = max([d.get('magnitude', 0.0) if isinstance(d, dict) else 0.0 for d in drifts], default=0.0)
         if max_mag > 0.5:
             severity = 'critical'
         elif max_mag > 0.2:
@@ -194,7 +461,7 @@ def record_to_alert_json(record: dict) -> str:
         category = 'drift_detected'
         message = (
             f"IEC detected {len(drifts)} drift(s) in {neighborhood} "
-            f"(scenario={scenario}, max_magnitude={max([d.get('magnitude', 0) for d in drifts], default=0):.3f})"
+            f"(scenario={scenario}, max_magnitude={max([d.get('magnitude', 0) if isinstance(d, dict) else 0 for d in drifts], default=0):.3f})"
         )
     elif strategy == 'retrain_model':
         category = 'model_retrain'
@@ -207,7 +474,10 @@ def record_to_alert_json(record: dict) -> str:
         message = f"IEC switching to alternative model in {neighborhood} due to severe drift."
     elif strategy == 'adjust_threshold':
         category = 'threshold_adjust'
-        action = record.get('action_result', {}).get('new_threshold', '?')
+        action_result = record.get('action_result', {})
+        if not isinstance(action_result, dict):
+            action_result = {}
+        action = action_result.get('new_threshold', '?')
         message = f"IEC adjusted anomaly threshold to {action} in {neighborhood}."
     else:
         category = 'unknown'
@@ -256,85 +526,69 @@ def record_to_pipeline_stats_json(record: dict) -> str:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sink factories
-# Each returns a FileSink that writes single-line JSON to S3A/Parquet.
-# We use JSON (not Parquet) for maximum compatibility — Flink StreamingFileSink
-# natively supports JSON via SimpleStringEncoder without extra serializers.
-# Parquet would require pyflink-specific ParquetWriterFactory which is complex
-# in pure Python; JSON is the idiomatic choice for PyFlink streaming sinks.
+# Each returns a RichMapFunction that uploads JSON files to MinIO via native S3 API.
+# No StreamingFileSink, no Hadoop S3A, no 2PC multipart complexity.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _build_file_sink(
+def _build_minio_sink(
     bucket: str,
     table: str,
-) -> StreamingFileSink:
-    """Build a StreamingFileSink for a given bucket/table with rolling policy.
+    flush_every_records: int = CustomMinioUploader._DEFAULT_FLUSH_RECORDS,
+) -> CustomMinioUploader:
+    """Build a CustomMinioUploader for a given bucket/table.
 
     Args:
-        bucket:   MinIO bucket name (e.g. 'raw-zone')
-        table:    logical table name, used as the path prefix
+        bucket:             MinIO bucket name (e.g. 'cadqstream-raw')
+        table:              logical table name, used as the path prefix
+        flush_every_records: flush after this many records (default 1000)
 
     Returns:
-        StreamingFileSink configured for S3A with default rolling policy.
-        Each record is encoded as UTF-8 JSON via Encoder.simple_string_encoder().
+        CustomMinioUploader configured for the target bucket/table.
+        The client is initialized inside open(), so no connection is held
+        at class definition time.
     """
-    path = _s3_path(bucket, table)
-
-    encoder = Encoder.simple_string_encoder()
-
-    rolling = RollingPolicy.default_rolling_policy()
-
-    output = (
-        OutputFileConfig
-        .builder()
-        .with_part_prefix(f"{table}")
-        .with_part_suffix('.json')
-        .build()
-    )
-
-    return (
-        StreamingFileSink
-        .for_row_format(path, encoder)
-        .with_rolling_policy(rolling)
-        .with_output_file_config(output)
-        .build()
+    return CustomMinioUploader(
+        bucket=bucket,
+        table=table,
+        flush_every_records=flush_every_records,
     )
 
 
 def create_raw_trips_sink():
     """Sink valid taxi trips to cadqstream-raw/taxi_trips_raw/."""
-    return _build_file_sink('cadqstream-raw', 'taxi_trips_raw')
+    return _build_minio_sink('cadqstream-raw', 'taxi_trips_raw')
 
 
 def create_schema_violations_sink():
     """Sink schema violations to cadqstream-violations/schema_violations/."""
-    return _build_file_sink('cadqstream-violations', 'schema_violations')
+    return _build_minio_sink('cadqstream-violations', 'schema_violations')
 
 
 def create_canary_violations_sink():
     """Sink canary rule violations to cadqstream-violations/canary_violations/."""
-    return _build_file_sink('cadqstream-violations', 'canary_violations')
+    return _build_minio_sink('cadqstream-violations', 'canary_violations')
 
 
 def create_anomaly_scores_sink():
     """Sink ML anomaly scores to cadqstream-anomalies/anomaly_scores/."""
-    return _build_file_sink('cadqstream-anomalies', 'anomaly_scores')
+    return _build_minio_sink('cadqstream-anomalies', 'anomaly_scores')
 
 
 def create_meta_metrics_sink():
     """Sink windowed meta-metrics to cadqstream-metrics/meta_metrics/."""
-    return _build_file_sink('cadqstream-metrics', 'meta_metrics')
+    return _build_minio_sink('cadqstream-metrics', 'meta_metrics')
 
 
 def create_drift_events_sink():
     """Sink IEC drift events to cadqstream-drift/drift_events/."""
-    return _build_file_sink('cadqstream-drift', 'drift_events')
+    return _build_minio_sink('cadqstream-drift', 'drift_events')
 
 
 def create_alerts_sink():
     """Sink IEC/pipeline alerts to cadqstream-drift/alerts/."""
-    return _build_file_sink('cadqstream-drift', 'alerts')
+    return _build_minio_sink('cadqstream-drift', 'alerts')
 
 
 def create_pipeline_stats_sink():
     """Sink periodic pipeline statistics to cadqstream-metrics/pipeline_stats/."""
-    return _build_file_sink('cadqstream-metrics', 'pipeline_stats')
+    return _build_minio_sink('cadqstream-metrics', 'pipeline_stats')

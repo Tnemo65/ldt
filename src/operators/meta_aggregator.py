@@ -27,7 +27,9 @@ from pyflink.datastream.window import TumblingEventTimeWindows
 from pyflink.common.time import Time
 from pyflink.common.typeinfo import Types
 from datetime import datetime
+import json
 import logging
+import urllib.request
 
 LOGGER = logging.getLogger('cadqstream-meta-agg')
 
@@ -40,10 +42,14 @@ class VotingEnsembleFunction(MapFunction):
     - Priority 2: ML anomaly score > threshold
     - Otherwise: CLEAN
 
-    Args:
-        canary_weight: Weight for Canary branch (default 1.0 = override)
-        complex_weight: Weight for Complex branch (default 1.0)
+    L4 METRICS: Emits cadqstream_records_valid_total{layer="L4"} and
+    cadqstream_voting_decisions_total per record here (not in a sink function),
+    because PyFlink sink functions are batched per partition rather than per-record.
     """
+    _l4_client = None
+    _l4_endpoint = 'http://cadqstream-metrics:9250/internal/metrics'
+    _l4_emit_errors = 0
+    _l4_batch_count = 0
 
     def __init__(self, canary_weight=1.0, complex_weight=1.0):
         """Initialize voting ensemble."""
@@ -51,6 +57,12 @@ class VotingEnsembleFunction(MapFunction):
         self.complex_weight = complex_weight
         self.records_processed = 0
         self.anomalies_detected = 0
+        self._batch_record_count = 0  # Count records in current micro-batch
+
+    def open(self, runtime_context):
+        """Initialize HTTP client for L4 metrics."""
+        VotingEnsembleFunction._l4_client = urllib.request
+        print(f"[VotingEnsemble] open() called. records_processed={self.records_processed}")
 
     def map(self, value):
         """Apply voting ensemble to merged record.
@@ -59,10 +71,42 @@ class VotingEnsembleFunction(MapFunction):
             value: Merged record from Rendezvous (has both Canary + Complex fields)
 
         Returns:
-            Record with final_decision, confidence, and decision_source
+            Record with final_decision, confidence, and decision_source.
+            Sentinel dict for None input (DLQ routing, never returns None).
         """
         if value is None:
-            return None
+            return {
+                'final_decision': 'CLEAN',
+                'decision_source': 'null_input',
+                'confidence': 0.0,
+                'has_violation': False,
+                'is_anomaly': False,
+                'anomaly_score': 0.0,
+                'voting_timestamp': '',
+                '_dlq': True,
+                '_dlq_reason': 'null_input',
+                '_dlq_category': 'VALIDATION_ERROR',
+                '_dlq_operator': 'VotingEnsembleFunction',
+                'trip_id': 'dlq_null',
+                'tpep_pickup_datetime': '',
+            }
+
+        if not isinstance(value, dict):
+            return {
+                'final_decision': 'CLEAN',
+                'decision_source': f'not_dict:{type(value).__name__}',
+                'confidence': 0.0,
+                'has_violation': False,
+                'is_anomaly': False,
+                'anomaly_score': 0.0,
+                'voting_timestamp': '',
+                '_dlq': True,
+                '_dlq_reason': f'not_dict:{type(value).__name__}',
+                '_dlq_category': 'VALIDATION_ERROR',
+                '_dlq_operator': 'VotingEnsembleFunction',
+                'trip_id': f'dlq_{type(value).__name__[:20]}',
+                'tpep_pickup_datetime': '',
+            }
 
         self.records_processed += 1
 
@@ -98,11 +142,15 @@ class VotingEnsembleFunction(MapFunction):
             # Confidence based on how far below threshold
             confidence = 1.0 - (anomaly_score / threshold) if threshold > 0 else 0.5
 
-        # Enrich record with voting results
+        # voting_timestamp: ROOT CAUSE FIX #1 — use event time from record, NOT datetime.utcnow().
+        # Decay factors and time-windowed algorithms depend on correct temporal ordering.
+        record_timestamp = value.get('tpep_pickup_datetime', '')
+        if not record_timestamp:
+            record_timestamp = value.get('voting_timestamp', '')
         value['final_decision'] = final_decision
         value['decision_source'] = decision_source
         value['confidence'] = float(confidence)
-        value['voting_timestamp'] = datetime.utcnow().isoformat()
+        value['voting_timestamp'] = record_timestamp
 
         # Log stats periodically
         if self.records_processed % 100000 == 0:
@@ -192,7 +240,16 @@ class MetaAggregateFunction(AggregateFunction):
         volume = accumulator['volume']
 
         if volume == 0:
-            return None
+            return {
+                'volume': 0,
+                'null_rate': 0.0,
+                'violation_rate': 0.0,
+                'anomaly_rate': 0.0,
+                'avg_anomaly_score': 0.0,
+                'delta_score': 0.0,
+                '_dlq': True,
+                '_dlq_reason': 'empty_window',
+            }
 
         null_rate = accumulator['null_count'] / volume
         violation_rate = accumulator['violation_count'] / volume
@@ -259,6 +316,19 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
         metrics = next(iter(elements))
 
         if metrics is None:
+            yield {
+                'volume': 0,
+                'null_rate': 0.0,
+                'violation_rate': 0.0,
+                'anomaly_rate': 0.0,
+                'avg_anomaly_score': 0.0,
+                'delta_score': 0.0,
+                'window_start': datetime.fromtimestamp(context.window().start / 1000).isoformat(),
+                'window_end': datetime.fromtimestamp(context.window().end / 1000).isoformat(),
+                'neighborhood_id': key,
+                '_dlq': True,
+                '_dlq_reason': 'null_metrics',
+            }
             return
 
         # Compute delta_score per thesis equation (5.18)

@@ -34,7 +34,7 @@ echo.
 
 :: ─── Step 0b: Check Ports ────────────────────────────────────────
 echo [STEP 0b] Checking required ports...
-set PORTS=2181 9092 8081 8080 8082 3000 9090 9100 9308 9000 9001 5000
+set PORTS=2181 9092 8081 8080 8082 3000 9090 9100 9308 9000 9001
 for %%p in (%PORTS%) do (
     netstat -ano 2^>nul | findstr ":%%p " >nul 2>&1
     if errorlevel 1 (
@@ -73,8 +73,8 @@ docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d zookeeper kafka sc
 echo.
 
 :: ─── Step 3: Start Storage ────────────────────────────────────────
-echo [STEP 3] Starting storage services (MinIO + MLflow)...
-docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d minio mlflow
+echo [STEP 3] Starting storage services (MinIO only)...
+docker compose -f "%DEPLOYMENT_DIR%\docker-compose.yml" up -d minio
 echo.
 
 :: ─── Step 4: Wait for Services ──────────────────────────────────
@@ -156,7 +156,6 @@ echo   Flink UI        http://localhost:8081       (no auth)
 echo   Grafana         http://localhost:3000       admin / admin123
 echo   Prometheus      http://localhost:9090        (no auth)
 echo   MinIO Console   http://localhost:9001       minioadmin / minioadmin123
-echo   MLflow          http://localhost:5000        (no auth)
 echo.
 echo   Kafka Topics:
 docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>nul

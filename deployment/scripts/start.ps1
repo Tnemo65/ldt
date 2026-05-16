@@ -172,7 +172,6 @@ $services = @(
     @{Name="ldt-minio"; Wait=60; Interval=10; Desc="MinIO"},
     @{Name="ldt-cadqstream-metrics"; Wait=60; Interval=5; Desc="cadqstream-metrics"},
     @{Name="ldt-ml-service"; Wait=60; Interval=5; Desc="ML Service (FastAPI)"},
-    @{Name="ldt-mlflow"; Wait=120; Interval=10; Desc="MLflow"},
     @{Name="ldt-stats-writer"; Wait=30; Interval=5; Desc="Stats Writer"}
 )
 
@@ -391,45 +390,8 @@ Write-Host ""
 if ($TrainModel) {
     Write-Host "[STEP 10] Training ML model..."
 
-    $mlflowReady = $false
-    $elapsed = 0
-    while ($elapsed -lt 60) {
-        try {
-            $resp = Invoke-WebRequest -Uri "http://localhost:5000/" -UseBasicParsing -TimeoutSec 3 -ErrorAction SilentlyContinue
-            if ($resp.StatusCode -eq 200) { $mlflowReady = $true; break }
-        } catch {}
-        Start-Sleep -Seconds 5
-        $elapsed += 5
-    }
-
-    if ($mlflowReady) {
-        Write-Host "  MLflow is ready."
-
-        Write-Host "  Training IsolationForest model..."
-        $trainResult = docker exec ldt-flink-jobmanager bash -c "
-            cd /opt/flink/e2e &&
-            python3 scripts/train_model.py --version v1 --n-samples 50000 --n-estimators 100 2>&1
-        " 2>$null
-
-        if ($trainResult -match "Training Complete" -or $LASTEXITCODE -eq 0) {
-            Write-Host "  [OK] Model trained and uploaded to MinIO."
-        } else {
-            Write-Host "  [WARN] Training output: $trainResult" -ForegroundColor Yellow
-        }
-
-        Write-Host "  Broadcasting model to pipeline..."
-        $loadResult = docker exec ldt-flink-jobmanager bash -c "
-            cd /opt/flink/e2e &&
-            python3 scripts/load_model_to_broadcast.py --version v1 --bootstrap kafka:9092 2>&1
-        " 2>$null
-
-        if ($loadResult -match "SUCCESS" -or $LASTEXITCODE -eq 0) {
-            Write-Host "  [OK] Model broadcast to Kafka."
-        } else {
-            Write-Host "  [WARN] Broadcast output: $loadResult" -ForegroundColor Yellow
-        }
     } else {
-        Write-Host "  [WARN] MLflow not ready. Skipping model training." -ForegroundColor Yellow
+        Write-Host "  [WARN] ML Service not ready. Skipping model training." -ForegroundColor Yellow
     }
 }
 Write-Host ""
@@ -483,7 +445,6 @@ Write-Host "  Flink UI            http://localhost:8081       (no auth)"
 Write-Host "  Grafana             http://localhost:3000       admin / admin123"
 Write-Host "  Prometheus          http://localhost:9090       (no auth)"
 Write-Host "  MinIO Console       http://localhost:9001       minioadmin / minioadmin123"
-Write-Host "  MLflow              http://localhost:5000       (no auth)"
 Write-Host "  ML Service          http://localhost:8000       FastAPI"
 Write-Host "  cadqstream-metrics  localhost:9250/metrics      Prometheus scrape target"
 Write-Host ""

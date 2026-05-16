@@ -1,0 +1,651 @@
+{
+  "experiment": "exp13_warmup_data_size",
+  "hyperparameter": "warmup_data_size",
+  "timestamp": "20260516_104546",
+  "priority": "HIGH",
+  "primary_metric": "cells_meeting_threshold",
+  "grid": [
+    50000,
+    100000,
+    200000,
+    500000
+  ],
+  "results": [
+    {
+      "total_cells_in_data": 20,
+      "cells_meeting_threshold": 20,
+      "cells_below_threshold": 0,
+      "empty_cells": 60,
+      "total_cells": 80,
+      "min_samples_in_cell": 59,
+      "max_samples_in_cell": 9803,
+      "avg_samples_per_cell": 2500.0,
+      "coverage_pct": 25.0,
+      "per_neighborhood": {
+        "manhattan": {
+          "total_samples": 1671,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 151,
+          "max_samples": 1520
+        },
+        "brooklyn": {
+          "total_samples": 3220,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 86,
+          "max_samples": 3134
+        },
+        "queens_lower": {
+          "total_samples": 10351,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 1731,
+          "max_samples": 8620
+        },
+        "queens_upper": {
+          "total_samples": 2862,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 177,
+          "max_samples": 2685
+        },
+        "bronx": {
+          "total_samples": 8899,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 437,
+          "max_samples": 8462
+        },
+        "staten_island": {
+          "total_samples": 5900,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 365,
+          "max_samples": 5535
+        },
+        "ewr": {
+          "total_samples": 1731,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 59,
+          "max_samples": 1672
+        },
+        "jfk": {
+          "total_samples": 1171,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 69,
+          "max_samples": 1102
+        },
+        "nalp": {
+          "total_samples": 4009,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 310,
+          "max_samples": 3699
+        },
+        "unknown": {
+          "total_samples": 10186,
+          "cells_with_data": 2,
+          "cells_meeting_threshold": 2,
+          "min_samples": 383,
+          "max_samples": 9803
+        }
+      },
+      "per_context_cell": {
+        "std_day_weekday": {
+          "total_samples": 46232,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekday": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "std_day_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "std_night_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_day_weekday": {
+          "total_samples": 3768,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_night_weekday": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_day_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_night_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        }
+      },
+      "warmup_size": 50000,
+      "elapsed_s": 1.1259350776672363
+    },
+    {
+      "total_cells_in_data": 40,
+      "cells_meeting_threshold": 37,
+      "cells_below_threshold": 3,
+      "empty_cells": 40,
+      "total_cells": 80,
+      "min_samples_in_cell": 4,
+      "max_samples_in_cell": 18590,
+      "avg_samples_per_cell": 2500.0,
+      "coverage_pct": 46.25,
+      "per_neighborhood": {
+        "manhattan": {
+          "total_samples": 3264,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 14,
+          "max_samples": 2727
+        },
+        "brooklyn": {
+          "total_samples": 5283,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 3,
+          "min_samples": 4,
+          "max_samples": 4710
+        },
+        "queens_lower": {
+          "total_samples": 23528,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 936,
+          "max_samples": 16463
+        },
+        "queens_upper": {
+          "total_samples": 5609,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 3,
+          "min_samples": 9,
+          "max_samples": 4925
+        },
+        "bronx": {
+          "total_samples": 15813,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 32,
+          "max_samples": 13637
+        },
+        "staten_island": {
+          "total_samples": 11756,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 17,
+          "max_samples": 10219
+        },
+        "ewr": {
+          "total_samples": 4465,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 3,
+          "min_samples": 4,
+          "max_samples": 3884
+        },
+        "jfk": {
+          "total_samples": 2209,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 12,
+          "max_samples": 1969
+        },
+        "nalp": {
+          "total_samples": 7561,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 14,
+          "max_samples": 6447
+        },
+        "unknown": {
+          "total_samples": 20512,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 40,
+          "max_samples": 18590
+        }
+      },
+      "per_context_cell": {
+        "std_day_weekday": {
+          "total_samples": 83571,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekday": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "std_day_weekend": {
+          "total_samples": 7250,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_day_weekday": {
+          "total_samples": 8097,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_night_weekday": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_day_weekend": {
+          "total_samples": 1082,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 7
+        },
+        "sp_night_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        }
+      },
+      "warmup_size": 100000,
+      "elapsed_s": 2.3501088619232178
+    },
+    {
+      "total_cells_in_data": 40,
+      "cells_meeting_threshold": 40,
+      "cells_below_threshold": 0,
+      "empty_cells": 40,
+      "total_cells": 80,
+      "min_samples_in_cell": 11,
+      "max_samples_in_cell": 38602,
+      "avg_samples_per_cell": 5000.0,
+      "coverage_pct": 50.0,
+      "per_neighborhood": {
+        "manhattan": {
+          "total_samples": 6723,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 27,
+          "max_samples": 5626
+        },
+        "brooklyn": {
+          "total_samples": 9416,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 12,
+          "max_samples": 8182
+        },
+        "queens_lower": {
+          "total_samples": 47276,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 1831,
+          "max_samples": 32754
+        },
+        "queens_upper": {
+          "total_samples": 12499,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 17,
+          "max_samples": 10925
+        },
+        "bronx": {
+          "total_samples": 28130,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 57,
+          "max_samples": 23561
+        },
+        "staten_island": {
+          "total_samples": 24435,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 36,
+          "max_samples": 21128
+        },
+        "ewr": {
+          "total_samples": 8461,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 11,
+          "max_samples": 7053
+        },
+        "jfk": {
+          "total_samples": 4298,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 25,
+          "max_samples": 3737
+        },
+        "nalp": {
+          "total_samples": 15963,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 30,
+          "max_samples": 13277
+        },
+        "unknown": {
+          "total_samples": 42799,
+          "cells_with_data": 4,
+          "cells_meeting_threshold": 4,
+          "min_samples": 81,
+          "max_samples": 38602
+        }
+      },
+      "per_context_cell": {
+        "std_day_weekday": {
+          "total_samples": 164845,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekday": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "std_day_weekend": {
+          "total_samples": 17569,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_day_weekday": {
+          "total_samples": 15459,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_night_weekday": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        },
+        "sp_day_weekend": {
+          "total_samples": 2127,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_night_weekend": {
+          "total_samples": 0,
+          "neighborhoods_with_data": 0,
+          "cells_meeting_threshold": 0
+        }
+      },
+      "warmup_size": 200000,
+      "elapsed_s": 4.242721319198608
+    },
+    {
+      "total_cells_in_data": 80,
+      "cells_meeting_threshold": 75,
+      "cells_below_threshold": 5,
+      "empty_cells": 0,
+      "total_cells": 80,
+      "min_samples_in_cell": 4,
+      "max_samples_in_cell": 77504,
+      "avg_samples_per_cell": 6250.0,
+      "coverage_pct": 93.75,
+      "per_neighborhood": {
+        "manhattan": {
+          "total_samples": 17829,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 7,
+          "min_samples": 10,
+          "max_samples": 11799
+        },
+        "brooklyn": {
+          "total_samples": 24815,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 7,
+          "min_samples": 4,
+          "max_samples": 14691
+        },
+        "queens_lower": {
+          "total_samples": 111658,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 8,
+          "min_samples": 578,
+          "max_samples": 61308
+        },
+        "queens_upper": {
+          "total_samples": 31852,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 7,
+          "min_samples": 10,
+          "max_samples": 21406
+        },
+        "bronx": {
+          "total_samples": 70192,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 8,
+          "min_samples": 31,
+          "max_samples": 42642
+        },
+        "staten_island": {
+          "total_samples": 58305,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 8,
+          "min_samples": 21,
+          "max_samples": 39965
+        },
+        "ewr": {
+          "total_samples": 19901,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 7,
+          "min_samples": 4,
+          "max_samples": 12645
+        },
+        "jfk": {
+          "total_samples": 10233,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 7,
+          "min_samples": 10,
+          "max_samples": 6854
+        },
+        "nalp": {
+          "total_samples": 42287,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 8,
+          "min_samples": 22,
+          "max_samples": 25974
+        },
+        "unknown": {
+          "total_samples": 112928,
+          "cells_with_data": 8,
+          "cells_meeting_threshold": 8,
+          "min_samples": 41,
+          "max_samples": 77504
+        }
+      },
+      "per_context_cell": {
+        "std_day_weekday": {
+          "total_samples": 314788,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekday": {
+          "total_samples": 67927,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_day_weekend": {
+          "total_samples": 69128,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "std_night_weekend": {
+          "total_samples": 14230,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_day_weekday": {
+          "total_samples": 24766,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_night_weekday": {
+          "total_samples": 3556,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_day_weekend": {
+          "total_samples": 4874,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 10
+        },
+        "sp_night_weekend": {
+          "total_samples": 731,
+          "neighborhoods_with_data": 10,
+          "cells_meeting_threshold": 5
+        }
+      },
+      "warmup_size": 500000,
+      "elapsed_s": 11.54768419265747
+    }
+  ],
+  "best_config": {
+    "total_cells_in_data": 80,
+    "cells_meeting_threshold": 75,
+    "cells_below_threshold": 5,
+    "empty_cells": 0,
+    "total_cells": 80,
+    "min_samples_in_cell": 4,
+    "max_samples_in_cell": 77504,
+    "avg_samples_per_cell": 6250.0,
+    "coverage_pct": 93.75,
+    "per_neighborhood": {
+      "manhattan": {
+        "total_samples": 17829,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 7,
+        "min_samples": 10,
+        "max_samples": 11799
+      },
+      "brooklyn": {
+        "total_samples": 24815,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 7,
+        "min_samples": 4,
+        "max_samples": 14691
+      },
+      "queens_lower": {
+        "total_samples": 111658,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 8,
+        "min_samples": 578,
+        "max_samples": 61308
+      },
+      "queens_upper": {
+        "total_samples": 31852,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 7,
+        "min_samples": 10,
+        "max_samples": 21406
+      },
+      "bronx": {
+        "total_samples": 70192,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 8,
+        "min_samples": 31,
+        "max_samples": 42642
+      },
+      "staten_island": {
+        "total_samples": 58305,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 8,
+        "min_samples": 21,
+        "max_samples": 39965
+      },
+      "ewr": {
+        "total_samples": 19901,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 7,
+        "min_samples": 4,
+        "max_samples": 12645
+      },
+      "jfk": {
+        "total_samples": 10233,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 7,
+        "min_samples": 10,
+        "max_samples": 6854
+      },
+      "nalp": {
+        "total_samples": 42287,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 8,
+        "min_samples": 22,
+        "max_samples": 25974
+      },
+      "unknown": {
+        "total_samples": 112928,
+        "cells_with_data": 8,
+        "cells_meeting_threshold": 8,
+        "min_samples": 41,
+        "max_samples": 77504
+      }
+    },
+    "per_context_cell": {
+      "std_day_weekday": {
+        "total_samples": 314788,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "std_night_weekday": {
+        "total_samples": 67927,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "std_day_weekend": {
+        "total_samples": 69128,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "std_night_weekend": {
+        "total_samples": 14230,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "sp_day_weekday": {
+        "total_samples": 24766,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "sp_night_weekday": {
+        "total_samples": 3556,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "sp_day_weekend": {
+        "total_samples": 4874,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 10
+      },
+      "sp_night_weekend": {
+        "total_samples": 731,
+        "neighborhoods_with_data": 10,
+        "cells_meeting_threshold": 5
+      }
+    },
+    "warmup_size": 500000,
+    "elapsed_s": 11.54768419265747
+  },
+  "recommendation": "50K INSUFFICIENT - at least 50% of cells below threshold. Need >= 100K."
+}
