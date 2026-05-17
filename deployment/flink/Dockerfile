@@ -41,6 +41,7 @@ RUN python3 -m venv /opt/venv && \
     grpcio==1.59.0 \
     grpcio-tools==1.59.0 \
     apache-beam==2.48.0 \
+    apache-flink==1.18.1 \
     avro-python3==1.10.2 \
     kafka-python==2.0.2 \
     pickle5 \
@@ -84,6 +85,7 @@ RUN sed -i '/^# YARN/a\
 python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh\
 python.client.executor.args: --python /opt/venv/bin/python3\
 taskmanager.memory.task.off-heap.enabled: true\
+taskmanager.memory.task.off-heap.size: 1024m\
 ' /opt/flink/conf/flink-conf.yaml
 
 # ── Python Symlinks ─────────────────────────────────────────────────────────

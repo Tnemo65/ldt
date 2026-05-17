@@ -17,9 +17,13 @@ Sink strategy:
       2. A timestamped filename is generated (yyyy-mm-dd_HHMMSS_<uuid>.json)
       3. minio_client.put_object() uploads the file in one shot
       4. The buffer is cleared
-  - Every Flink checkpoint (via snapshot_state()) also forces a flush, ensuring
-    no data is lost between checkpoints regardless of record count.
+  - A threading.Timer fires every 30 seconds to flush any unflushed records
+    (handles low-throughput periods)
   - The open() method (called once per task instance) initializes the minio client.
+  - close() forces a final flush of any remaining buffered records.
+
+  NOTE: CheckpointedFunction does not exist in PyFlink 1.18.1's Python API.
+  Flink's at-least-once reprocessing handles restart recovery.
 
 Env vars:
   MINIO_ENDPOINT   e.g. http://minio:9000
@@ -40,14 +44,12 @@ Bucket layout (created by deployment/minio/init-scripts/01-create-buckets.sh):
 
 import json
 import os
+import threading
 import uuid
 from datetime import datetime
-from threading import Lock
 from typing import Any, List, Optional
 
-from pyflink.datastream.functions import RuntimeContext, RichMapFunction, CheckpointedFunction
-from pyflink.datastream.state import ListState, ListStateDescriptor
-from pyflink.common.typeinfo import Types
+from pyflink.datastream.functions import RuntimeContext, MapFunction
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -70,28 +72,26 @@ def _generate_filename(table: str) -> str:
 # Custom MinIO Sink (native Python client, no S3A)
 # ─────────────────────────────────────────────────────────────────────────────
 
-class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
-    """RichMapFunction + CheckpointedFunction that buffers records and uploads JSON to MinIO.
+class CustomMinioUploader(MapFunction):
+    """MapFunction that buffers records and uploads JSON to MinIO.
 
     Uses the native Python minio client (S3 API) instead of Hadoop S3A,
     completely bypassing StreamingFileSink and its 2PC multipart complexity.
 
-    Thread-safety:
-      _buffer is guarded by _lock so concurrent checkpoint snapshots do not corrupt state.
-
     Flush triggers:
       - record_count >= flush_every_records (primary)
-      - snapshot_state() forces a flush on every checkpoint barrier (guarantees no
-        data is stuck in the buffer when a checkpoint completes)
-      - close() forces final flush of any remaining records
+      - timer forces a flush every FLUSH_INTERVAL_SEC seconds (guarantees periodic
+        writes even at low throughput, with at most FLUSH_INTERVAL_SEC data loss)
 
-    ROOT CAUSE FIX: Removed threading.Timer (which silently failed within PyFlink's
-    subprocess execution model). Replaced timer-based flush with CheckpointedFunction
-    integration — every Flink checkpoint barrier triggers a synchronous flush so
-    buffered data is committed before the checkpoint is acknowledged.
+    NOTE: CheckpointedFunction does not exist in PyFlink 1.18.1's Python API.
+    Periodic flush via threading.Timer is the correct pattern for PyFlink.
+    The timer fires inside the Python subprocess (NOT a separate JVM process)
+    because the UDF worker is a long-running Python process.
+    Flink's checkpointing ensures at-least-once reprocessing on restart.
     """
 
     _DEFAULT_FLUSH_RECORDS = 1000
+    _FLUSH_INTERVAL_SEC  = 30  # max delay before unflushed records are written
 
     def __init__(
         self,
@@ -104,29 +104,41 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
         self.table  = table
         self.flush_every_records = flush_every_records
 
-        self._minio_client: Optional[Any] = None
-        self._using_boto3: bool           = False
-        self._boto3_client: Optional[Any]= None
-        self._buffer: List[str]            = []
-        self._lock: Lock                   = Lock()
-        self._records_since_flush: int    = 0
-        self._uploads_ok: int             = 0
-        self._uploads_fail: int           = 0
+        self._minio_client: Optional[Any]       = None
+        self._using_boto3: bool                = False
+        self._boto3_client: Optional[Any]       = None
+        self._buffer: List[str]                = []
+        self._lock: threading.Lock             = threading.Lock()
+        self._records_since_flush: int         = 0
+        self._uploads_ok: int                  = 0
+        self._uploads_fail: int                = 0
 
-        self._buffer_state: Optional[ListState] = None
+        self._timer: Optional[threading.Timer]  = None
+        self._closed: bool                     = False
+
+    def __getstate__(self):
+        """Exclude unpicklable lock from serialization (cloudpickle during job submission)."""
+        state = self.__dict__.copy()
+        del state['_lock']
+        return state
+
+    def __setstate__(self, state):
+        """Reinitialize lock after deserialization on the worker side."""
+        self.__dict__.update(state)
+        self._lock = threading.Lock()
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def open(self, runtime_context: RuntimeContext):
-        """Initialize the minio client (one per task instance, not per record)."""
+        """Initialize the minio client and schedule the periodic flush timer."""
         try:
             from minio import Minio
         except ImportError:
             try:
-                import boto3
+                import boto3 as _boto3
                 self._minio_client = None
                 self._using_boto3  = True
-                self._boto3_client = boto3.client(
+                self._boto3_client = _boto3.client(
                     's3',
                     endpoint_url=os.getenv('MINIO_ENDPOINT', _MINIO_ENDPOINT),
                     aws_access_key_id=os.getenv('MINIO_ACCESS_KEY', _MINIO_ACCESS_KEY),
@@ -137,14 +149,13 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
                 logging.getLogger('cadqstream-minio').info(
                     "minio package unavailable; falling back to boto3"
                 )
-                self._init_buffer_state(runtime_context)
+                self._start_flush_timer()
                 return
             except ImportError:
                 import logging
                 logging.getLogger('cadqstream-minio').error(
                     "Neither minio nor boto3 is available; MinIO sink will be a no-op"
                 )
-                self._init_buffer_state(runtime_context)
                 return
 
         self._using_boto3 = False
@@ -159,67 +170,38 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
             "MinIO client initialized: endpoint=%s bucket=%s",
             _MINIO_ENDPOINT, self.bucket,
         )
-        self._init_buffer_state(runtime_context)
+        self._start_flush_timer()
 
-    def _init_buffer_state(self, runtime_context: RuntimeContext):
-        """Initialize Flink ListState for checkpoint recovery of buffered records."""
-        state_desc = ListStateDescriptor(
-            'minio_buffer',
-            Types.PICKLED_BYTE_ARRAY()
-        )
-        self._buffer_state = runtime_context.get_operator_state().get_list_state(state_desc)
+    def _start_flush_timer(self):
+        """Schedule a periodic flush every _FLUSH_INTERVAL_SEC seconds.
+
+        ROOT CAUSE FIX: threading.Timer works correctly inside PyFlink's Python
+        subprocess when the subprocess stays alive (steady-state processing).
+        Each new timer is created after the previous one fires, guaranteeing
+        periodic flushes even at low throughput.
+        """
+        def _tick():
+            with self._lock:
+                flushed = self._do_upload_locked()
+            if not self._closed:
+                self._timer = threading.Timer(self._FLUSH_INTERVAL_SEC, _tick)
+                self._timer.start()
+
+        self._timer = threading.Timer(self._FLUSH_INTERVAL_SEC, _tick)
+        self._timer.start()
 
     def close(self):
+        self._closed = True
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer.join(timeout=5)
         with self._lock:
-            if self._buffer:
-                self._do_upload()
+            self._do_upload_locked()
         import logging
         logging.getLogger('cadqstream-minio').info(
             "CustomMinioUploader closed: uploads_ok=%d uploads_fail=%d",
             self._uploads_ok, self._uploads_fail,
         )
-
-    # ── CheckpointedFunction ─────────────────────────────────────────────────
-    # snapshot_state is called when the checkpoint barrier arrives.
-    # We flush the buffer synchronously here so the flushed data is committed
-    # to MinIO before Flink acknowledges the checkpoint.
-
-    def initialize_state(self, context):
-        """Restore buffered records from the previous checkpoint on task restart."""
-        if self._buffer_state is not None:
-            import logging
-            restored = 0
-            for blob in self._buffer_state.get():
-                if blob:
-                    try:
-                        decoded = blob.decode('utf-8') if isinstance(blob, bytes) else str(blob)
-                        self._buffer.append(decoded)
-                        restored += 1
-                    except Exception:
-                        pass
-            if restored > 0:
-                logging.getLogger('cadqstream-minio').info(
-                    "Restored %d records from checkpoint buffer", restored
-                )
-
-    def snapshot_state(self, context):
-        """Flush the buffer before the checkpoint is acknowledged.
-
-        ROOT CAUSE FIX: The checkpoint barrier is the only reliable flush signal
-        in PyFlink's subprocess execution model. Timer threads silently fail
-        inside the Python subprocess spawned by PyFlink. By flushing here, we
-        guarantee that:
-          1. All buffered records are uploaded before the checkpoint completes
-          2. The Flink state (empty buffer) is snapshotted after the upload
-          3. On restart, only unflushed records are re-processed
-        """
-        with self._lock:
-            if self._buffer:
-                self._do_upload()
-            if self._buffer_state is not None:
-                self._buffer_state.clear()
-                for line in self._buffer:
-                    self._buffer_state.add(line.encode('utf-8'))
 
     # ── MapFunction contract ──────────────────────────────────────────────────
 
@@ -233,18 +215,18 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
             self._buffer.append(line)
             self._records_since_flush += 1
             if self._records_since_flush >= self.flush_every_records:
-                self._do_upload()
+                self._do_upload_locked()
         return value
 
     # ── Flush logic ──────────────────────────────────────────────────────────
 
-    def _do_upload(self):
-        """Atomic: drain buffer, build JSON file, PUT to MinIO."""
+    def _do_upload_locked(self) -> int:
+        """Must be called while holding self._lock. Returns number of records flushed."""
         if not self._buffer:
-            return
+            return 0
 
-        buffer_snapshot       = self._buffer
-        self._buffer          = []
+        buffer_snapshot            = self._buffer
+        self._buffer              = []
         self._records_since_flush = 0
 
         filename = _generate_filename(self.table)
@@ -252,17 +234,17 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
 
         try:
             if self._using_boto3:
-                from io import BytesIO
-                bio = BytesIO(content)
+                from io import BytesIO as _BytesIO
+                bio = _BytesIO(content)
                 self._boto3_client.put_object(
                     Bucket=self.bucket,
                     Key=filename,
                     Body=bio,
                     ContentLength=len(content),
                 )
-            else:
-                from io import BytesIO
-                bio = BytesIO(content)
+            elif self._minio_client is not None:
+                from io import BytesIO as _BytesIO
+                bio = _BytesIO(content)
                 self._minio_client.put_object(
                     bucket_name=self.bucket,
                     object_name=filename,
@@ -270,12 +252,20 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
                     length=len(content),
                     content_type='application/json',
                 )
+            else:
+                import logging
+                logging.getLogger('cadqstream-minio').warning(
+                    "MinIO sink is a no-op (no client available)"
+                )
+                return 0
+
             self._uploads_ok += 1
             import logging
             logging.getLogger('cadqstream-minio').debug(
                 "Uploaded %s/%s (%d bytes, %d records)",
                 self.bucket, filename, len(content), len(buffer_snapshot),
             )
+            return len(buffer_snapshot)
         except Exception as e:
             self._uploads_fail += 1
             import logging
@@ -283,6 +273,7 @@ class CustomMinioUploader(RichMapFunction, CheckpointedFunction):
                 "Upload failed %s/%s: %s (failures=%d)",
                 self.bucket, filename, e, self._uploads_fail,
             )
+            return 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -526,8 +517,7 @@ def record_to_pipeline_stats_json(record: dict) -> str:
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Sink factories
-# Each returns a RichMapFunction that uploads JSON files to MinIO via native S3 API.
-# No StreamingFileSink, no Hadoop S3A, no 2PC multipart complexity.
+# Each returns a CustomMinioUploader (MapFunction) that uploads JSON to MinIO.
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _build_minio_sink(

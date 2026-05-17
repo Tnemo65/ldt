@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import os
 import sys
 from pathlib import Path
 import json
@@ -241,13 +242,13 @@ def main():
     parser.add_argument(
         '--kafka-bootstrap',
         type=str,
-        default='localhost:9092',
+        default=os.environ.get('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092'),
         help='Kafka bootstrap servers'
     )
     parser.add_argument(
         '--ml-service-url',
         type=str,
-        default='http://localhost:8000',
+        default=os.environ.get('ML_SERVICE_URL', 'http://ml-service:8000'),
         help='FastAPI ML service URL'
     )
     parser.add_argument(
@@ -265,10 +266,14 @@ def main():
 
     args = parser.parse_args()
 
+    # Env vars take precedence over defaults (env var already set correctly in docker-compose)
+    kafka_bootstrap = os.environ.get('KAFKA_BOOTSTRAP_SERVERS', args.kafka_bootstrap)
+    ml_service_url = os.environ.get('ML_SERVICE_URL', args.ml_service_url)
+
     # Create and run worker
     worker = ActionReplayWorker(
-        kafka_bootstrap=args.kafka_bootstrap,
-        ml_service_url=args.ml_service_url,
+        kafka_bootstrap=kafka_bootstrap,
+        ml_service_url=ml_service_url,
         max_retries=args.max_retries,
         backoff_base=args.backoff_base
     )

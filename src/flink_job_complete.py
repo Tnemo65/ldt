@@ -941,7 +941,7 @@ def main():
 
     BOOTSTRAP = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
 
-    # CustomMinioUploader is a RichMapFunction, not SinkFunction — use .map() not .add_sink()
+    # CustomMinioUploader is a MapFunction, not SinkFunction — use .map() not .add_sink()
 
     # ── Kafka Sinks ───────────────────────────────────────────────────
     # ROOT CAUSE FIX #3: TRUE sink consolidation — ONE unified sink for ALL outputs.

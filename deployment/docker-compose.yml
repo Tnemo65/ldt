@@ -311,6 +311,9 @@ services:
   # =============================================================================
 
   flink-jobmanager:
+    build:
+      context: ..
+      dockerfile: deployment/flink/Dockerfile
     image: ldt-flink:1.18.1-py
     container_name: ldt-flink-jobmanager
     hostname: flink-jobmanager
@@ -365,6 +368,11 @@ services:
         parallelism.default: 4
         taskmanager.memory.process.size: 2048m
         taskmanager.memory.managed.fraction: 0.4
+        # ── Python UDF: use venv Python with off-heap direct memory ─────────────
+        python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
+        python.client.executor.args: --python /opt/venv/bin/python3
+        taskmanager.memory.task.off-heap.enabled: true
+        taskmanager.memory.task.off-heap.size: 1024m
         kafka.bootstrap.servers: kafka:9092
         rest.address: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -398,6 +406,9 @@ services:
           memory: 4096M
 
   flink-taskmanager:
+    build:
+      context: ..
+      dockerfile: deployment/flink/Dockerfile
     image: ldt-flink:1.18.1-py
     container_name: ldt-flink-taskmanager
     hostname: flink-taskmanager
@@ -447,7 +458,11 @@ services:
         # FIX RC#1: Reduce connection TTL so stale connections are reclaimed faster.
         fs.s3a.connection.ttl: 30000
         # ── JVM Metaspace: prevent OOM from repeated Python UDF class loading ─────
-        taskmanager.memory.jvm-metaspace.size: 512m
+        taskmanager.memory.jvm-metaspace.size: 1024m
+        # Off-heap pool for Python Beam worker direct-memory mapping.
+        # Required: without an explicit size, the pool has 0 bytes and the Python
+        # subprocess crashes immediately on startup (isAliveOrThrow).
+        taskmanager.memory.task.off-heap.size: 1024m
         # ── RocksDB tuning ─────────────────────────────────────────────────────
         state.backend.rocksdb.memory.managed: true
         state.backend.rocksdb.block.cache-size: 512mb
@@ -466,6 +481,11 @@ services:
         metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
         # FIX LAG: Increased parallelism to drain consumer lag faster
         parallelism.default: 4
+        # ── Python UDF: use venv Python with off-heap direct memory ─────────────
+        python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
+        python.client.executor.args: --python /opt/venv/bin/python3
+        taskmanager.memory.task.off-heap.enabled: true
+        taskmanager.memory.task.off-heap.size: 1024m
         kafka.bootstrap.servers: kafka:9092
         rest.address: flink-jobmanager
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -479,6 +499,11 @@ services:
       S3_PATH_STYLE_ACCESS: "true"
       FLINK_ENV: production
       PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      # Python subprocess heap limit — prevents OOM when MemStreamScoringOperator
+      # allocates 50K memory buffer + PyTorch warmup across parallel tasks.
+      # 4 parallel Python processes × 1.5GB max = 6GB; JVM gets the remainder.
+      PYTHON_WORKER_HEAP_MAX_MB: "1536"
+      PYTHON_EXECUTION_MEMORY: "3072m"
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
@@ -499,6 +524,9 @@ services:
     shm_size: 256m
 
   flink-init:
+    build:
+      context: ..
+      dockerfile: deployment/flink/Dockerfile
     image: ldt-flink:1.18.1-py
     container_name: ldt-flink-init
     hostname: flink-init
@@ -511,7 +539,9 @@ services:
         condition: service_started
     networks:
       - cadqstream-net
-    restart: "no"
+    # ROOT CAUSE FIX: Run indefinitely for continuous job health monitoring.
+    # The supervisor loop watches for FAILED/LOST states and auto-resubmits.
+    restart: unless-stopped
     entrypoint: ["/bin/bash", "/scripts/flink-init.sh"]
     volumes:
       - ./flink/flink-init.sh:/scripts/flink-init.sh:ro
@@ -521,6 +551,8 @@ services:
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_PASSWORD: ${MINIO_ROOT_PASSWORD}
       FLINK_ENV: production
       PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
       MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
@@ -535,7 +567,13 @@ services:
   # =============================================================================
 
   ml-service:
-    image: ldt-ml-service:v1.0.0
+    # REBUILD NOTE: To force a clean rebuild of this service (e.g. after updating
+    # src/api/ml_service.py), run:
+    #   docker compose build --no-cache ml-service
+    # Without --no-cache, Docker may reuse cached layers if requirements.txt unchanged.
+    build:
+      context: ..
+      dockerfile: deployment/ml-service/Dockerfile
     container_name: ldt-ml-service
     hostname: ml-service
     depends_on:
@@ -592,6 +630,9 @@ services:
         condition: service_healthy
       ml-service:
         condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ML_SERVICE_URL: http://ml-service:8000
     networks:
       - cadqstream-net
     restart: unless-stopped
