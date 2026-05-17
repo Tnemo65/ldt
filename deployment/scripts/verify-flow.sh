@@ -24,6 +24,14 @@ if [ -f "$DOTENV" ]; then
     set +a
 fi
 
+# Require GRAFANA_PASSWORD to be set (no fallback)
+if [[ -z "${GRAFANA_PASSWORD:-}" ]]; then
+    echo "[fix-flow] ERROR: GRAFANA_PASSWORD environment variable not set"
+    echo "[fix-flow] Set it via: export GRAFANA_PASSWORD=\$(grep GRAFANA_PASSWORD $DEPLOYMENT_DIR/.env | cut -d= -f2)"
+    exit 1
+fi
+AUTH="admin:${GRAFANA_PASSWORD}"
+
 # Default topic names (match kafka init script and .env)
 TOPIC_RAW="${TOPIC_RAW:-taxi-nyc-raw}"
 TOPIC_PROCESSED="${TOPIC_PROCESSED:-dq-stream-processed}"
@@ -417,7 +425,7 @@ CURRENT_STEP=6
 log_step "6" "Grafana — Dashboards, panes, metric groups"
 
 # 6a. Dashboard count
-DASHBOARDS=$(curl -sf -u "admin:${GRAFANA_PASSWORD:-changeme-grafana-password!!}" \
+DASHBOARDS=$(curl -sf -u "admin:${GRAFANA_PASSWORD}" \
     "http://localhost:3000/api/search?type=dash-db" 2>/dev/null || echo "[]")
 DASH_COUNT=$(echo "$DASHBOARDS" | python -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo 0)
 if [ "$DASH_COUNT" -ge 6 ]; then
@@ -428,7 +436,7 @@ fi
 
 # 6b. For each dashboard, verify panes query data
 GRAFANA_URL="http://localhost:3000"
-AUTH="admin:${GRAFANA_PASSWORD:-changeme-grafana-password!!}"
+AUTH="admin:${GRAFANA_PASSWORD}"
 
 declare -A DASHBOARD_UIDS=(
     ["MemStream: Data Quality"]="memstream-data-quality"

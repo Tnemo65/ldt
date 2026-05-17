@@ -301,8 +301,8 @@ step_2_train() {
     hmac_valid=$(python3 - <<'PYEOF'
 import hmac, hashlib, sys
 signing_key = open(sys.argv[1], 'rb').read()
-expected = hmac.new(signign_key.encode(), signing_key, hashlib.sha256).hexdigest()
-# Just check the checkpoint is readable
+data = open(sys.argv[2], 'rb').read() if len(sys.argv) > 2 else signing_key
+# Verify checkpoint is readable
 import torch
 try:
     state = torch.load(sys.argv[1], weights_only=False)

@@ -2,6 +2,10 @@
 Rendezvous Operator - Synchronize Canary + Complex Branches.
 Task 3.6-3.10: CoProcessFunction with MapState inbox
 
+NOTE: Not used in Phase 3 pipeline (flink_job_complete.py uses sequential processing).
+Kept for potential Phase 4 dual-branch pattern. Do not remove until Phase 4 is
+confirmed to be abandoned.
+
 Architecture:
 - Two input streams: Canary (rule-based) + Complex (ML-based)
 - MapState inbox per branch with 5-second TTL
@@ -171,6 +175,11 @@ class RendezvousOperator(CoProcessFunction):
         (records that arrived from one branch but not the other within 5s).
         """
         from datetime import datetime
+
+        ts = ctx.timestamp()
+        if ts is None:
+            # Watermark-based timer may fire without a valid timestamp
+            return
 
         # Emit timeouts from canary inbox
         if self.canary_inbox:

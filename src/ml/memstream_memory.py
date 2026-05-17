@@ -62,6 +62,13 @@ DEFAULT_GAMMA: float = 0.0  # No decay weighting
 # NeighborhoodMemory: Single FIFO Buffer
 # =============================================================================
 
+# NOTE: NeighborhoodMemory is defined here for future use but is currently
+# not used in the production pipeline. The MemStreamCore class manages
+# a single MemoryModule per neighborhood instance. This class may be used
+# in a future refactor where each neighborhood has an independent
+# MemStreamCore instance with its own NeighborhoodMemory buffer.
+# Kept for: architectural completeness and potential future multi-instance use.
+
 class NeighborhoodMemory:
     """
     Single neighborhood's memory buffer (FIFO queue).

@@ -411,19 +411,26 @@ class ContextBeta:
         cb._cell_counts = {}
         if 'cell_counts' in state:
             cb._cell_counts = {
-                tuple(map(int, k.split('_')): v
+                tuple(map(int, k.split('_'))): v
                 for k, v in state['cell_counts'].items()
             }
         if 'recent_scores' in state:
             cb._recent_scores = deque(state['recent_scores'], maxlen=5000)
-        # Load thresholds — handle both full (thresholds_array) and legacy (betas) format
+        # Load thresholds — handle both full (thresholds_array), dict (thresholds), and legacy (betas) format
         if 'thresholds_array' in state:
-            cb._thresholds = state['thresholds_array'].astype(np.float32)
+            cb._thresholds = np.asarray(state['thresholds_array'], dtype=np.float32)
         elif 'thresholds' in state:
-            cb._thresholds = state['thresholds'].astype(np.float32)
+            # thresholds is a nested dict: {neighborhood_name: {context_name: value}}
+            for nb_name, ctx_dict in state['thresholds'].items():
+                nb_id = NEIGHBORHOOD_TO_ID.get(nb_name, -1)
+                if nb_id < 0:
+                    continue
+                for ctx_name, threshold in ctx_dict.items():
+                    ctx_id = CONTEXT_CELLS.index(ctx_name) if ctx_name in CONTEXT_CELLS else -1
+                    if ctx_id >= 0:
+                        cb._thresholds[nb_id, ctx_id] = float(threshold)
         elif 'betas' in state:
-            cb._thresholds = state['betas'].astype(np.float32)
-        cb.load_state_dict(state)
+            cb._thresholds = np.asarray(state['betas'], dtype=np.float32)
         return cb
 
     def quick_retrain(self, recent_scores: List[float]) -> float:

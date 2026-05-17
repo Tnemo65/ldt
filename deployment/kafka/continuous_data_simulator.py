@@ -40,7 +40,7 @@ logging.basicConfig(
 TOPIC_RAW = os.getenv("TOPIC_RAW", "taxi-nyc-raw-v2")
 BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
 DEFAULT_DELAY = float(os.getenv("PRODUCE_DELAY", "0.05"))
-DEFAULT_INPUT = os.getenv("INPUT_FILE", "data/nyc_taxi_300k.parquet")
+DEFAULT_INPUT = os.getenv("INPUT_FILE", "data/nyc_taxi_300k.csv")
 DEFAULT_LOOP = os.getenv("LOOP_INDEFINITELY", "true").lower() == "true"
 
 
@@ -128,23 +128,39 @@ def _load_records(input_path: str):
 
 def _create_topic_if_not_exists(admin_client, topic_name, num_partitions=8):
     """Create Kafka topic idempotently (no-op if it already exists)."""
-    existing = admin_client.list_topics(timeout=10)
-    if topic_name not in {t.name for t in existing.values}:
-        from kafka.admin import NewTopic
+    try:
+        existing = admin_client.list_topics()
+        # kafka-python 2.0.2: list_topics() can return str, dict, or list depending on version
+        if isinstance(existing, str):
+            topic_names = set(t.strip() for t in existing.strip().split('\n') if t.strip())
+        elif isinstance(existing, dict):
+            topic_names = {t.name for t in existing.values()}
+        elif isinstance(existing, (list, set, frozenset)):
+            # Each item might be a string or a Topic object
+            topic_names = set()
+            for t in existing:
+                if isinstance(t, str):
+                    topic_names.add(t)
+                else:
+                    topic_names.add(getattr(t, 'name', str(t)))
+        else:
+            topic_names = set()
+        if topic_name not in topic_names:
+            from kafka.admin import NewTopic
 
-        new_topic = NewTopic(
-            name=topic_name,
-            num_partitions=num_partitions,
-            replication_factor=1,
-            topic_configs={
-                "retention.ms": "604800000",
-                "cleanup.policy": "delete",
-            },
-        )
-        admin_client.create_topics([new_topic], validate_only=False)
-        LOGGER.info("Created topic: %s", topic_name)
-    else:
-        LOGGER.info("Topic already exists: %s", topic_name)
+            new_topic = NewTopic(
+                name=topic_name,
+                num_partitions=num_partitions,
+                replication_factor=1,
+                topic_configs={
+                    "retention.ms": "604800000",
+                    "cleanup.policy": "delete",
+                },
+            )
+            admin_client.create_topics([new_topic], validate_only=False)
+            LOGGER.info("Created topic: %s", topic_name)
+    except Exception as e:
+        LOGGER.warning("Could not check/create topic: %s. Assuming topic exists.", e)
 
 
 def _build_producer(bootstrap_servers):

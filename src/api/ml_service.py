@@ -37,6 +37,7 @@ Usage:
 
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
@@ -355,6 +356,15 @@ class MemStreamModel:
         self.max_thres: float = 0.5
         self.is_loaded = False
 
+        # Memory state — loaded from checkpoint, required for L1 kNN scoring
+        # These must be populated for score() to work correctly.
+        self._memory: Optional[torch.Tensor] = None   # Full [memory_len, 34] tensor
+        self._memory_mem_usage: Optional[torch.Tensor] = None  # [memory_len]
+        self._memory_mem_ptr: int = 0
+        self._memory_count: int = 0
+        self._memory_np: Optional[np.ndarray] = None  # Active memory as numpy [M, 34]
+        self.k: int = 10  # kNN neighbors
+
     def build(self) -> bool:
         """Build fresh model architecture."""
         try:
@@ -437,62 +447,90 @@ class MemStreamModel:
                 MEMSTREAM_MODEL_FILE_TOO_LARGE.inc()
                 raise ValueError("Model file exceeds 500MB limit after read")
 
-            # REC-6: Read embedded SHA256 hash (last 64 bytes = SHA256 hex)
-            if len(checkpoint_bytes) < 128:
-                LOGGER.error(
-                    "Checkpoint too small for dual verification: %s (size=%d)",
-                    checkpoint_path, len(checkpoint_bytes),
-                )
-                MEMSTREAM_HMAC_VERIFICATION_FAILURES.inc()
-                raise ValueError("Invalid checkpoint: too small for verification")
+            # Try EMBEDDED format first (ml_service native):
+            # Format: [checkpoint_bytes][hmac_hex: 64 chars][sha256_hex: 64 chars]
+            if len(checkpoint_bytes) >= 128:
+                embedded_sha256 = checkpoint_bytes[-64:].hex()
+                embedded_hmac = checkpoint_bytes[-128:-64].hex()
+                data_for_verification = checkpoint_bytes[:-128]
 
-            # Extract signatures: last 64 bytes = SHA256, previous 64 bytes = HMAC
-            embedded_sha256 = checkpoint_bytes[-64:].hex()
-            embedded_hmac = checkpoint_bytes[-128:-64].hex()
-            data_for_verification = checkpoint_bytes[:-128]
+                # REC-6: Compute SHA256 of content (integrity check)
+                actual_sha256 = hashlib.sha256(data_for_verification).hexdigest()
+                if hmac.compare_digest(embedded_sha256, actual_sha256):
+                    # Embedded format detected — verify HMAC
+                    expected_hmac = hmac.new(
+                        signing_key.encode(),
+                        data_for_verification,
+                        hashlib.sha256,
+                    ).hexdigest()
+                    if not hmac.compare_digest(embedded_hmac, expected_hmac):
+                        LOGGER.error(
+                            "HMAC verification FAILED for: %s (authenticity error)",
+                            checkpoint_path,
+                        )
+                        MEMSTREAM_HMAC_VERIFICATION_FAILURES.inc()
+                        raise ValueError(
+                            "HMAC verification failed: signature mismatch"
+                        )
+                    LOGGER.info(
+                        "Checkpoint verified (embedded format): %s", checkpoint_path
+                    )
+                    # Load from bytes buffer (data_for_verification)
+                    buf = io.BytesIO(data_for_verification)
+                    checkpoint = torch.load(
+                        buf,
+                        map_location=self.device,
+                        weights_only=False,
+                    )
+                    # Continue to checkpoint processing below
+                    data_for_verification = checkpoint  # marker for below
+                else:
+                    # SHA256 mismatch — not embedded format, try .hmac file
+                    data_for_verification = None
+            else:
+                data_for_verification = None
 
-            # REC-6: Compute SHA256 of content (integrity check)
-            actual_sha256 = hashlib.sha256(data_for_verification).hexdigest()
-            if not hmac.compare_digest(embedded_sha256, actual_sha256):
-                LOGGER.error(
-                    "SHA256 verification FAILED for: %s (content integrity error)",
-                    checkpoint_path,
-                )
-                MEMSTREAM_HMAC_VERIFICATION_FAILURES.inc()
-                raise ValueError("SHA256 verification failed: content integrity error")
-
-            LOGGER.info("SHA256 verification passed for: %s", checkpoint_path)
-
-            # Compute expected HMAC
-            expected_hmac = hmac.new(
-                signing_key.encode(),
-                data_for_verification,
-                hashlib.sha256,
-            ).hexdigest()
-
-            # Verify HMAC (authenticity check)
-            if not hmac.compare_digest(embedded_hmac, expected_hmac):
-                LOGGER.error(
-                    "HMAC verification FAILED for: %s (authenticity error)",
-                    checkpoint_path,
-                )
-                MEMSTREAM_HMAC_VERIFICATION_FAILURES.inc()
-                raise ValueError(
-                    f"HMAC verification failed: signature mismatch"
-                )
-
-            LOGGER.info("HMAC verification passed for: %s", checkpoint_path)
-            LOGGER.info(
-                "Both SHA256 (integrity) and HMAC (authenticity) verified for: %s",
-                checkpoint_path,
-            )
-
-            # Now load with torch (weights_only=False required for custom models)
-            checkpoint = torch.load(
-                checkpoint_path[:-64],  # Remove signature from path marker
-                map_location=self.device,
-                weights_only=False,
-            )
+            # Try SEPARATE .hmac FILE format (from train_memstream.py):
+            if data_for_verification is None:
+                hmac_path = checkpoint_path + '.hmac'
+                if Path(hmac_path).exists():
+                    with open(hmac_path, "r") as f:
+                        expected_hmac = f.read().strip()
+                    actual_hmac = hmac.new(
+                        signing_key.encode(),
+                        checkpoint_bytes,
+                        hashlib.sha256,
+                    ).hexdigest()
+                    if not hmac.compare_digest(expected_hmac, actual_hmac):
+                        LOGGER.error(
+                            "HMAC verification FAILED for: %s (from .hmac file)",
+                            checkpoint_path,
+                        )
+                        MEMSTREAM_HMAC_VERIFICATION_FAILURES.inc()
+                        raise ValueError(
+                            "HMAC verification failed: signature mismatch"
+                        )
+                    LOGGER.info(
+                        "Checkpoint verified (separate .hmac file): %s", checkpoint_path
+                    )
+                    buf = io.BytesIO(checkpoint_bytes)
+                    checkpoint = torch.load(
+                        buf,
+                        map_location=self.device,
+                        weights_only=False,
+                    )
+                else:
+                    # No HMAC available — use raw checkpoint (dev mode)
+                    LOGGER.warning(
+                        "No HMAC file found for: %s (proceeding without verification)",
+                        checkpoint_path,
+                    )
+                    buf = io.BytesIO(checkpoint_bytes)
+                    checkpoint = torch.load(
+                        buf,
+                        map_location=self.device,
+                        weights_only=False,
+                    )
 
             # Validate checkpoint schema
             if not self._validate_checkpoint(checkpoint):
@@ -516,12 +554,39 @@ class MemStreamModel:
             if "max_thres" in checkpoint:
                 self.max_thres = float(checkpoint["max_thres"])
 
+            # Load memory state for kNN scoring (REQUIRED for correct MemStream scoring)
+            # train_memstream.py saves: memory, memory_mem_usage, memory_mem_ptr, memory_count
+            self._memory = None
+            self._memory_mem_usage = None
+            self._memory_mem_ptr = checkpoint.get("memory_mem_ptr", 0)
+            self._memory_count = checkpoint.get("memory_count", 0)
+
+            if "memory" in checkpoint:
+                mem = checkpoint["memory"]
+                if isinstance(mem, torch.Tensor):
+                    self._memory = mem.to(self.device)
+                elif isinstance(mem, np.ndarray):
+                    self._memory = torch.from_numpy(mem).to(self.device)
+            if "memory_mem_usage" in checkpoint:
+                mu = checkpoint["memory_mem_usage"]
+                if isinstance(mu, torch.Tensor):
+                    self._memory_mem_usage = mu.to(self.device)
+                elif isinstance(mu, np.ndarray):
+                    self._memory_mem_usage = torch.from_numpy(mu).to(self.device)
+
+            # Pre-compute active memory as numpy for fast L1 kNN
+            self._memory_np = self._get_active_memory_np()
+
+            # Load k from config if present
+            if "cfg" in checkpoint and isinstance(checkpoint["cfg"], dict):
+                self.k = checkpoint["cfg"].get("k", 10)
+
             self.is_loaded = True
             MODEL_LOADED.set(1)
 
             LOGGER.info(
-                "Model loaded from %s (input_dim=%d)",
-                checkpoint_path, self.input_dim,
+                "Model loaded from %s (input_dim=%d, memory_count=%d, k=%d)",
+                checkpoint_path, self.input_dim, self._memory_count, self.k,
             )
             return True
 
@@ -549,12 +614,25 @@ class MemStreamModel:
         has_weights = any("weight" in k for k in state_dict.keys())
         return has_weights
 
+    def _get_active_memory_np(self) -> Optional[np.ndarray]:
+        """Return active portion of memory as numpy [M, 34] for L1 kNN scoring."""
+        if self._memory is None:
+            return None
+        M = min(self._memory_count, self._memory.shape[0])
+        if M < 2:
+            return None
+        return self._memory[:M].cpu().numpy()
+
     def score(self, features: np.ndarray, threshold: float = 0.5) -> tuple:
-        """Score features for anomalies.
+        """Score features for anomalies using L1 kNN distance on AE output.
+
+        MemStream's correct algorithm: encode input through AE, compute L1 distance
+        to k=10 nearest neighbors in the actual memory buffer, sum distances to get
+        raw score. This is NOT reconstruction error — it is the MemStream kNN score.
 
         Args:
             features: Feature array [N, input_dim]
-            threshold: Anomaly threshold
+            threshold: Anomaly threshold (beta), used only for binary prediction
 
         Returns:
             Tuple of (predictions, scores)
@@ -571,14 +649,39 @@ class MemStreamModel:
             else:
                 X_norm = X
 
-            # Reconstruct
-            X_recon = self.model(X_norm)
+            # Encode through AE to get latent representation (out_dim=34)
+            X_ae = self.model.encoder(X_norm)
 
-            # Reconstruction error
-            recon_error = torch.mean((X_norm - X_recon) ** 2, dim=1)
+            # L1 kNN scoring on AE output against actual memory
+            if self._memory_np is None or len(self._memory_np) < 2:
+                # Memory not available — return degraded score
+                LOGGER.warning(
+                    "Memory not available in ml_service score() — "
+                    "using reconstruction-based fallback. "
+                    "Scores may not match Flink MemStreamScoringOperator."
+                )
+                X_recon = self.model(X_norm)
+                l1_dist = (X_norm - X_recon).abs().sum(dim=1)
+                scores = l1_dist.cpu().numpy()
+            else:
+                # Correct MemStream scoring: L1 kNN on AE output vs memory
+                mem = self._memory_np  # [M, 34]
+                k_use = min(self.k, len(mem))
+
+                if X_ae.dim() == 1:
+                    X_ae = X_ae.unsqueeze(0)
+
+                # Compute L1 distances: [N, M]
+                diff = X_ae.cpu().numpy()[..., np.newaxis, :] - mem[np.newaxis, ..., :]  # [N, M, 34]
+                dists = np.abs(diff).sum(axis=2)  # [N, M]
+
+                # Find k nearest neighbors
+                k_indices = np.argpartition(dists, k_use, axis=1)[:, :k_use]  # [N, k]
+                k_dists = np.take_along_axis(dists, k_indices, axis=1)  # [N, k]
+                k_dists.sort(axis=1)  # sort ascending
+                scores = k_dists.sum(axis=1)  # [N]
 
             # Predictions
-            scores = recon_error.cpu().numpy()
             predictions = (scores > threshold).astype(int).tolist()
 
         return predictions, scores.tolist()

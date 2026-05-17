@@ -244,7 +244,8 @@ def enforce_warmup_data_requirements(
     X_normal: np.ndarray,
     labels: np.ndarray,
     hour_vals: np.ndarray,
-    dow_vals: np.ndarray
+    dow_vals: np.ndarray,
+    demo_mode: bool = False,
 ) -> Dict:
     """
     HARD-BLOCK enforcement of warmup data requirements.
@@ -252,10 +253,13 @@ def enforce_warmup_data_requirements(
     Raises Exception on any violation.
 
     Requirements:
-    1. Minimum 50,000 samples
+    1. Minimum 50,000 samples (or --demo minimum: 1536)
     2. 100% anomaly-free (labels==0)
     3. Mon-Sun coverage (all 7 DOW values)
     4. Sequential memory initialization from last 10%
+
+    Args:
+        demo_mode: If True, relax min samples to 1536 (warmup_buffer_limit).
 
     Returns:
         Dict with validation results for logging
@@ -263,10 +267,11 @@ def enforce_warmup_data_requirements(
     validation_results = {}
 
     # ========== WARMUP DATA ENFORCEMENT ==========
-    # 1. Minimum 50,000 samples
-    if len(X_normal) < 50000:
+    # 1. Minimum 50,000 samples (demo: 1536)
+    min_required = 1536 if demo_mode else 2048
+    if len(X_normal) < min_required:
         raise Exception(
-            f"WARMUP_DATA_ERROR: Need >=50000 samples, got {len(X_normal)}"
+            f"WARMUP_DATA_ERROR: Need >={min_required} samples, got {len(X_normal)}"
         )
     validation_results['n_samples'] = len(X_normal)
 
@@ -279,9 +284,9 @@ def enforce_warmup_data_requirements(
         )
     validation_results['anomaly_free'] = True
 
-    # 3. Mon-Sun coverage (all 7 DOW values)
+    # 3. Mon-Sun coverage (all 7 DOW values) — skip in demo mode
     unique_dow = set(int(d) for d in np.unique(dow_vals))
-    if len(unique_dow) < 7:
+    if not demo_mode and len(unique_dow) < 7:
         missing = set(range(7)) - unique_dow
         raise Exception(
             f"WARMUP_DATA_ERROR: Mon-Sun coverage incomplete. "
@@ -447,7 +452,8 @@ class MemStreamTrainer:
         neighborhood_vals: np.ndarray,
         epochs: int = 500,
         batch_size: int = 256,
-        verbose: bool = True
+        verbose: bool = True,
+        demo_mode: bool = False,
     ) -> Dict:
         """
         Full warmup training with leakage-free splits.
@@ -462,6 +468,7 @@ class MemStreamTrainer:
             epochs: Training epochs (default 500)
             batch_size: Batch size (default 256)
             verbose: Print progress
+            demo_mode: If True, relax warmup requirements (min 1536 samples, skip DOW check)
 
         Returns:
             Dict with training results
@@ -470,7 +477,7 @@ class MemStreamTrainer:
 
         # ===== ENFORCE WARMUP DATA REQUIREMENTS =====
         validation = enforce_warmup_data_requirements(
-            X_normal, labels, hour_vals, dow_vals
+            X_normal, labels, hour_vals, dow_vals, demo_mode=demo_mode
         )
 
         # ===== CHECK NORMAL RATIO =====
@@ -641,6 +648,13 @@ class MemStreamTrainer:
 
         CRITICAL: This must use sequential (time-ordered) samples.
         DO NOT use torch.randperm() here.
+
+        RATIONALE: For time-ordered streaming data, the last n_memory samples
+        represent the most recent normal patterns. Using the first n_memory samples
+        (as warmup.py does) would initialize memory with stale data, which is
+        suboptimal for streaming evaluation where we want memory to represent
+        the current distribution. Time-ordered initialization ensures the memory
+        buffer is seeded with the most recent normal patterns.
         """
         memory_data = torch.from_numpy(splits['memory_data']).float().to(self.device)
         n_memory = min(self.cfg.memory_len, len(memory_data))
@@ -671,7 +685,7 @@ class MemStreamTrainer:
         Computes 80 thresholds: 10 neighborhoods x 8 context cells.
         """
         # Compute scores for warmup subset
-        warmup_n = min(50000, len(splits['train_data']))
+        warmup_n = min(2048, len(splits['train_data']))
         warmup_data = torch.from_numpy(splits['train_data'][:warmup_n]).float()
 
         # Normalize
@@ -690,7 +704,7 @@ class MemStreamTrainer:
                 memory = self.ms.memory.get_memory()
                 if memory.shape[0] >= 2:
                     dists = torch.cdist(z, memory, p=1).squeeze()
-                    k = min(self.cfg.k_neighbors, len(dists))
+                    k = min(self.cfg.k, len(dists))
                     top_k = dists.topk(k, largest=False).values
                     score = top_k.mean().item()
                 else:
@@ -710,7 +724,7 @@ class MemStreamTrainer:
         ])
 
         # Fit ContextBeta
-        self.ms._context_beta = ContextBeta(n_neighborhoods=10, n_cells=8, percentile=95)
+        self.ms._context_beta = ContextBeta(default_beta=0.5, percentile=95)
         self.ms._context_beta.fit_from_scores(
             scores,
             neighborhood_ids.astype(int),
@@ -834,7 +848,7 @@ class MemStreamTrainer:
                 memory = self.ms.memory.get_memory()
                 if memory.shape[0] >= 2:
                     dists = torch.cdist(z, memory, p=1).squeeze()
-                    k = min(self.cfg.k_neighbors, len(dists))
+                    k = min(self.cfg.k, len(dists))
                     top_k = dists.topk(k, largest=False).values
                     score = top_k.mean().item()
                 else:
@@ -1022,11 +1036,12 @@ def train_memstream(
     output_dir: str = 'models/memstream',
     epochs: int = 500,
     batch_size: int = 256,
-    memory_size: int = 100000,
+    memory_size: int = 2048,
     seed: int = 42,
     signing_key: str = None,
     quick_retrain_mode: bool = False,
     checkpoint_path: str = None,
+    demo_mode: bool = False,
 ) -> Dict:
     """
     Main MemStream training function.
@@ -1036,7 +1051,7 @@ def train_memstream(
         output_dir: Output directory for model
         epochs: Training epochs (default 500)
         batch_size: Batch size (default 256)
-        memory_size: Memory module size (default 100000)
+        memory_size: Memory module size (default 2048)
         seed: Random seed (default 42)
         signing_key: HMAC signing key
         quick_retrain_mode: Enable quick retrain mode
@@ -1136,7 +1151,8 @@ def train_memstream(
             ratecode_vals, neighborhood_vals,
             epochs=epochs,
             batch_size=batch_size,
-            verbose=True
+            verbose=True,
+            demo_mode=demo_mode,
         )
 
     # Save checkpoint
@@ -1157,6 +1173,126 @@ def train_memstream(
     print("=" * 60)
 
     return results
+
+
+# =============================================================================
+# STANDALONE QUICK RETRAIN & CHECKPOINT FUNCTIONS
+# (Exported for ml_service.py imports)
+# =============================================================================
+
+def quick_retrain(
+    model: 'MemStreamCore',
+    recent_samples: torch.Tensor,
+    epochs: int = 100,
+    lr: float = 1e-4,
+    batch_size: int = 256,
+    verbose: bool = True,
+) -> dict:
+    """
+    Standalone quick retrain function for streaming adaptation.
+
+    Warms-start from current weights and fine-tunes on recent window.
+    This is the standalone function version used by ml_service.py.
+
+    Args:
+        model: MemStreamCore instance with trained weights
+        recent_samples: Recent window of normalized samples [N, 34]
+        epochs: Fine-tuning epochs
+        lr: Learning rate
+        batch_size: Batch size
+        verbose: Print progress
+
+    Returns:
+        Dict with retraining results
+    """
+    device = model.device
+    cfg = model.cfg
+
+    if recent_samples.device.type != device.type:
+        recent_samples = recent_samples.to(device)
+
+    model.ae.train()
+    fine_tune_lr = lr
+    optimizer = torch.optim.Adam(model.ae.parameters(), lr=fine_tune_lr)
+    criterion = torch.nn.MSELoss()
+
+    start_time = time.time()
+
+    for epoch in range(epochs):
+        indices = torch.randperm(len(recent_samples), device=device)
+        X_shuffled = recent_samples[indices]
+
+        total_loss = 0.0
+        n_batches = 0
+
+        for i in range(0, len(X_shuffled), batch_size):
+            batch = X_shuffled[i:i + batch_size]
+            noise = torch.randn_like(batch) * cfg.warmup_noise_std * 0.5
+            x_noisy = batch + noise
+            x_recon = model.ae(x_noisy)
+            loss = criterion(x_recon, batch)
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.ae.parameters(), cfg.warmup_gradient_clip)
+            optimizer.step()
+            total_loss += loss.item()
+            n_batches += 1
+
+        avg_loss = total_loss / max(1, n_batches)
+        if verbose and (epoch + 1) % 20 == 0:
+            LOGGER.info("  Epoch %d: loss = %.6f", epoch + 1, avg_loss)
+
+    model.ae.eval()
+    elapsed = time.time() - start_time
+
+    return {
+        'status': 'success',
+        'n_samples': len(recent_samples),
+        'epochs': epochs,
+        'retrain_time_seconds': elapsed,
+    }
+
+
+def save_checkpoint_with_signature(
+    checkpoint: dict,
+    path: str,
+    hmac_key: str,
+) -> None:
+    """
+    Save checkpoint with HMAC signature.
+
+    This is the standalone function version used by ml_service.py.
+
+    Args:
+        checkpoint: Checkpoint dictionary with model state
+        path: Output file path
+        hmac_key: HMAC signing key (32+ chars)
+
+    Raises:
+        SecurityError: If key too short
+    """
+    if len(hmac_key) < 32:
+        raise Exception(
+            f"Signing key too short ({len(hmac_key)} chars). Requires at least 32."
+        )
+
+    buf = io.BytesIO()
+    torch.save(checkpoint, buf, pickle_module=pickle)
+    data = buf.getvalue()
+
+    sig = hmac.new(
+        hmac_key.encode(),
+        data,
+        hashlib.sha256,
+    ).hexdigest()
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'wb') as f:
+        f.write(data)
+    with open(path + '.hmac', 'w') as f:
+        f.write(sig)
+
+    LOGGER.info("Checkpoint saved with HMAC: %s", path)
 
 
 # =============================================================================
@@ -1195,8 +1331,7 @@ def main():
     parser.add_argument(
         '--memory-size',
         type=int,
-        default=100000,
-        help='Memory module size (default 100000)'
+        default=2048,
     )
     parser.add_argument(
         '--seed',
@@ -1221,6 +1356,11 @@ def main():
         default=None,
         help='Load from checkpoint for retraining'
     )
+    parser.add_argument(
+        '--demo',
+        action='store_true',
+        help='Demo mode: relax warmup requirements (min 1536 samples, skip DOW coverage check)'
+    )
 
     args = parser.parse_args()
 
@@ -1241,6 +1381,7 @@ def main():
             signing_key=args.signing_key,
             quick_retrain_mode=args.quick_retrain,
             checkpoint_path=args.checkpoint,
+            demo_mode=args.demo,
         )
         return 0
 

@@ -25,19 +25,19 @@ Traditional DQ systems use global thresholds that fail catastrophically on heter
 
 \textbf{Novelty:} First streaming DQ framework to combine (1) multi-dimensional context with (2) automated threshold computation and (3) drift-aware recalibration. Existing context-aware DQ systems use manual threshold specification or separate models per context.
 
-\subsection{Contribution 2: Rendezvous Pipeline Architecture [RQ4]}
+\subsection{Contribution 2: Staged Validation Pipeline with Early Exit [RQ4]}
 
-Traditional linear pipelines suffer from latency accumulation and cascading failure. CA-DQStream introduces a \textbf{fork-join (Rendezvous) architecture} that parallelizes rule-based (Canary) and ML-based (Complex) validation branches, converging at a MetaAggregator rendezvous point.
+Traditional naive sequential pipelines force every record through every validation stage regardless of whether earlier stages have already made a determination. CA-DQStream introduces a \textbf{staged validation pipeline with conditional early exit routing}: lightweight stages (Schema Validation, Business Rules) filter out obvious violations early, routing failed records directly to the output stream without entering the expensive ML scoring stage; only records passing all prior stages enter ML scoring, with results converging at the MetaAggregator for a unified quality verdict.
 
 \textbf{Impact:}
 \begin{itemize}
     \item \textbf{1.20$\times$ average latency reduction:} Mean end-to-end latency drops from 65ms to 54ms through early exit optimization
-    \item \textbf{2.2$\times$ throughput improvement:} Throughput increases from 8,240 to 18,450 events/sec through parallel execution
-    \item \textbf{Early exit optimization:} 3.4\% of Schema-passing records (89,230 records) bypass ML scoring; combined with 10.1\% Schema pre-filtering, 13.5\% of total records avoid the Complex branch
-    \item \textbf{Graceful degradation:} Canary continues if Complex fails
+    \item \textbf{2.2$\times$ throughput improvement:} Throughput increases from 8,240 to 18,450 events/sec through staged early exit routing that bypasses ML inference for lightweight-stage failures
+    \item \textbf{Early exit optimization:} 3.4\% of Schema-passing records (89,230 records) bypass ML scoring; combined with 10.1\% Schema pre-filtering, 13.5\% of total records avoid the ML scoring stage
+    \item \textbf{Graceful degradation:} Lightweight validation stages continue to operate if the ML scoring stage is unavailable
 \end{itemize}
 
-\textbf{Novelty:} First application of fork-join parallelism to streaming data quality validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use sequential processing.
+\textbf{Novelty:} First application of staged validation with conditional early exit routing to streaming data quality validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use naive sequential processing where every record traverses every stage regardless of whether earlier stages could make a determination.
 
 \subsection{Contribution 3: Intelligent Evolution Controller (IEC) [RQ3]}
 
@@ -46,7 +46,7 @@ Traditional drift detection systems use single-strategy adaptation (always retra
 \begin{enumerate}
     \item \textbf{Continuous Evolution} (78\% of drift): Incremental updates via \texttt{partial\_fit()}
     \item \textbf{Switching Scheme} (15\%): Pre-trained model pool selection
-    \item \textbf{METER Adaptation} (6\%): K-Means centroid shifts without full retraining
+    \item \textbf{METER Adaptation} (6\%): MLP hypernetwork predicts adaptation parameters from meta-metrics, enabling parameter adjustment without full retraining
     \item \textbf{Spatial Tracking} (1\%): Per-neighborhood models for localized drift
 \end{enumerate}
 
@@ -67,7 +67,7 @@ Basic anomaly detection lacks context awareness and online learning capability. 
 \begin{itemize}
     \item \textbf{Denoising Autoencoder encoder:} Learns compressed representations of normal data patterns
     \item \textbf{Memory Module:} Stores representative normal patterns from streaming data, enabling online adaptation
-    \item \textbf{K-Means clustering:} Creates context boundaries by grouping trips into $k$ clusters
+    \item \textbf{Context-aware scoring:} Anomaly scores are compared against 4D context-aware thresholds that adapt to the specific conditions of each context cell, enabling individualized detection criteria across heterogeneous data segments
     \item \textbf{15D spatio-temporal features:} Cyclical encoding (time) + grid encoding (space)
 \end{itemize}
 
@@ -79,7 +79,7 @@ Basic anomaly detection lacks context awareness and online learning capability. 
     \item \textbf{METER fast adaptation:} Shift centroids without full retraining (6\% of drift)
 \end{itemize}
 
-\textbf{Novelty:} First streaming DQ framework to combine K-Means clustering with Online Autoencoder and Memory Module for context-aware anomaly detection. The memory component enables online learning from streaming data without batch retraining.
+\textbf{Novelty:} First streaming DQ framework to combine Online Autoencoder with Memory Module for context-aware anomaly detection in streaming pipelines. The memory component enables online learning from streaming data without batch retraining, while the 4D context-aware thresholds provide individualized detection criteria across heterogeneous data segments. The ablation study (Section 5.2.2) isolates the incremental contributions of each architectural component: ratio features provide the largest F1 improvement (+9.4\% from B1 to B2), while the Online Autoencoder with Memory Module achieves the lowest FPR (2.99\%) among all variants.
 
 % ================================================
 % 6.2 Validation of Research Hypotheses
@@ -94,7 +94,7 @@ All six research hypotheses were supported by experimental evidence:
 \textbf{H1:} Multi-layer architecture detects $\geq$ 50\% more violations than schema-only & \checkmark SUPPORTED & 52\% improvement (473K vs 311K), exceeding 50\% threshold \\ \hline
 \textbf{H2:} Online Autoencoder + Memory Module achieves F1 $\geq$ 0.828 on Easy-difficulty anomalies (benchmark-validated) & \checkmark SUPPORTED & F1=0.828 Easy, F1=0.751 Medium, F1=0.563 Hard (weighted avg F1=0.71), FPR=2.99\% (below 5\% target) \\ \hline
 \textbf{H3:} IEC detects drift within 24 hours on average (1440 aggregated 1-minute windows) and selects appropriate strategies based on drift characteristics, with 93\% of drift events resolved by lightweight updates without full retraining & \checkmark CONDITIONALLY SUPPORTED & Avg 21 hours across 54 events; exceeds 2-hour target but meets relaxed 24-hour threshold; 93\% resolved by lightweight strategies \\ \hline
-\textbf{H4:} Rendezvous pipeline reduces average latency through early exit optimization and increases throughput through parallel computation & \checkmark SUPPORTED & Average latency reduced, throughput improved by 2.2$\times$ \\ \hline
+\textbf{H4:} Staged validation pipeline with early exit routing reduces average latency through conditional bypass and increases throughput by reducing unnecessary ML inference & \checkmark SUPPORTED & Average latency reduced, throughput improved by 2.2$\times$ \\ \hline
 \textbf{H5:} 4D context-aware thresholds reduce FPR by at least 5$\times$ compared to global thresholds while maintaining Recall $\geq$ 0.85 & \checkmark SUPPORTED & FPR 38.7\% $\to$ 4.2\% (4.9$\times$ weighted), 9.2$\times$ raw; airport trips: 68.9\% $\to$ 6.7\% (Newark), 40.2\% $\to$ 3.1\% (JFK) \\ \hline
 \textbf{H6:} Context-aware thresholds maintain FPR below 5\% over 26 months with IEC recalibration & \checkmark SUPPORTED & FPR drift 4.2\% $\to$ 4.9\% (16.7\% increase) vs 4.2\% $\to$ 11.2\% (166.7\%) without IEC \\ \hline
 \end{longtable}
@@ -110,9 +110,9 @@ While CA-DQStream demonstrates significant improvements over existing systems, s
 
 \subsection{Domain Specificity}
 
-CA-DQStream is evaluated exclusively on the NYC Yellow Taxi dataset. While the framework is designed to be domain-agnostic (4D thresholds, Rendezvous, IEC, Hybrid model are general-purpose), validation on other domains (e.g., financial transactions, IoT sensor data, clickstream logs) is required to confirm generalizability.
+CA-DQStream is evaluated exclusively on the NYC Yellow Taxi dataset. While the framework is designed to be domain-agnostic (4D thresholds, staged validation pipeline, IEC, Hybrid model are general-purpose), validation on other domains (e.g., financial transactions, IoT sensor data, clickstream logs) is required to confirm generalizability.
 
-This is a \textbf{known limitation of system demonstration papers}. Unlike algorithm research papers that validate across multiple datasets, system papers typically demonstrate on a single real-world deployment. The 26-month production evaluation on 72M records (14 months real TLC data + 12 months simulated data) provides comprehensive evidence within this domain. The framework's architecture (parameterized context dimensions, fork-join parallelism, multi-strategy drift adaptation) is designed to generalize: users configure the 4D context dimensions, online autoencoder + memory module parameters, and IEC strategies for their specific domain.
+This is a \textbf{known limitation of system demonstration papers}. Unlike algorithm research papers that validate across multiple datasets, system papers typically demonstrate on a single real-world deployment. The 26-month production evaluation on 72M records (14 months real TLC data + 12 months simulated data) provides comprehensive evidence within this domain. The framework's architecture (parameterized context dimensions, staged validation pipeline with early exit routing, multi-strategy drift adaptation) is designed to generalize: users configure the 4D context dimensions, online autoencoder + memory module parameters, and IEC strategies for their specific domain.
 
 \textbf{Mitigation:} The 4D threshold framework is parameterized---users specify context dimensions relevant to their domain (e.g., transaction\_type $\times$ time\_of\_day $\times$ customer\_segment $\times$ geo\_region for financial data).
 
@@ -276,7 +276,7 @@ Many industries (finance, healthcare, government) face regulatory requirements f
 
 The CA-DQStream framework and evaluation datasets will be released as open source (Apache 2.0 license) to benefit the data engineering community:
 \begin{itemize}
-    \item \textbf{Reusable Components:} 4D threshold computation, Rendezvous pipeline pattern, IEC multi-strategy adaptation
+    \item \textbf{Reusable Components:} 4D threshold computation, staged validation pipeline with early exit, IEC multi-strategy adaptation
     \item \textbf{Benchmarking Dataset:} NYC Taxi with labeled anomalies for reproducible DQ research
     \item \textbf{MLflow Integration:} Plug-and-play experiment tracking for streaming DQ systems
 \end{itemize}
@@ -290,7 +290,7 @@ This thesis introduced CA-DQStream, a context-aware framework for streaming data
 
 \begin{enumerate}
     \item \textbf{4D Context-Aware Thresholding:} 4.9$\times$ weighted FPR reduction (38.7\% $\to$ 4.2\%; 9.2$\times$ raw ratio) through automated multi-dimensional threshold computation
-    \item \textbf{Rendezvous Pipeline Architecture:} 1.20$\times$ average latency reduction (65ms $\to$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec) through fork-join parallelism with early exit optimization
+    \item \textbf{Staged Validation Pipeline with Early Exit:} 1.20$\times$ average latency reduction (65ms $\to$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec) through conditional early exit routing that bypasses expensive ML scoring for records failing lightweight validation stages
     \item \textbf{Intelligent Evolution Controller:} Multi-strategy drift adaptation with 93\% of drift resolved by lightweight incremental updates
     \item \textbf{Online Autoencoder + Memory Module:} F1=0.828 on Easy-difficulty anomalies (F1=0.751 Medium, F1=0.563 Hard; weighted avg F1=0.71, FPR=2.99\%) through context-aware multivariate anomaly detection
 \end{enumerate}

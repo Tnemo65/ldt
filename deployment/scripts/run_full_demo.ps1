@@ -111,14 +111,14 @@ if ($ForceRestart) {
 Write-Banner "PHASE 1: Build Docker Images"
 
 if (-not $SkipBuild) {
-    Write-Step "Building ldt-flink:1.17.1-py (first run: 5-10 min)..."
-    $build = docker build -t ldt-flink:1.17.1-py $DEPLOYMENT_DIR -f "$DEPLOYMENT_DIR\flink\Dockerfile" 2>&1
+    Write-Step "Building ldt-flink:1.18.1-py (first run: 5-10 min)..."
+    $build = docker build -t ldt-flink:1.18.1-py $DEPLOYMENT_DIR -f "$DEPLOYMENT_DIR\flink\Dockerfile" 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] Flink image build failed!" -ForegroundColor Red
         Write-Host $build
         exit 1
     }
-    Write-Host "  [OK] ldt-flink:1.17.1-py built."
+    Write-Host "  [OK] ldt-flink:1.18.1-py built."
 
     foreach ($img in @(
         @{Name="cadqstream-metrics:latest";   Path="$DEPLOYMENT_DIR\cadqstream-metrics";   Desc="cadqstream-metrics"},

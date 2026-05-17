@@ -34,27 +34,6 @@ Kafka's retention mechanism stores events durably for as long as needed (configu
 
 The Kafka Streams API \citep{kafkastreams2024} enables implementing stream processing applications and microservices with higher-level functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Kafka Streams partitions data for processing using the same partitioning as Kafka's storage layer, enabling data locality, elasticity, scalability, high performance, and fault tolerance.
 
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.7\linewidth]{figs/kafka-streams-overview-v26.jpg}}
-\caption{Kafka Streams architecture overview. Producers write events to topics, consumers subscribe and process events, and Kafka Streams provides higher-level stream processing functions. Source: Apache Kafka Documentation \citep{kafkaintro2024}.}
-\label{fig:kafka_streams_overview}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.75\linewidth]{figs/Thesis_Figures/kafka1.PNG}}
-\caption{Kafka architecture: producers publish events to topics, each topic is partitioned across brokers, and consumer groups subscribe to consume events. Partitions enable parallel writes and reads across the cluster. Adapted from Apache Kafka documentation.}
-\label{fig:kafka_architecture}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.75\linewidth]{figs/Thesis_Figures/kafka2.PNG}}
-\caption{Kafka Streams API enables higher-level stream processing functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Source: Apache Kafka Documentation \citep{kafkaintro2024}.}
-\label{fig:kafka_streams_api}
-\end{figure}
-
 \subsection{Apache Flink: Stateful Stream Processing}
 
 Apache Flink \citep{flinkdocs2024} is described as ``a framework and distributed processing engine for stateful computations over unbounded and bounded data streams.'' Flink has been designed to run in all common cluster environments, perform computations at in-memory speed, and scale to any size. Flink integrates with Hadoop YARN, Kubernetes, and can run as a stand-alone cluster.
@@ -74,21 +53,7 @@ Flink supports both \textit{unbounded streams} (continuous, no defined end, must
 
 Flink's JobManager coordinates the execution of a Flink job, managing task scheduling, checkpoint coordination, and failure recovery. TaskManagers are worker nodes that execute tasks in parallel within processing slots. Each TaskManager provides a fixed number of processing slots (controlled by taskmanager.numberOfTaskSlots). State is maintained in memory or, if state size exceeds available memory, in access-efficient on-disk data structures (RocksDB state backend). Applications can leverage virtually unlimited amounts of CPUs, main memory, disk, and network I/O, with Flink reported to process multiple trillions of events per day and maintain multiple terabytes of state in production deployments.
 
-Flink's windowing mechanism enables aggregation over finite sets of events. Windows can be defined by time (tumbling, sliding, session) or count, and can be assigned based on event time or processing time. Figure~\ref{fig:flink_windows} illustrates how Flink partitions unbounded streams into bounded windows for stateful computation.
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.75\linewidth]{figs/flink-stateless-stateful-streaming.png}}
-\caption{Flink streaming architecture: stateless vs stateful stream processing. Flink applications are composed of streaming dataflows that may be transformed by user-defined operators. State is maintained in memory or in access-efficient on-disk data structures (RocksDB). Source: Apache Flink Documentation \citep{flinkdocs2024}.}
-\label{fig:flink_stateful}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.9\linewidth]{figs/Thesis_Figures/flink3.PNG}}
-\caption{Flink windowing on a data stream. An unbounded stream of events is partitioned into time-based windows (W1, W2, W3, ...) for aggregation and stateful computation. Each window maintains state and emits results independently. Source: Apache Flink Documentation \citep{flinkdocs2024}.}
-\label{fig:flink_windows}
-\end{figure}
+Flink's windowing mechanism enables aggregation over finite sets of events. Windows can be defined by time (tumbling, sliding, session) or count, and can be assigned based on event time or processing time.
 
 The distinction between batch and streaming DQ is fundamental. In batch processing, all records are available before validation, enabling complete statistical analysis. In streaming, records arrive incrementally, requiring online algorithms that update statistics incrementally and validate records with minimal latency.
 

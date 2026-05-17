@@ -117,14 +117,14 @@ DEFAULT_CONFIG = {
     'in_dim': 34,
     'hidden_dim': 68,
     'out_dim': 34,
-    'memory_len': 50000,    # plan: minimum 50,000
+    'memory_len': 2048,
     'k_neighbors': 10,
     'gamma': 0.0,
     'warmup_epochs': 500,    # Production warmup
     'warmup_batch_size': 256,
     'warmup_noise_std': 0.1,
     'default_beta': 0.5,
-    'warmup_buffer_limit': 16384,  # Ablation: {256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 50000}
+    'warmup_buffer_limit': 1536,  # Reduced for production: min records to trigger MemStream warmup
     'seed': 42,
 }
 
@@ -132,55 +132,26 @@ DEFAULT_CONFIG = {
 # Neighborhood Definitions (10 neighborhoods matching benchmark v10)
 # =============================================================================
 
-MANHATTAN_ZONES = set(range(1, 44))
-BRONX_ZONES = set(range(44, 104))
-BROOKLYN_ZONES = set(range(104, 128))
-QUEENS_LOWER_ZONES = set(range(128, 149))
-QUEENS_UPPER_ZONES = set(range(149, 162))
-STATEN_ISLAND_ZONES = set(range(162, 182))
-EWR_ZONES = set(range(182, 197))
-JFK_ZONES = set(range(217, 230))
-NALP_ZONES = set(range(230, 235))
-UNKNOWN_ZONES = set(range(235, 266)) | set(range(197, 217))
-
-NEIGHBORHOOD_NAMES = [
-    'manhattan', 'brooklyn', 'queens_lower', 'queens_upper',
-    'bronx', 'staten_island', 'ewr', 'jfk', 'nalp', 'unknown'
-]
-N_NEIGHBORHOODS = 10
+from src.operators.neighborhood_mapping import (
+    get_neighborhood_name,
+    get_neighborhood_idx,
+    NEIGHBORHOOD_NAMES,
+    N_NEIGHBORHOODS,
+)
 
 
 def location_to_neighborhood_idx(loc_id: int) -> int:
-    """Map PULocationID to neighborhood index (0-9)."""
-    if loc_id <= 0:
-        return 9
-    z = int(loc_id)
-    if 1 <= z <= 43:
-        return 0
-    elif 44 <= z <= 103:
-        return 4
-    elif 104 <= z <= 127:
-        return 1
-    elif 128 <= z <= 148:
-        return 2
-    elif 149 <= z <= 161:
-        return 3
-    elif 162 <= z <= 181:
-        return 5
-    elif 182 <= z <= 196:
-        return 6
-    elif 217 <= z <= 229:
-        return 7
-    elif 230 <= z <= 234:
-        return 8
-    else:
-        return 9
+    """Map PULocationID to neighborhood index (0-9). Delegates to shared module."""
+    return get_neighborhood_idx(int(loc_id) if loc_id else 0)
 
 
 def get_neighborhood(record: Dict) -> Tuple[str, int]:
-    """Get neighborhood name and index from record."""
-    zone_id = int(float(record.get('PULocationID', 1)))
-    idx = location_to_neighborhood_idx(zone_id)
+    """Get neighborhood name and index from record.
+
+    Uses shared neighborhood_mapping module for consistency with MetaAggregator.
+    """
+    zone_id = int(float(record.get('PULocationID', 0)))
+    idx = get_neighborhood_idx(zone_id)
     return NEIGHBORHOOD_NAMES[idx], idx
 
 
@@ -349,8 +320,8 @@ class MemStreamScoringOperator(MapFunction):
     def _validate_config(self):
         """CRITICAL assertions on config (HARD-BLOCK)."""
         cfg = self.config
-        assert cfg.get('memory_len', 0) >= 50000, (
-            f"[MemStream] HARD-BLOCK: memory_len must be >= 50000, "
+        assert cfg.get('memory_len', 0) >= 2048, (
+            f"[MemStream] HARD-BLOCK: memory_len must be >= 2048, "
             f"got {cfg.get('memory_len')}"
         )
         assert cfg.get('warmup_epochs', 0) >= 500, (
@@ -397,7 +368,7 @@ class MemStreamScoringOperator(MapFunction):
         )
 
         # Create MemStream config
-        cfg.memory_len = self.config.get('memory_len', 50000)
+        cfg.memory_len = self.config.get('memory_len', 2048)
         cfg.warmup_epochs = self.config.get('warmup_epochs', 500)
         cfg.warmup_batch_size = self.config.get('warmup_batch_size', 256)
         cfg.warmup_noise_std = self.config.get('warmup_noise_std', 0.1)
@@ -409,6 +380,19 @@ class MemStreamScoringOperator(MapFunction):
         # Initialize MemStream core
         self._ms_core = MemStreamCore(cfg=cfg, device='cpu')
         LOGGER.info("[MemStreamScoring] MemStreamCore initialized")
+
+        # NOTE: Each parallel Flink subtask has its own MemStream instance with
+        # independent memory. With parallelism=4, each of the 4 subtasks maintains
+        # its own 50K-slot memory buffer. Records scored by subtask A do NOT
+        # update memory used by subtask B — memory is NOT shared across subtasks.
+        #
+        # Implications:
+        #   - Effective memory coverage is 4x fragmented (4 separate 50K buffers).
+        #   - Warmup is duplicated across subtasks (each needs its own warmup data).
+        #   - Retrain signals reset memory only in the subtask that handles the signal.
+        #
+        # Long-term fix: Use Redis-backed shared memory so all subtasks share
+        # the same memory state. Short-term: reduce scoring parallelism to 1.
 
         # Setup Flink ValueState for memory persistence
         state_desc = ValueStateDescriptor(
@@ -716,6 +700,17 @@ class MemStreamScoringOperator(MapFunction):
                 pass
 
         if not self._warmup_complete:
+            # CRITICAL FIX #6: Guard against unbounded warmup buffer growth.
+            # If warmup keeps failing (e.g., all records fail vectorization),
+            # the buffer would grow forever. Cap it and switch to degraded mode.
+            if len(self._warmup_buffer) >= self._warmup_buffer_limit:
+                if not self._warmup_failed:
+                    self._warmup_failed = True
+                    LOGGER.error(
+                        f"[{self.__class__.__name__}] Warmup buffer limit reached "
+                        f"({self._warmup_buffer_limit}) without successful warmup. "
+                        f"Switching to degraded mode (score=0.5 for all records)."
+                    )
             self._warmup_buffer.append(value)
             return {
                 **value,

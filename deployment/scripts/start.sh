@@ -27,7 +27,7 @@ log_step() { echo -e "${CYAN}[STEP]${NC}  $*"; }
 echo ""
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════════════${NC}"
 echo -e "${CYAN}  CA-DQStream Production Deployment${NC}"
-echo -e "${CYAN}  4-Layer Streaming Pipeline on Apache Flink 1.17.1${NC}"
+echo -e "${CYAN}  4-Layer Streaming Pipeline on Apache Flink 1.18.1${NC}"
 echo -e "${CYAN}  Storage: MinIO only${NC}"
 echo -e "${CYAN}═══════════════════════════════════════════════════════════════════════════════${NC}"
 echo ""
@@ -54,8 +54,8 @@ docker network rm ldt_cadqstream-net 2>/dev/null || true
 docker network rm deployment_cadqstream-net 2>/dev/null || true
 docker network rm deployment-cadqstream-net 2>/dev/null || true
 
-log_info "Pruning unused Docker resources (images, build cache only)..."
-docker image prune -af 2>/dev/null || true
+log_info "Pruning unused Docker build cache for ldt-* images..."
+docker image prune -f --filter "reference=ldt-*" 2>/dev/null || true
 
 log_ok "Docker reset complete."
 
@@ -107,39 +107,9 @@ fi
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 2: Build Custom Flink Image
 # ═══════════════════════════════════════════════════════════════════════════
-log_step "STEP 2: Building custom Flink image (ldt-flink:1.17.1-py)"
+log_step "STEP 2: JAR dependencies (resolved at Docker build time)"
 
-if [ -f "$DEPLOYMENT_DIR/flink/Dockerfile" ]; then
-    log_info "Flink Dockerfile found at $DEPLOYMENT_DIR/flink/Dockerfile"
-
-    FLINK_LIB="$DEPLOYMENT_DIR/flink"
-    REQUIRED_JARS=(
-        "flink-connector-kafka-1.17.1.jar"
-        "flink-connector-jdbc-3.1.1-1.17.jar"
-        "kafka-clients-3.5.1.jar"
-    )
-
-    for jar in "${REQUIRED_JARS[@]}"; do
-        if [ -f "$FLINK_LIB/$jar" ]; then
-            log_ok "JAR found: $jar"
-        else
-            log_warn "JAR NOT found: $jar — image build may fail if not present in Dockerfile"
-        fi
-    done
-
-    log_info "Building image (this may take several minutes)..."
-    if docker build -f "$DEPLOYMENT_DIR/flink/Dockerfile" \
-        -t ldt-flink:1.17.1-py \
-        "$DEPLOYMENT_DIR" 2>&1; then
-        log_ok "Flink image built successfully"
-    else
-        log_err "Flink image build failed!"
-        exit 1
-    fi
-else
-    log_err "Flink Dockerfile not found at $DEPLOYMENT_DIR/flink/Dockerfile"
-    exit 1
-fi
+log_info "Kafka connector, Hadoop S3A JARs are downloaded from Maven Central during the Docker build."
 
 # ═══════════════════════════════════════════════════════════════════════════
 # STEP 3: Create Network

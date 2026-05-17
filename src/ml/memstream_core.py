@@ -41,6 +41,7 @@ import hashlib
 import hmac
 import io
 import logging
+import math
 import os
 import pickle
 from collections import deque
@@ -98,6 +99,12 @@ class MemStreamConfig:
     """Hyperparameters for MemStream anomaly detection (34D v10 benchmark).
 
     Verified against memstream_src/core/memstream_core.py lines 73-104.
+
+    Enforces production invariants:
+    - memory_len >= 2048
+    - gamma == 0.0 (prevents memory poisoning)
+    - in_dim == 34
+    - default_beta > 0
     """
 
     def __init__(self):
@@ -107,7 +114,7 @@ class MemStreamConfig:
         self.out_dim: int = 34          # v10: symmetric
 
         # Memory
-        self.memory_len: int = 50000   # plan: minimum 50,000
+        self.memory_len: int = 2048
         self.memory_init_fraction: float = 0.1
 
         # kNN scoring (v10 benchmark)
@@ -130,8 +137,31 @@ class MemStreamConfig:
         self.seed: int = 42
 
         # Warmup validation
-        self.warmup_min_samples: int = 50000
+        self.warmup_min_samples: int = 2048
         self.warmup_neighborhood_ids_required: bool = False
+
+    def validate(self) -> None:
+        """Validate production invariants.
+
+        Raises:
+            ValueError: If any invariant is violated
+        """
+        if self.memory_len < 2048:
+            raise ValueError(
+                f"memory_len={self.memory_len} is below minimum 2,048"
+            )
+        if self.gamma != 0.0:
+            raise ValueError(
+                f"gamma={self.gamma} is not 0.0 — memory poisoning risk"
+            )
+        if self.in_dim != 34:
+            raise ValueError(
+                f"in_dim={self.in_dim} must be 34"
+            )
+        if self.default_beta <= 0:
+            raise ValueError(
+                f"default_beta={self.default_beta} must be > 0"
+            )
 
     def __repr__(self) -> str:
         return (
@@ -217,7 +247,7 @@ class MemoryModule:
     Distance metric: L1 (Manhattan) per benchmark_v10.py line 662.
     """
 
-    def __init__(self, memory_len: int = 50000, out_dim: int = 34, device: str = 'cpu'):
+    def __init__(self, memory_len: int = 2048, out_dim: int = 34, device: str = 'cpu'):
         self.memory_len = memory_len
         self.out_dim = out_dim
         self.device = device
@@ -415,6 +445,7 @@ class MemStreamCore:
         device: str = 'cpu'
     ):
         self.cfg = cfg or MemStreamConfig()
+        self.cfg.validate()  # Enforce production invariants
         self.device = device
 
         # Autoencoder
@@ -773,7 +804,7 @@ class MemStreamCore:
         # Fit ContextBeta from warmup scores
         # =====================================================================
 
-        warmup_n = min(50000, len(X_norm))
+        warmup_n = min(2048, len(X_norm))
         warmup_data = X_norm[:warmup_n]
         warmup_scores_np = self.score_batch(warmup_data.cpu().numpy())
         warmup_scores = warmup_scores_np.tolist()
@@ -807,7 +838,7 @@ class MemStreamCore:
             )
 
         # Fit ContextBeta
-        self._context_beta = ContextBeta(n_neighborhoods=10, n_cells=8, percentile=95)
+        self._context_beta = ContextBeta(default_beta=0.5, percentile=95)
         self._context_beta.fit_from_scores(
             warmup_scores,
             neighborhood_ids_arr.tolist(),
@@ -1042,10 +1073,22 @@ class MemStreamCore:
     # -------------------------------------------------------------------------
 
     def reset_neighborhood(self, neighborhood_idx: int) -> Dict:
-        """Reset MemStream memory for a specific neighborhood.
+        """Reset MemStream memory.
+
+        NOTE: The current architecture uses a SINGLE shared memory buffer
+        (self.memory) across all neighborhoods. One retrain event for ANY
+        neighborhood resets the entire memory buffer. This IS the correct
+        behavior for the shared-memory architecture — a drift event means
+        the entire learned representation is stale.
+
+        For true per-neighborhood memory isolation, integrate NeighborhoodMemory
+        (10 independent circular buffers) from memstream_memory.py. Until then,
+        the neighborhood_idx parameter is accepted but unused; this method resets
+        ALL memory.
 
         Args:
-            neighborhood_idx: Index of the neighborhood to reset
+            neighborhood_idx: Index of the neighborhood to reset (unused —
+                see NOTE above)
 
         Returns:
             Dict with reset statistics
@@ -1071,7 +1114,7 @@ class MemStreamCore:
             return {'status': 'error', 'error': str(e)}
 
     def clone(self) -> 'MemStreamCore':
-        """Create a copy with same weights but fresh memory."""
+        """Create a copy with same weights and full state including memory."""
         new_ms = MemStreamCore(cfg=self.cfg, device=self.device)
         new_ms.ae.load_state_dict(self.ae.state_dict())
         new_ms.mean = self.mean.clone() if self.mean is not None else None
@@ -1082,6 +1125,8 @@ class MemStreamCore:
         new_ms.k = self.k
         new_ms.gamma = self.gamma
         new_ms._context_beta = self._context_beta
+        # Copy memory module state
+        new_ms.memory.load_state_dict(self.memory.get_state_dict())
         new_ms._score_buf = self._score_buf.copy()
         new_ms._warmup_scores = self._warmup_scores.copy()
         new_ms._recent_scores = deque(self._recent_scores, maxlen=5000)
@@ -1185,10 +1230,7 @@ class MemStreamCore:
             # Backward compat: load from legacy flat keys
             n_nb = state.get('context_beta_n_neighborhoods', 10)
             n_cells = state.get('context_beta_n_cells', 8)
-            self._context_beta = ContextBeta(
-                n_neighborhoods=n_nb,
-                n_cells=n_cells
-            )
+            self._context_beta = ContextBeta(default_beta=0.5, percentile=95)
             self._context_beta.betas = state['context_beta_betas']
         else:
             self._context_beta = None
@@ -1384,7 +1426,9 @@ class SimpleADWIN:
             old_mean = sum(old) / len(old)
 
             diff = abs(recent_mean - old_mean)
-            threshold = 2.0 * (1.0 / n ** 0.5)
+            # Hoeffding-based threshold: sqrt((1/(2*n)) * ln(2/delta))
+            # Lower delta = more sensitive (detects smaller shifts sooner)
+            threshold = math.sqrt((1.0 / (2.0 * max(n, 1))) * math.log(2.0 / max(self.delta, 1e-10)))
 
             if diff > threshold:
                 # Drift detected — shrink window

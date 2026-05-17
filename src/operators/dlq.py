@@ -1,6 +1,12 @@
 """
 Dead Letter Queue (DLQ) Infrastructure for CA-DQStream.
 
+NOTE: DLQ is implemented via inline sentinel dicts with _dlq=True flag,
+not Flink SideOutputs. See flink_job_complete.py DlqFilter pattern which
+routes records by checking record['_dlq'] == True.
+The OutputTag definitions below are kept for reference but are NOT connected
+to any Flink side output in the current pipeline.
+
 ROOT CAUSE FIX #2: Zero-Null Tolerance
 
 Every record that fails processing must NOT be silently dropped or passed as None

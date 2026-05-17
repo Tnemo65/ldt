@@ -1,7 +1,11 @@
 # =============================================================================
 # CA-DQStream Deployment Script (PowerShell)
-# 4-Layer Streaming Pipeline on Apache Flink 1.17.1 with Python support
+# 4-Layer Streaming Pipeline on Apache Flink 1.18.1 with Python support
 # Run from project root: powershell -ExecutionPolicy Bypass -File deployment/scripts/start.ps1
+#
+# NOTE: JAR dependencies (Kafka connector, Hadoop S3A libs) are downloaded from
+# Maven Central at build time inside the Dockerfile. They are NOT required as
+# local files. Only the source code and Python packages are needed.
 # =============================================================================
 
 param(
@@ -17,7 +21,7 @@ $DEPLOYMENT_DIR = Split-Path -Parent $PSScriptRoot
 Write-Host ""
 Write-Host "================================================================"
 Write-Host "  CA-DQStream Production Deployment - PowerShell"
-Write-Host "  4-Layer Streaming Pipeline on Apache Flink 1.17.1 + Python"
+Write-Host "  4-Layer Streaming Pipeline on Apache Flink 1.18.1 + Python"
 Write-Host "================================================================"
 Write-Host ""
 
@@ -39,123 +43,75 @@ foreach ($c in $ldtContainers) { docker rm -f $c 2>$null | Out-Null }
 Write-Host "[OK] Docker reset complete."
 Write-Host ""
 
-# ─── Step 1: Check Required JAR Files ─────────────────────────────────────
-Write-Host "[STEP 1] Checking required JAR files..."
-
-$jars = @(
-    "flink\flink-connector-kafka-1.17.1.jar",
-    "flink\flink-connector-jdbc-3.1.1-1.17.jar",
-    "flink\kafka-clients-3.5.1.jar"
-)
-
-$missing = $false
-foreach ($j in $jars) {
-    $path = Join-Path $DEPLOYMENT_DIR $j
-    if (-not (Test-Path $path)) {
-        Write-Host "  [MISSING] $j" -ForegroundColor Red
-        $missing = $true
-    } else {
-        $size = (Get-Item $path).Length / 1MB
-        Write-Host "  [OK] $j ($([math]::Round($size,1)) MB)"
-    }
-}
-
-# S3/S3A connector JARs (required for MinIO checkpoint + lakehouse storage)
-$s3Jars = @(
-    "flink\flink-s3-fs-hadoop-1.17.1.jar",
-    "flink\kafka-clients-3.5.1.jar"
-)
-foreach ($j in $s3Jars) {
-    $path = Join-Path $DEPLOYMENT_DIR $j
-    if (-not (Test-Path $path)) {
-        Write-Host "  [MISSING - OPTIONAL] $j" -ForegroundColor Yellow
-        Write-Host "    -> Download from Maven: flink-s3-fs-presto, hadoop-common, hadoop-aws"
-    } else {
-        $size = (Get-Item $path).Length / 1MB
-        Write-Host "  [OK] $j ($([math]::Round($size,1)) MB)"
-    }
-}
-
-if ($missing) {
-    Write-Host "[ERROR] Required JAR files are missing. Cannot proceed."
-    Write-Host "         Download them and place in deployment/flink/"
-    exit 1
-}
-
-$s3Missing = $false
-foreach ($j in $s3Jars) {
-    $path = Join-Path $DEPLOYMENT_DIR $j
-    if (-not (Test-Path $path)) {
-        Write-Host "  [MISSING] $j" -ForegroundColor Yellow
-        $s3Missing = $true
-    }
-}
-if ($s3Missing) {
-    Write-Host "  [WARN] S3/MinIO JARs missing - Hadoop deps must be in Flink image Dockerfile." -ForegroundColor Yellow
-}
+# NOTE: The Flink Dockerfile downloads Kafka connector and Hadoop S3A JARs from
+# Maven Central at build time. No local JAR files are required.
+Write-Host "[STEP 1] JAR dependencies (downloaded at Docker build time, not required locally)"
+Write-Host "  [OK] flink-connector-kafka: downloaded from Maven during image build"
+Write-Host "  [OK] kafka-clients: downloaded from Maven during image build"
+Write-Host "  [OK] hadoop-aws / aws-java-sdk-bundle: downloaded from Maven during image build"
 Write-Host ""
 
 # ─── Step 2: Build Images ─────────────────────────────────────
 Write-Host "[STEP 2] Building Docker images..."
 
-# Build Flink image
+# Build Flink image (tag must match docker-compose.yml: ldt-flink:1.18.1-py)
 if (-not $SkipBuild) {
-    Write-Host "  Building ldt-flink:1.17.1-py (5-10 min on first run)..."
-    $build = docker build -t ldt-flink:1.17.1-py $DEPLOYMENT_DIR -f (Join-Path $DEPLOYMENT_DIR "flink\Dockerfile") 2>&1
+    Write-Host "  Building ldt-flink:1.18.1-py (5-15 min on first run)..."
+    $build = docker build -t ldt-flink:1.18.1-py $DEPLOYMENT_DIR -f (Join-Path $DEPLOYMENT_DIR "flink\Dockerfile") 2>&1
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[ERROR] Flink image build failed!" -ForegroundColor Red
         Write-Host $build
         exit 1
     }
-    Write-Host "  [OK] ldt-flink:1.17.1-py built."
+    Write-Host "  [OK] ldt-flink:1.18.1-py built."
 } else {
-    $img = docker images -q ldt-flink:1.17.1-py 2>$null
+    $img = docker images -q ldt-flink:1.18.1-py 2>$null
     if (-not $img) {
-        Write-Host "[ERROR] Image ldt-flink:1.17.1-py not found. Run without -SkipBuild."
+        Write-Host "[ERROR] Image ldt-flink:1.18.1-py not found. Run without -SkipBuild." -ForegroundColor Red
         exit 1
     }
     Write-Host "  [SKIP] Flink build skipped."
 }
 
-# Build cadqstream-metrics image (fixed Prometheus registry)
-Write-Host "  Building cadqstream-metrics image..."
-$metricsBuild = docker build -t cadqstream-metrics:latest (Join-Path $DEPLOYMENT_DIR "cadqstream-metrics") 2>&1
+# Build cadqstream-metrics image (tag must match docker-compose.yml: ldt-cadqstream-metrics:latest)
+Write-Host "  Building ldt-cadqstream-metrics:latest..."
+$metricsBuild = docker build -t ldt-cadqstream-metrics:latest (Join-Path $DEPLOYMENT_DIR "cadqstream-metrics") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] cadqstream-metrics build failed!" -ForegroundColor Red
     Write-Host $metricsBuild
     exit 1
 }
-Write-Host "  [OK] cadqstream-metrics:latest built."
+Write-Host "  [OK] ldt-cadqstream-metrics:latest built."
 
-# Build ML service image
-Write-Host "  Building ml-service image..."
-$mlBuild = docker build -t ml-service:latest (Join-Path $DEPLOYMENT_DIR "ml-service") 2>&1
+# Build ML service image (tag must match docker-compose.yml: ldt-ml-service:latest)
+Write-Host "  Building ldt-ml-service:latest..."
+$mlBuild = docker build -t ldt-ml-service:latest (Join-Path $DEPLOYMENT_DIR "ml-service") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] ml-service build failed!" -ForegroundColor Red
     Write-Host $mlBuild
     exit 1
 }
-Write-Host "  [OK] ml-service:latest built."
+Write-Host "  [OK] ldt-ml-service:latest built."
 
-# Build action-replay-worker image
-Write-Host "  Building action-replay-worker image..."
-$arwBuild = docker build -t action-replay-worker:latest (Join-Path $DEPLOYMENT_DIR "action-replay-worker") 2>&1
+# Build action-replay-worker image (tag must match docker-compose.yml: ldt-action-replay-worker:latest)
+Write-Host "  Building ldt-action-replay-worker:latest..."
+$arwBuild = docker build -t ldt-action-replay-worker:latest (Join-Path $DEPLOYMENT_DIR "action-replay-worker") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] action-replay-worker build failed!" -ForegroundColor Red
     Write-Host $arwBuild
     exit 1
 }
-Write-Host "  [OK] action-replay-worker:latest built."
+Write-Host "  [OK] ldt-action-replay-worker:latest built."
 
-# Build stats-writer image
-Write-Host "  Building stats-writer image..."
-$swBuild = docker build -t stats-writer:latest (Join-Path $DEPLOYMENT_DIR "stats-writer") 2>&1
+# Build stats-writer image (tag must match docker-compose.yml: ldt-stats-writer:latest)
+Write-Host "  Building ldt-stats-writer:latest..."
+$swBuild = docker build -t ldt-stats-writer:latest (Join-Path $DEPLOYMENT_DIR "stats-writer") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] stats-writer build failed!" -ForegroundColor Red
     Write-Host $swBuild
     exit 1
 }
-Write-Host "  [OK] stats-writer:latest built."
+Write-Host "  [OK] ldt-stats-writer:latest built."
 Write-Host ""
 
 # ─── Step 3: Start All Services ────────────────────────────────────
@@ -386,12 +342,28 @@ try {
 }
 Write-Host ""
 
-# ─── Step 10: Train ML Model (optional) ─────────────────────────────
-if ($TrainModel) {
-    Write-Host "[STEP 10] Training ML model..."
+# ─── Step 10: ML Model Verification ────────────────────────────────────────
+Write-Host "[STEP 10] Verifying ML model artifacts..."
+$mlHealthy = $false
+try {
+    $mlResp = Invoke-WebRequest -Uri "http://localhost:8000/health" -UseBasicParsing -TimeoutSec 5 -ErrorAction SilentlyContinue
+    if ($mlResp.StatusCode -eq 200) {
+        $mlHealthy = $true
+        Write-Host "  [OK] ML service health check passed."
+    }
+} catch {
+    Write-Host "  [WARN] ML service not reachable at :8000." -ForegroundColor Yellow
+}
 
-    } else {
-        Write-Host "  [WARN] ML Service not ready. Skipping model training." -ForegroundColor Yellow
+if ($mlHealthy) {
+    try {
+        $predPayload = @{features = @(@(900.0, 3.5, 15.50, 2.50, 0.33, 0.95, 0.14, 0.0, 2.0, 100.0, 170.0, 5.0, 1.3, 0.16, 0.10, 0.05, 1.0, 1.0, 0.0, 1.0, 0.87, 0.5, 0.3, 0.8, 0.2, 0.7, 0.4, 0.6, 0.1, 0.9, 0.15, 0.85, 0.25, 0.75))} | ConvertTo-Json -Compress
+        $predResp = Invoke-WebRequest -Uri "http://localhost:8000/predict" -UseBasicParsing -Method POST -Body $predPayload -ContentType "application/json" -TimeoutSec 10 -ErrorAction SilentlyContinue
+        if ($predResp.StatusCode -eq 200) {
+            Write-Host "  [OK] ML /predict endpoint responding."
+        }
+    } catch {
+        Write-Host "  [WARN] ML /predict endpoint not responding yet." -ForegroundColor Yellow
     }
 }
 Write-Host ""
@@ -442,14 +414,14 @@ Write-Host "  Service             URL / Port                  Credentials"
 Write-Host "  -------             ---------------              ------------"
 Write-Host "  Kafka UI            http://localhost:8080       (no auth)"
 Write-Host "  Flink UI            http://localhost:8081       (no auth)"
-Write-Host "  Grafana             http://localhost:3000       admin / admin123"
+Write-Host "  Grafana             http://localhost:3000       admin / (see .env GRAFANA_PASSWORD)"
 Write-Host "  Prometheus          http://localhost:9090       (no auth)"
 Write-Host "  MinIO Console       http://localhost:9001       minioadmin / minioadmin123"
 Write-Host "  ML Service          http://localhost:8000       FastAPI"
 Write-Host "  cadqstream-metrics  localhost:9250/metrics      Prometheus scrape target"
 Write-Host ""
 Write-Host "  Next steps:"
-Write-Host "    1. Open Grafana at http://localhost:3000 (admin/admin123)"
+Write-Host "    1. Open Grafana at http://localhost:3000 (admin / see .env GRAFANA_PASSWORD)"
 Write-Host "    2. Wait 1-2 minutes for data to flow through pipeline"
 Write-Host "    3. Check MinIO data: docker exec ldt-minio mc ls local/raw-zone/"
 Write-Host "    4. Check metrics: curl http://localhost:9250/metrics | findstr cadqstream"

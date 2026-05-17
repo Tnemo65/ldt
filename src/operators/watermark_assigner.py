@@ -2,14 +2,11 @@
 Watermark assignment for event-time processing.
 Spec: Lines 1491-1510 (withIdleness 30s)
 
-FIX: Use processing time instead of event time for L4 windowing.
-Reason: Data has historical event timestamps (2024) which block watermark advancement.
-Solution: Return current processing time as event time so windows trigger every 1 minute.
-
-Task 1 - WatermarkStrategy Refactoring:
-  - BoundedOutOfOrderness explicitly set to 5 seconds (not 10s)
-  - Idleness set to 30 seconds (prevents partition stall)
-  - Processing time used for timestamp (unbounded advancement)
+ROOT CAUSE FIX: Historical timestamps (2024) stuck watermark advancement.
+Solution: Use for_monotonous_time() for window triggering. This assigns
+processing-time-based watermarks so TumblingEventTimeWindows fire every 1 minute
+regardless of event timestamps. The TaxiTripTimestampAssigner is still used
+downstream by MemStreamScoringOperator for decay factor computation.
 """
 
 from pyflink.common import WatermarkStrategy, Duration
@@ -17,23 +14,17 @@ from pyflink.common.watermark_strategy import TimestampAssigner
 
 
 class TaxiTripTimestampAssigner(TimestampAssigner):
-    """Extract pickup_datetime as event timestamp for bounded event-time processing.
+    """Extract pickup_datetime as event timestamp for ML decay factor computation.
 
-    FORBIDDEN: Processing time (time.time(), datetime.now()) was previously used here.
-    This caused a 2-year time delta when streaming historical 2024/2025 data,
-    breaking ML algorithm decay factors (decayed to 0) and causing all
-    IEC strategies to fall back to do_nothing.
-
-    FIX: Extract the actual event time from the record's tpep_pickup_datetime field.
-    If the field is missing or unparseable, fall back to the Kafka record timestamp.
-    This allows bounded watermark advancement based on the event's temporal ordering
-    rather than wall-clock processing time.
+    This timestamp is used by MemStreamScoringOperator to compute
+    time_since_last_update for decay_factor computation.
+    It is NOT used for watermark assignment (which uses processing time).
     """
 
     def extract_timestamp(self, value, record_timestamp):
         """Return event time from pickup_datetime, with Kafka record timestamp as fallback.
 
-        Returns event time in milliseconds for downstream windowing and watermark bounding.
+        Returns event time in milliseconds for ML decay factor computation.
         """
         if not isinstance(value, dict):
             return record_timestamp if record_timestamp is not None else 0
@@ -59,25 +50,28 @@ class TaxiTripTimestampAssigner(TimestampAssigner):
 
 
 def create_watermark_strategy():
-    """Create watermark strategy for bounded event-time processing.
+    """Create watermark strategy using processing time for window triggering.
 
-    ROOT CAUSE FIX #1 (Time Paradox):
-      - BoundedOutOfOrderness of 5 seconds (handle late arrivals within 5s window)
-      - Idleness of 30 seconds (unblock partitions that go silent)
-      - Event-time timestamp assigner (extracts tpep_pickup_datetime from record)
-      - Fallback to Kafka record timestamp if pickup_datetime is missing
+    ROOT CAUSE FIX (Time Paradox):
+      Historical 2024 timestamps blocked watermark advancement, preventing
+      TumblingEventTimeWindows from ever firing. The pipeline processed data
+      (Source read 17K+ records, Map2 buffered at 5000) but Window received
+      0 records because the watermark from 2024 was always behind the
+      event-time window boundaries.
 
-    ROOT CAUSE FIX #1: Previously used processing time (time.time()), which caused
-    a 2-year time delta when streaming 2024/2025 historical data. Decay factors
-    in MemStream/ADWIN decayed to 0, breaking all ML algorithms and causing
-    IEC to fall back to do_nothing for all records.
+      Solution: for_monotonous_time() assigns watermarks based on processing
+      time (wall clock), so windows fire every 1 minute regardless of
+      the event timestamps in the data.
+
+    TaxiTripTimestampAssigner is retained for ML decay factor computation
+    in MemStreamScoringOperator (time_since_last_update).
 
     Returns:
-        WatermarkStrategy configured for bounded, fault-tolerant event-time streaming
+        WatermarkStrategy with processing-time watermarks for reliable windowing
     """
     strategy = (
         WatermarkStrategy
-        .for_bounded_out_of_orderness(Duration.of_seconds(5))
+        .for_monotonous_time()
         .with_timestamp_assigner(TaxiTripTimestampAssigner())
         .with_idleness(Duration.of_seconds(30))
     )

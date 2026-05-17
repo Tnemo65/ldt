@@ -45,15 +45,17 @@ IEC_SIGNING_KEY_ENV = 'IEC_SIGNING_KEY'
 
 def _get_signing_key() -> str:
     """
-    Get IEC signing key from environment.
+    Get signing key for retrain signals.
 
-    Fails hard if key is missing. No fallback.
+    Reads MEMSTREAM_MODEL_SIGNING_KEY (primary, matches MemStreamScoringOperator)
+    as the primary key, with IEC_SIGNING_KEY as fallback for backward compat.
     """
-    key = os.environ.get(IEC_SIGNING_KEY_ENV)
-    if key is None or not key:
-        raise EnvironmentError(
-            f"{IEC_SIGNING_KEY_ENV} environment variable is not set or empty. "
-            f"Required for signing retrain signals written to MinIO."
+    key = os.environ.get('MEMSTREAM_MODEL_SIGNING_KEY') or os.environ.get(IEC_SIGNING_KEY_ENV)
+    if not key:
+        raise ValueError(
+            "MEMSTREAM_MODEL_SIGNING_KEY environment variable must be set. "
+            "This key is used to sign retrain signals written to MinIO and must "
+            "match the key used by MemStreamScoringOperator for HMAC verification."
         )
     return key
 
@@ -198,6 +200,12 @@ class IECController:
         self.minio_client = minio_client
 
         # Retrain trigger tracking per neighborhood
+        # NOTE: _retrain_tracking is NOT persisted to Flink state.
+        # On restart, these counters reset to zero:
+        #   - adwin_drift_days: Trigger A won't fire for 7 days after restart
+        #   - anomaly_rate_days_above_threshold: Trigger B won't fire for 3 days after restart
+        #   - knn_baseline: Will be recalculated from new memory state (acceptable)
+        # If persistence is needed, integrate with Flink keyed state (ValueState).
         self._retrain_tracking: Dict[str, dict] = {}
         self._init_retrain_tracking()
 
@@ -494,20 +502,27 @@ class IECController:
 
         elif strategy == EvolutionStrategy.QUICK_RETRAIN:
             result = self._execute_quick_retrain(decision)
+
+            # Record action in circuit breaker — ONLY for actual adaptations (quick_retrain)
+            # NOT for do_nothing (which runs on every MetaAggregator window and would
+            # cause the circuit to trip after ~10 windows of normal operation)
+            self._circuit_breaker.record_action()
+            if result.get('status') == 'success':
+                self._circuit_breaker.on_action_success()
+                # Reset kNN tracking so baseline recalculates from new memory state after retrain
+                for nb in decision.get('affected_neighborhoods', []):
+                    if nb in self._retrain_tracking:
+                        self._retrain_tracking[nb]['knn_history'] = []
+                        self._retrain_tracking[nb]['knn_baseline'] = None
+            else:
+                self._circuit_breaker.on_action_failure()
+
+            result['circuit_state'] = self._circuit_breaker.state
+            result['consecutive_actions'] = self._circuit_breaker.consecutive_actions
+            return result
+
         else:
             return {'status': 'error', 'message': f'Unknown strategy: {strategy}'}
-
-        # Record action in circuit breaker
-        self._circuit_breaker.record_action()
-        if result.get('status') == 'success':
-            self._circuit_breaker.on_action_success()
-        else:
-            self._circuit_breaker.on_action_failure()
-
-        result['circuit_state'] = self._circuit_breaker.state
-        result['consecutive_actions'] = self._circuit_breaker.consecutive_actions
-
-        return result
 
     def _execute_quick_retrain(self, decision: Dict) -> Dict:
         """
@@ -604,10 +619,11 @@ class IECController:
         import json
 
         if self.minio_client is None:
-            LOGGER.warning(
-                f"[IECController] No MinIO client — retrain signal not persisted for {neighborhood}"
+            raise RuntimeError(
+                f"[IECController] Cannot write retrain signal: MinIO client unavailable. "
+                f"Retrain decision will not be executed for neighborhood={neighborhood}. "
+                f"Ensure MinIO is configured and accessible."
             )
-            return
 
         iec_key = _get_signing_key()
 
@@ -666,6 +682,7 @@ class IECController:
         """Reset all IEC state."""
         self._adwin.reset()
         self._aggregator.reset()
+        self._circuit_breaker.reset()
         self._last_decision = None
         self._n_processed = 0
         self._strategy_counts = {s: 0 for s in EvolutionStrategy.ALL_STRATEGIES}

@@ -232,8 +232,15 @@ def make_unified_kafka_sink(bootstrap_servers):
         'batch.size': '65536',
         'buffer.memory': '134217728',
         'compression.type': 'lz4',
-        'acks': '0',
-        'retries': '0',
+        # CRITICAL FIX #1: acks=all is required for exactly-once checkpointing.
+        # acks=0 means fire-and-forget — records may be lost on broker failure,
+        # which violates the exactly-once guarantee even if checkpoints succeed.
+        # Trade-off: acks=all increases latency by ~1-3ms per record due to
+        # waiting for all ISRs to acknowledge. Ensure Kafka broker has
+        # min.insync.replicas=1 (default) or higher.
+        'acks': 'all',
+        'retries': '3',
+        'max.in.flight.requests.per.connection': '5',
     }
     return FlinkKafkaProducer(
         topic='dq-stream-unified',
@@ -275,7 +282,11 @@ def make_kafka_sink(topic, bootstrap_servers):
         'batch.size': '32768',
         'buffer.memory': '67108864',
         'compression.type': 'lz4',
-        'acks': '0',
+        # CRITICAL FIX #1: acks=all required for exactly-once.
+        # See make_unified_kafka_sink for full trade-off documentation.
+        'acks': 'all',
+        'retries': '3',
+        'max.in.flight.requests.per.connection': '5',
     }
     return FlinkKafkaProducer(
         topic=topic,
@@ -615,9 +626,25 @@ def main():
     checkpoint_config.set_min_pause_between_checkpoints(60000)
     checkpoint_config.set_checkpoint_timeout(600000)
     checkpoint_config.set_max_concurrent_checkpoints(1)
+    # NOTE: State backend (RocksDB) is configured in docker-compose.yml via
+    # flink-conf.yaml: state.backend: rocksdb, state.backend.incremental: true.
+    # This is picked up automatically by the Flink runtime — no code-level
+    # env.set_state_backend() call needed for PyFlink 1.18+.
     checkpoint_config.enable_externalized_checkpoints(
         ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
     )
+    # CRITICAL FIX #2: Unaligned checkpoints disabled with parallelism=4.
+    # With 4 parallel subtasks, aligned checkpoints can cause head-of-line
+    # blocking when one subtask is slow — barriers wait indefinitely for the
+    # slowest channel. Options to fix:
+    #   (A) Enable unaligned checkpoints for barrierless processing:
+    #         checkpoint_config.enable_unaligned_checkpoints()
+    #   (B) Keep aligned but increase concurrent checkpoints to overlap them:
+    #         checkpoint_config.set_max_concurrent_checkpoints(2)
+    # Chosen: keep aligned checkpoints with max_concurrent=1 (safer for RocksDB).
+    # NOTE: With parallelism=4 and single TM, unaligned checkpoints are risky
+    # because all 4 slots share the same TM process — partial writes can corrupt
+    # state. Only enable unaligned checkpoints when running across multiple TMs.
     checkpoint_config.disable_unaligned_checkpoints()
 
     # ── Layer 1: Ingestion & Validation ─────────────────────────────────

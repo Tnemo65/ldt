@@ -25,7 +25,7 @@ import socket
 import sys
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -39,11 +39,16 @@ from src.iec import (
 
 
 def _get_default_operator_id() -> str:
-    """Generate default operator_id from hostname + PID + random suffix."""
-    hostname = socket.gethostname()
-    pid = os.getpid()
-    short_uuid = uuid.uuid4().hex[:8]
-    return f"iec-{hostname}-{pid}-{short_uuid}"
+    """Generate stable operator_id from hostname + fixed UUID suffix.
+
+    The UUID is computed once per class (first operator instantiation) and
+    reused for all subsequent instances. This ensures Prometheus dashboards
+    maintain continuity across Flink job restarts.
+    """
+    if not hasattr(_get_default_operator_id, '_stable_id'):
+        hostname = socket.gethostname()
+        _get_default_operator_id._stable_id = f"iec-{hostname}-{uuid.uuid4().hex[:8]}"
+    return _get_default_operator_id._stable_id
 
 
 def _get_minio_client():
@@ -162,7 +167,7 @@ class IECOperator(MapFunction):
                 'iec_strategy': 'do_nothing',
                 'iec_confidence': 0.0,
                 'iec_error': str(e),
-                'iec_timestamp': datetime.utcnow().isoformat(),
+                'iec_timestamp': datetime.now(timezone.utc).isoformat(),
             }
 
         strategy = decision.get('strategy', 'do_nothing')
@@ -205,7 +210,7 @@ class IECOperator(MapFunction):
             'action_result': action_result,
             'retrain_triggers': retrain_triggers,
             'circuit_state': decision.get('circuit_state', 'closed'),
-            'iec_timestamp': datetime.utcnow().isoformat(),
+            'iec_timestamp': datetime.now(timezone.utc).isoformat(),
         }
 
         # Merge neighborhood data into output
@@ -294,6 +299,34 @@ class IECOperator(MapFunction):
                     urllib.request.Request(
                         'http://cadqstream-metrics:9250/internal/metrics',
                         data=p3,
+                        headers={'Content-Type': 'application/json'},
+                        method='POST'
+                    ),
+                    timeout=2
+                )
+            except Exception:
+                pass
+
+            # Circuit breaker state gauge (0=closed, 1=open, 2=half_open)
+            circuit_status = self.iec_controller.get_circuit_status() if self.iec_controller else {}
+            circuit_state = circuit_status.get('state', 'closed')
+            circuit_state_map = {'closed': 0, 'open': 1, 'half_open': 2}
+            circuit_state_value = circuit_state_map.get(circuit_state, 0)
+            p4 = json.dumps({
+                'name': 'iecc_circuit_state',
+                'value': circuit_state_value,
+                'labels': {
+                    'layer': 'L4',
+                    'neighborhood': neighborhood,
+                    'operator_id': self.operator_id,
+                },
+                'type': 'gauge'
+            }).encode('utf-8')
+            try:
+                urllib.request.urlopen(
+                    urllib.request.Request(
+                        'http://cadqstream-metrics:9250/internal/metrics',
+                        data=p4,
                         headers={'Content-Type': 'application/json'},
                         method='POST'
                     ),

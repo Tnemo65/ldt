@@ -31,6 +31,8 @@ import json
 import logging
 import urllib.request
 
+from src.operators.neighborhood_mapping import get_neighborhood_name, NEIGHBORHOOD_NAMES
+
 LOGGER = logging.getLogger('cadqstream-meta-agg')
 
 
@@ -261,20 +263,8 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
 def extract_neighborhood_key(record: dict) -> str:
     """Extract neighborhood key for spatial grouping.
 
-    Returns:
-        Neighborhood key (e.g., 'manhattan', 'brooklyn', etc.)
+    Uses shared neighborhood_mapping module for consistency with MemStreamScoringOperator.
+    Returns neighborhood name string (e.g., 'manhattan', 'brooklyn', etc.)
     """
     zone_id = record.get('PULocationID', 0)
-
-    if zone_id <= 50:
-        return 'manhattan'
-    elif zone_id <= 100:
-        return 'brooklyn'
-    elif zone_id <= 150:
-        return 'queens'
-    elif zone_id <= 200:
-        return 'bronx'
-    elif zone_id in [132, 138]:
-        return 'airport'
-    else:
-        return 'staten_island'
+    return get_neighborhood_name(int(float(zone_id)) if zone_id else 0)

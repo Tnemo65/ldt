@@ -1,7 +1,7 @@
 FROM python:3.10-slim
 WORKDIR /app
 RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends liblz4-1 liblz4-dev && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir kafka-python==2.0.2 pandas>=2.0.0 lz4>=4.0.0
+RUN pip install --no-cache-dir kafka-python==2.0.2 pandas>=2.0.0 pyarrow lz4>=4.0.0
 COPY continuous_data_simulator.py /app/continuous_data_simulator.py
 
 # Default: continuous unbounded streaming mode, 0.05s inter-record delay
@@ -9,6 +9,6 @@ COPY continuous_data_simulator.py /app/continuous_data_simulator.py
 # For single-pass test: --no-loop
 # For different topic: --topic taxi-nyc-raw-v2
 CMD ["python3", "/app/continuous_data_simulator.py", \
-     "--input", "/data/nyc_taxi_300k.parquet", \
+     "--input", "/data/taxi_sample_5k.parquet", \
      "--topic", "taxi-nyc-raw-v2", \
-     "--delay", "0.05"]
+     "--delay", "0.005"]

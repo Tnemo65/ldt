@@ -8,7 +8,7 @@ Key Design Decisions:
     - in_dim=34: Verified canonical dimensionality from feature_extractor.py
     - hidden_dim=68: 2x input dimension (standard autoencoder practice)
     - out_dim=34: Symmetric autoencoder (encode and decode same dimension)
-    - memory_len=50000: Minimum 50,000 slots per neighborhood for production
+    - memory_len=2048: Minimum 2,048 slots per neighborhood for production
     - gamma=0.0: Prevents memory poisoning (fresh anomaly scores dominate)
     - warmup_epochs=500: Extended warmup for production quality
     - k=10: kNN neighbors for scoring
@@ -41,7 +41,7 @@ class MemStreamConfig:
         in_dim: Input feature dimension (34 for NYC taxi)
         hidden_dim: Hidden layer dimension (2x in_dim)
         out_dim: Output dimension (matches in_dim for symmetric AE)
-        memory_len: Number of memory slots (minimum 50,000 for production)
+        memory_len: Number of memory slots (minimum 2,048 for production)
         k: Number of kNN neighbors for scoring
         gamma: Decay factor for weighted kNN (0.0 = no decay)
         default_beta: Default anomaly threshold
@@ -65,7 +65,7 @@ class MemStreamConfig:
     out_dim: int = 34
 
     # Memory (production scale)
-    memory_len: int = 50000
+    memory_len: int = 2048
     memory_init_fraction: float = 0.1
 
     # kNN scoring (v10 benchmark)
@@ -111,9 +111,9 @@ class MemStreamConfig:
         if self.out_dim != 34:
             errors.append(f"Expected out_dim=34, got {self.out_dim}")
 
-        if self.memory_len < 50000:
+        if self.memory_len < 2048:
             errors.append(
-                f"memory_len={self.memory_len} is below minimum 50,000"
+                f"memory_len={self.memory_len} is below minimum 2,048"
             )
 
         if self.gamma != 0.0:
@@ -209,7 +209,7 @@ class MemStreamDefaults:
     OUT_DIM: int = 34
 
     # Memory
-    MEMORY_LEN: int = 50000
+    MEMORY_LEN: int = 2048
     MEMORY_INIT_FRACTION: float = 0.1
 
     # kNN

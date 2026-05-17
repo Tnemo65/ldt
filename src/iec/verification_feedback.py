@@ -1,6 +1,19 @@
 """
 IEC Verification Feedback Loop.
 
+*** RESERVED FOR PHASE 4 INTEGRATION ***
+
+Phase 3 Status: This module is not used in the current Sequential Pipeline.
+- Not imported by iec_controller.py
+- Not instantiated by any operator
+- Exported in __init__.py for future use
+
+Phase 4 TODO:
+- Integrate with IECController after quick_retrain execution
+- Replace beta-based AdaptationRecord with strategy-based tracking
+  (Phase 3 uses do_nothing/quick_retrain, not adjust_threshold)
+- Implement verification windows post-retrain
+
 Tracks whether IEC adaptations (threshold adjustments) actually improve metrics.
 If no improvement after N verification windows, triggers escalation or rollback.
 
@@ -20,17 +33,23 @@ LOGGER = logging.getLogger('memstream-iec.verification')
 
 @dataclass
 class AdaptationRecord:
-    """Record of a single IEC adaptation."""
+    """
+    Record of a single IEC adaptation.
+
+    Phase 4: Strategy-based (replaces Phase 2D beta-based tracking).
+    """
     timestamp: float
     strategy: str
     neighborhood: str
-    old_beta: float
-    new_beta: float
-    anomaly_rate_before: float
-    anomaly_rate_after: float
-    drift_count_before: int
-    drift_count_after: int
-    improvement: float  # positive = better, negative = worse
+    # Phase 4: old/new values depend on strategy type
+    # For quick_retrain: old/new model_version or memory_snapshot_id
+    old_value: float = 0.0
+    new_value: float = 0.0
+    anomaly_rate_before: float = 0.0
+    anomaly_rate_after: float = 0.0
+    drift_count_before: int = 0
+    drift_count_after: int = 0
+    improvement: float = 0.0  # positive = better, negative = worse
     verified: bool = False
     verdict: str = 'pending'  # 'pending', 'success', 'failed', 'neutral'
 
@@ -100,18 +119,18 @@ class VerificationFeedbackLoop:
         self,
         neighborhood: str,
         strategy: str,
-        old_beta: float,
-        new_beta: float,
+        old_value: float,
+        new_value: float,
         metrics: Dict,
     ) -> None:
         """
         Record a snapshot before applying an adaptation.
-        
+
         Args:
             neighborhood: The neighborhood being adapted
-            strategy: The adaptation strategy (e.g., 'adjust_threshold')
-            old_beta: Beta value before adaptation
-            new_beta: Beta value after adaptation
+            strategy: The adaptation strategy (e.g., 'quick_retrain', 'do_nothing')
+            old_value: Phase 4: model version or memory snapshot ID before adaptation
+            new_value: Phase 4: model version or memory snapshot ID after adaptation
             metrics: Current meta-metrics from MetaAggregator
         """
         snapshot = VerificationWindow(
@@ -132,8 +151,8 @@ class VerificationFeedbackLoop:
             timestamp=time.time(),
             strategy=strategy,
             neighborhood=neighborhood,
-            old_beta=old_beta,
-            new_beta=new_beta,
+            old_value=old_value,
+            new_value=new_value,
             anomaly_rate_before=snapshot.anomaly_rate,
             anomaly_rate_after=0.0,
             drift_count_before=snapshot.drift_count,
@@ -153,17 +172,23 @@ class VerificationFeedbackLoop:
     def record_verification_window(self, metrics: Dict) -> Optional[Dict]:
         """
         Record a new verification window metric and check pending verifications.
-        
+
         Args:
-            metrics: Current meta-metrics from MetaAggregator
-            
+            metrics: Current meta-metrics. Can be:
+                - Dict keyed by neighborhood: {'manhattan': {...}, 'brooklyn': {...}}
+                - Flat dict with 'neighborhood_id' field
+
         Returns:
             Dict with verification results if a pending adaptation is ready to be verified,
             or None if no pending verifications.
         """
-        neighborhood = metrics.get('neighborhood', 'unknown')
-        current_anomaly_rate = float(metrics.get('anomaly_rate', 0.0))
-        current_drift_count = int(metrics.get('drift_count', 0))
+        # Normalize: extract neighborhood from either format
+        if 'neighborhood_id' in metrics:
+            neighborhood = metrics.get('neighborhood_id', 'unknown')
+        elif len(metrics) == 1 and isinstance(list(metrics.values())[0], dict):
+            neighborhood = list(metrics.keys())[0]
+        else:
+            neighborhood = metrics.get('neighborhood', 'unknown')
         
         if neighborhood not in self._pending_verification:
             return None
@@ -234,8 +259,8 @@ class VerificationFeedbackLoop:
             'consecutive_failures': consecutive_fails,
             'consecutive_successes': consecutive_successes,
             'strategy': record.strategy,
-            'old_beta': record.old_beta,
-            'new_beta': record.new_beta,
+            'old_value': record.old_value,
+            'new_value': record.new_value,
             'action': 'none',
         }
         
@@ -251,12 +276,12 @@ class VerificationFeedbackLoop:
         # Rollback: too many consecutive failures
         if consecutive_fails >= self.rollback_threshold:
             result['action'] = 'rollback'
-            result['rollback_beta'] = record.old_beta
+            result['rollback_value'] = record.old_value
             self._total_rollbacks += 1
             LOGGER.error(
                 "[Verification] ROLLBACK %s: %d consecutive failures, "
-                "reverting beta from %.4f to %.4f",
-                neighborhood, consecutive_fails, record.new_beta, record.old_beta
+                "reverting from new_value %.4f to old_value %.4f",
+                neighborhood, consecutive_fails, record.new_value, record.old_value
             )
         
         if record.verdict == 'success' and consecutive_successes >= 3:
@@ -299,8 +324,8 @@ class VerificationFeedbackLoop:
                 'timestamp': r.timestamp,
                 'neighborhood': r.neighborhood,
                 'strategy': r.strategy,
-                'old_beta': r.old_beta,
-                'new_beta': r.new_beta,
+                'old_value': r.old_value,
+                'new_value': r.new_value,
                 'verdict': r.verdict,
                 'improvement': r.improvement,
             }

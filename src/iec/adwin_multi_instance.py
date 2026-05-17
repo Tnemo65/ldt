@@ -18,9 +18,11 @@ Metrics monitored:
 Spec: Phase 1D — SimpleADWIN Expansion (6→10 neighborhoods)
 """
 
+from collections import deque
 from datetime import datetime
 from typing import Dict, List, Optional
 import logging
+import math
 
 from src.ml.memstream_core import SimpleADWIN
 
@@ -98,7 +100,7 @@ class MultiInstanceADWIN:
         self.adwin_instances = {}
         
         # Track drift history for get_total_drifts()
-        self.drift_history: List[Dict] = []
+        self.drift_history: deque = deque(maxlen=1000)
 
         for neighborhood in neighborhoods:
             for metric in metrics:
@@ -152,26 +154,26 @@ class MultiInstanceADWIN:
         """Update all SimpleADWIN instances from MetaAggregator output.
 
         Args:
-            meta_metrics: Dict with neighborhood_id and 6 metrics
+            meta_metrics: Dict keyed by neighborhood name, e.g.
+                {
+                    'manhattan': {'volume': 1500, 'null_rate': 0.02, ...},
+                    'brooklyn': {'volume': 800, 'null_rate': 0.01, ...},
+                }
 
         Returns:
             List of drift detections
         """
-        neighborhood = meta_metrics.get('neighborhood_id', 'unknown')
-
         drifts = []
 
-        for metric_name in self.metrics:
-            value = meta_metrics.get(metric_name)
-
-            if value is None:
+        for neighborhood, metrics in meta_metrics.items():
+            if neighborhood == '_dlq':
                 continue
 
-            # Update SimpleADWIN
-            drift_result = self.update(neighborhood, metric_name, value)
-
-            if drift_result['drift_detected']:
-                drifts.append(drift_result)
+            for metric_name, value in metrics.items():
+                if isinstance(value, (int, float)) and not math.isnan(float(value)):
+                    drift_result = self.update(neighborhood, metric_name, float(value))
+                    if drift_result['drift_detected']:
+                        drifts.append(drift_result)
 
         return drifts
 
@@ -210,7 +212,11 @@ class MultiInstanceADWIN:
     def reset_all(self):
         """Reset all SimpleADWIN instances and clear drift history."""
         for key in self.adwin_instances:
-            neighborhood, metric_name = key.rsplit('_', 1)
+            # Key format: 'neighborhood_metric' where neighborhood may contain underscores
+            # (e.g., 'queens_lower_volume', 'staten_island_anomaly_rate').
+            # Split off the last underscore to get the metric name.
+            metric_name = key.rsplit('_', 1)[-1]
+            neighborhood = key[:-(len(metric_name) + 1)]
             delta = self.delta_config.get(metric_name, self.default_delta)
             self.adwin_instances[key] = SimpleADWIN(delta=delta, max_window=self.max_window)
         self.drift_history.clear()
@@ -239,72 +245,3 @@ class MultiInstanceADWIN:
         return self.adwin_instances.get(key)
 
 
-class DriftAggregator:
-    """Aggregate drift signals across multiple SimpleADWIN instances.
-
-    Provides higher-level drift assessment by combining signals from
-    multiple neighborhoods and metrics.
-    """
-
-    def __init__(self, drift_threshold: int = 3):
-        """Initialize drift aggregator.
-
-        Args:
-            drift_threshold: Number of concurrent drifts to trigger alert
-        """
-        self.drift_threshold = drift_threshold
-        self.recent_drifts = []
-        self.drift_history = []
-
-    def add_drift(self, drift_event: dict):
-        """Add drift event to aggregator.
-
-        Args:
-            drift_event: Drift detection result from SimpleADWIN
-        """
-        self.recent_drifts.append(drift_event)
-        self.drift_history.append(drift_event)
-
-        # Keep only recent drifts (last 10 minutes)
-        # In production, would use proper time-based windowing
-        if len(self.recent_drifts) > 100:
-            self.recent_drifts = self.recent_drifts[-100:]
-
-    def assess_drift_severity(self):
-        """Assess overall drift severity.
-
-        Returns:
-            Dict with severity assessment
-        """
-        n_recent = len(self.recent_drifts)
-
-        if n_recent == 0:
-            severity = 'none'
-        elif n_recent < self.drift_threshold:
-            severity = 'low'
-        elif n_recent < self.drift_threshold * 2:
-            severity = 'moderate'
-        else:
-            severity = 'high'
-
-        # Count affected neighborhoods
-        affected_neighborhoods = set(
-            d['neighborhood'] for d in self.recent_drifts
-        )
-
-        # Count affected metrics
-        affected_metrics = set(
-            d['metric'] for d in self.recent_drifts
-        )
-
-        return {
-            'severity': severity,
-            'drift_count': n_recent,
-            'affected_neighborhoods': list(affected_neighborhoods),
-            'affected_metrics': list(affected_metrics),
-            'threshold': self.drift_threshold
-        }
-
-    def clear_recent(self):
-        """Clear recent drifts (e.g., after adaptation)."""
-        self.recent_drifts = []

@@ -1,1259 +1,961 @@
-1. CÁC QUY ĐỊNH THỐNG NHẤT (LOCKED)
-
-NOTE: TẤT CẢ evaluation PHẢI chạy STREAMING mode để chứng minh
-concept drift detection. Không dùng batch evaluation cho concept drift.
-Một số baseline models (IsolationForest, OC-SVM, HBOS) không hỗ trợ
-streaming — chúng chỉ để so sánh point anomaly detection, KHÔNG dùng
-cho concept drift analysis.
-
-1.1. Ngưỡng is_night: hour >= 20 hoặc hour <= 6  [LOCKED — domain knowledge]
-1.2. memory_len: TBD — tìm optimal bằng Ablation #6 (MS-1: Val, AB-4: Test)
-     → Giá trị: {256, 1024, 2048, 4096, 8192, 16384, 32768, 50000}
-1.3. gamma: TBD — tìm optimal bằng Ablation #5 (MS-4: Val, AB-3: Test)
-     → Giá trị: {0.0, 0.3, 0.5, 0.7, 0.9}
-1.4. k: TBD — tìm optimal bằng Ablation #3 (MS-3: Val, AB-2: Test)
-     → Giá trị: {3, 5, 10, 15, 20, 30}
-1.5. Feature dim: 34  [LOCKED — fixed architecture, PCA PROHIBITED]
-1.6. Neighborhoods: 10 vùng địa lý  [LOCKED — TLC geographic domain, không phải HP]
-     → Ablation #6 test per-neighborhood memory partitioning (memory strategy),
-        không test số lượng neighborhood
-1.7. ContextBeta: TBD — tìm optimal bằng MS-5 (Val)
-     → Giá trị: {1 (global), 4 cells (NB×2), 8 cells (NB×8), 16 cells (NB×16)}
-     → Default hiện tại: 80 cells (10 NB × 8 context) — pending benchmark
-1.8. Ratecode: chỉ chấp nhận [1, 2, 3, 4, 5, 6, 99]  [LOCKED — TLC domain]
-
-
-2. BỘ DATASET (DÙNG CHUNG CHO TẤT CẢ)
-
-2.1. Dòng Khung Quy Trình (Icewafl-Inspired Polluter)
-
-  TLC Parquet (thực tế)
-      |
-      v
-  [BƯỚC 1: Ingestion] --> Tải 24 tháng, giữ nguyên lỗi
-      |
-      v
-  [BƯỚC 2: EDA on RAW] --> Phân tích raw: NULL rates, out-of-range, duplicates
-      |
-      v
-  [BƯỚC 3: Clean] --------> Tạo CLEAN dataset (100% sạch, 0% anomaly)
-      |
-      v
-  [BƯỚC 4: EDA on CLEAN] --> Verify anomalies removed, distribution stats
-      |
-      v
-  [BƯỚC 5: Inject] --------> Tạo POLLUTED dataset (5% valid/test, 8% prod)
-      |
-      v
-  [BƯỚC 6: EDA on INJECTED] --> Verify ground truth, drift placement
-      |
-      v
-  [BƯỚC 7: Feature Engineering] --> 34D features, normalization, neighborhoods
-      |
-      v
-  [BƯỚC 8: Benchmark] -----> Train/Val/Test, hyperparameter tuning per model
-      |                          ⚠️ STREAMING eval cho concept drift metrics
-      v
-  [BƯỚC 9: Inter-Model] ---> So sánh MemStream vs baselines
-      |                          ⚠️ STREAMING eval bắt buộc cho drift models
-      v
-  [BƯỚC 10: Ablation Study] -> Component-level ablation (AE→MemStream→Flow)
-      |                          ⚠️ STREAMING eval trên Test dataset
-      v
-  [BƯỚC 11: Evaluate] -----> AUC-ROC, AUC-PR, NAB, MTD, MTFA, FPR
-      |                          ⚠️ STREAMING-only cho concept drift detection
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ STREAMING vs BATCH EVALUATION — PHÂN BIỆT RÕ RÀNG                           │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ STREAMING (BẮT BUỘC cho concept drift):                                     │
-  │   - Data chảy tuần tự theo thời gian (time-ordered)                        │
-  │   - Model update liên tục sau mỗi record / mini-batch                      │
-  │   - ADWIN drift detector hoạt động trên running metrics                    │
-  │   - Concept drift: thể hiện qua ADWIN adaptation events (không spike)     │
-  │   - Point anomaly: thể hiện qua sudden score spike                         │
-  │   - Cần thiết để prove: "MemStream ADAPT với concept drift"                 │
-  │   - Script: scripts/benchmark_streaming.py (chính — dùng cho B8/B9/B10)    │
-  │                                                                            │
-  │ BATCH (chỉ để so sánh point anomaly):                                     │
-  │   - Train trên toàn bộ dataset, predict trên toàn bộ dataset               │
-  │   - IsolationForest, OC-SVM, HBOS — KHÔNG hỗ trợ streaming                │
-  │   - Chỉ đánh giá POINT ANOMALY, KHÔNG đánh giá concept drift               │
-  │   - Script: scripts/benchmark_batch.py (phụ — chỉ cho point anomaly)      │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-
-2.2. Nguồn Dữ Liệu: TLC Trip Record Data (Toàn bộ 2024-2025)
-
-  Tháng     Tập tin                          Rows (dự kiến)
-  ------------------------------------------------------------
-  Jan 2024  yellow_tripdata_2024-01.parquet  ~6.0M
-  Feb 2024  yellow_tripdata_2024-02.parquet  ~5.5M
-  Mar 2024  yellow_tripdata_2024-03.parquet  ~6.2M
-  Apr 2024  yellow_tripdata_2024-04.parquet  ~5.8M
-  May 2024  yellow_tripdata_2024-05.parquet  ~6.1M
-  Jun 2024  yellow_tripdata_2024-06.parquet  ~5.9M
-  Jul 2024  yellow_tripdata_2024-07.parquet  ~6.0M
-  Aug 2024  yellow_tripdata_2024-08.parquet  ~5.8M
-  Sep 2024  yellow_tripdata_2024-09.parquet  ~5.7M
-  Oct 2024  yellow_tripdata_2024-10.parquet  ~6.0M
-  Nov 2024  yellow_tripdata_2024-11.parquet  ~5.6M
-  Dec 2024  yellow_tripdata_2024-12.parquet  ~5.5M
-  Jan 2025  yellow_tripdata_2025-01.parquet  ~5.8M
-  Feb 2025  yellow_tripdata_2025-02.parquet  ~5.5M
-  Mar 2025  yellow_tripdata_2025-03.parquet  ~6.0M
-  Apr 2025  yellow_tripdata_2025-04.parquet  ~5.8M
-  May 2025  yellow_tripdata_2025-05.parquet  ~6.1M
-  Jun 2025  yellow_tripdata_2025-06.parquet  ~5.9M
-  Jul 2025  yellow_tripdata_2025-07.parquet  ~6.0M
-  Aug 2025  yellow_tripdata_2025-08.parquet  ~5.8M
-  Sep 2025  yellow_tripdata_2025-09.parquet  ~5.7M
-  Oct 2025  yellow_tripdata_2025-10.parquet  ~6.0M
-  Nov 2025  yellow_tripdata_2025-11.parquet  ~5.6M
-  Dec 2025  yellow_tripdata_2025-12.parquet  ~5.5M
-
-  Tải: https://www.nyc.gov/site/tlc/about/trip-record-data.page
-  Tổng: ~150M rows (nếu đủ 24 tháng)
-
-
-2.3. Dataset Specifications
-
-  ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-  │ Dataset          │ Period             │ Rows       │ Anomaly │ Purpose                   │
-  ├─────────────────┼───────────────────┼────────────┼─────────┼───────────────────────────┤
-  │ Raw             │ Jan2024-Dec2025    │ ~150M      │ N/A     │ EDA only                  │
-  │ Clean 2024      │ Jan2024-Dec2024    │ ~70M       │ 0%      │ Fixed baseline (không sửa)│
-  │ Clean 2025      │ Jan2025-Dec2025    │ ~70M       │ 0%      │ Fixed baseline (không sửa)│
-  ├─────────────────┼───────────────────┼────────────┼─────────┼───────────────────────────┤
-  │ Valid (SHARED)  │ Sep2024-Oct2024    │ ~10.5M     │ 5%      │ Validate HP (all models)  │
-  │ Test (SHARED)   │ Nov2024-Dec2024    │ ~10.5M     │ 5%      │ Evaluate (leakage-free)   │
-  │ Production      │ Jan2025-Feb2025    │ ~11.3M     │ 8%      │ Deployed system          │
-  └─────────────────────────────────────────────────────────────────────────────────────────┘
-
-  NOTE: Valid và Test là SHARED giữa tất cả models — đảm bảo so sánh công bằng.
-  Production là SHARED cho concept drift evaluation.
-
-  ┌─────────────────────────────────────────────────────────────────────────────────────────┐
-  │ TRAIN DATA — PER-MODEL (không dùng chung)                                          │
-  │ Mỗi model train trên data riêng tùy nhu cầu model. Tuy nhiên, tất cả              │
-  │ train data phải là CLEAN (0% anomaly) và time-ordered.                             │
-  ├─────────────────┬───────────────────┬────────────┬─────────────────────────────────────┤
-  │ Model           │ Train Period      │ Rows       │ Train Config                        │
-  ├─────────────────┼───────────────────┼────────────┼─────────────────────────────────────┤
-  │ MemStream       │ Jan-Aug 2024      │ ~46.7M     │ AE: 5000 epochs, lr=0.01          │
-  │                 │                   │            │ Min 50K samples enforced            │
-  │ iForestASD     │ Jan-Aug 2024      │ ~46.7M     │ Online learning via River           │
-  │                 │                   │            │ Chunk-based sliding window           │
-  │ RCF            │ Jan-Aug 2024      │ ~46.7M     │ Online learning via River           │
-  │                 │                   │            │ Random Continuous Forest            │
-  │ xStream        │ Jan-Aug 2024      │ ~46.7M     │ Online learning via River           │
-  │                 │                   │            │ Streaming Half-Space ESOM           │
-  │ IsolationForest │ Jan-Aug 2024      │ ~46.7M     │ Batch sklearn                       │
-  │                 │                   │            │ n_estimators, max_samples           │
-  │ OC-SVM         │ Jan-Aug 2024      │ ~46.7M     │ Batch sklearn                       │
-  │                 │                   │            │ kernel, nu                          │
-  │ HBOS           │ Jan-Aug 2024      │ ~46.7M     │ Batch PyOD                          │
-  │                 │                   │            │ n_bins, alpha                       │
-  │ ARIMA          │ Jan-Aug+Sep 2024  │ ~52.2M     │ STL decomposition (9 months)         │
-  │                 │                   │            │ Rolling forecast t+1                 │
-  │ Naive          │ (none)            │ —          │ Seasonal naive — no fitting needed   │
-  └─────────────────┴───────────────────┴────────────┴─────────────────────────────────────┘
-
-  NOTE: Production dùng Jan-Feb 2025 (2 tháng) với 8% anomaly rate.
-  Valid và Test dùng 2024 với 5% rate.
-  Train dùng clean 0% (fit AE + fit beta) — không inject.
-  Clean 2024 và Clean 2025 là FIXED BASELINE, không được sửa đổi.
-
-
-2.4. NAB Events (Numenta Anomaly Benchmark — Reference Patterns)
-
-  Nguồn: https://github.com/numenta/NAB
-  Paper: https://arxiv.org/abs/1510.03336
-
-  NAB là synthetic dataset để benchmark anomaly detection methods.
-  Cung cấp ground truth labels + profile scoring (α=0.1, β=1/144).
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ PHÂN BIỆT: NAB Events vs Concept Drift                                       │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ NAB Events    → POINT anomaly patterns (reference). Dùng để benchmark       │
-  │                 model detect spike/drop spikes. MAP TỚI Point Anomaly        │
-  │                 (Section 2.5 / BƯỚC 5).                                     │
-  │                 → 5 sự kiện bên dưới: sudden drop, massive drop, gap,     │
-  │                   spike, extreme — đều là POINT anomalies.                 │
-  │                                                                              │
-  │ Concept Drift → Phân bố data thay đổi từ từ (không phải spike/drop).      │
-  │                 KHÔNG liên quan NAB. MAP TỚI 3 drift polluters bên dưới.   │
-  │                 → Abrupt, Incremental, Cyclical.                             │
-  └────────────────────────────────────────────────────────────────────────────┘
-
-  5 sự kiện tham khảo (2014-2015) — POINT ANOMALY PATTERNS:
-  - NYC Marathon:   02/11/2014  (sudden drop)
-  - Thanksgiving:   27/11/2014  (massive drop)
-  - Christmas:      25/12/2014  (gap day)
-  - New Year:       01/01/2015  (spike/drop)
-  - Blizzard:       26-27/01/2015 (extreme)
-
-  Visualization: BƯỚC 6 (EDA on INJECTED) visualize theo ground_truth_mask.npy:
-  - fig/injected_drift_abrupt_timeseries.png    → Abrupt drift (point injection)
-  - fig/injected_drift_incremental_rolling.png  → Incremental drift
-  - fig/injected_drift_cyclical_acf.png         → Cyclical drift (4-week ACF peak)
-  - fig/injected_ground_truth_coverage_bar.png → Point anomaly rate by type
-  - fig/injected_label_stacked_bar.png          → % per polluter type (stacked)
-
-  NOTE: NAB scoring profile (α, β) không áp dụng trực tiếp vì production
-  data không có NAB labels. Chỉ dùng NAB events làm QUALITATIVE REFERENCE.
-
-
-2.5. Icewafl Framework (EDBT 2025) — Data Polluter Architecture
-
-  Icewafl (Inserting Customizable Errors with Apache Flink) là framework
-  được công bố tại EDBT 2025 (Barcelona) bởi Schinninger et al.
-  GitHub: https://github.com/chri-schi/Icewafl
-
-  Framework này xác lập polluter architecture chuẩn:
-
-    Polluter = (e, c, A_p)
-      e  = event (thời điểm/khoảng thời gian)
-      c  = condition (điều kiện kích hoạt)
-      A_p = attribute perturbation (cách thay đổi giá trị)
-
-  Kiến trúc Icewafl gồm 4 thành phần chính:
-  1. Builder      : Xây dựng pollution pipeline (PolluterBuilder pattern)
-  2. Conditions   : Điều kiện kích hoạt (temporal, probability, function, composite)
-  3. Polluters    : Attribute perturbation (replace, multiply, reduce precision, composite)
-  4. Read/Write   : Data I/O (CSV, Parquet, streaming)
-
-  Áp dụng vào project:
-  - Sử dụng Icewafl-inspired polluter thay vì hardcoded inject
-  - Từng polluter có: type (point/concept), condition, rate, attributes affected
-  - Ground truth mask per polluter type (để phân tách point vs concept drift detection)
-
-
-3. CÁC BƯỚC THỰC HIỆN
-
-  [1]  Ingestion                      --> data/raw/
-  [2]  EDA on RAW                     --> data/eda/raw/
-  [3]  Clean (100% anomaly-free)       --> data/clean/
-  [4]  EDA on CLEAN                   --> data/eda/clean/
-  [5]  Inject (5% valid/test, 8% prod) --> data/polluted/
-  [6]  EDA on INJECTED                --> data/eda/injected/
-  [7]  Feature Engineering            --> src/features/
-  [8]  Benchmark (per-model HP)       --> results/hp_benchmark/{model}/
-      ⚠️ STREAMING eval BẮT BUỘC cho MemStream, iForestASD, RCF, xStream
-  [9]  Inter-Model comparison        --> results/inter_model/
-      ⚠️ STREAMING eval BẮT BUỘC cho concept drift models
-  [10] Ablation Study              --> results/ablation/
-      ⚠️ STREAMING eval trên Test dataset (Nov-Dec 2024)
-  [11] Evaluate (AUC-ROC, NAB, MTD, MTFA, FPR)  --> results/final/
-      ⚠️ STREAMING-only cho concept drift detection
-
-
-4. CHI TIẾT TỪNG BƯỚC
-
-BƯỚC 1: INGESTION — Thu Thập Dữ Liệu Thô (Có Lỗi)
-------------------------------------------------------
-- Script: scripts/ingest_tlc_parquet.py
-- Tải 24 tháng TLC parquet từ cloudfront URL (Jan 2024 - Dec 2025)
-- Giữ nguyên lỗi, không làm sạch
-- Output: data/raw/raw_YYYYMM.parquet + raw_combined.parquet
-
-
-BƯỚC 2: EDA on RAW — Khai Phá Dữ Liệu Thô
-----------------------------------------------
-- Script: scripts/eda_raw.py
-- Mục tiêu: Xác định tất cả lỗi CÓ TRONG RAW DATA trước khi clean
-
-  Phân tích:
-  - NULL rates theo cột và tháng
-  - Out-of-range values: RatecodeID, PULocationID, passenger_count
-  - Negative values: fare_amount, trip_distance, total_amount
-  - Duplicate records (exact copy)
-  - Temporal coverage: Mon-Sun, 24h, missing hours
-  - Speed outliers: > 80 mph, < 0 mph
-  - Seasonality: ACF (24h, 168h periodicity), hourly/weekday patterns
-  - Distribution of raw features (fare_amount, trip_distance, speed, passenger_count)
-
-  Output: data/eda/raw/
-  - eda_summary.json
-  - fig/raw_null_rates_by_month.png
-  - fig/raw_out_of_range_by_month.png
-  - fig/raw_negative_values.png
-  - fig/raw_duplicates_by_month.png
-  - fig/raw_temporal_coverage_heatmap.png
-  - fig/raw_speed_distribution.png
-  - fig/raw_seasonality_acf.png
-  - fig/raw_hourly_pattern.png
-  - fig/raw_fare_distribution.png
-  NOTE: Mỗi fig chỉ chứa 1 biểu đồ duy nhất
-
-
-BƯỚC 3: CLEAN — Tạo Clean Dataset
----------------------------------
-- Script: scripts/clean_taxi_data.py
-- Pipeline 3 tầng: Schema → Hard Rule → ML Detection
-
-  ═══════════════════════════════════════════════════════
-  TẦNG 1: SCHEMA CLEANING
-  ═══════════════════════════════════════════════════════
-  - Validate columns: drop unknown columns, rename TLC fields
-  - Parse datetime: tpep_pickup_datetime, tpep_dropoff_datetime
-  - Cast types: float64 for numerics, int for IDs
-  - Handle encoding: unicode, trailing whitespace
-  - Deduplicate column names (duplicate column names from parquet)
-  - Output: schema-validated records
-
-  ═══════════════════════════════════════════════════════
-  TẦNG 2: HARD RULE CLEANING (Rule-Based)
-  ═══════════════════════════════════════════════════════
-  - Loại bỏ semantic violations tuyệt đối
-
-  Cleaning Rules:
-  - fare_amount >= 0
-  - trip_distance >= 0
-  - passenger_count: 1-6
-  - RatecodeID: [1, 2, 3, 4, 5, 6, 99] only
-  - PULocationID / DOLocationID: 1-263
-  - duration_s: > 0 và < 86400
-  - speed_mph: > 0 và <= 80
-
-  Output: data/clean/tier1_hardrule.parquet
-
-  ═══════════════════════════════════════════════════════
-  TẦNG 3: ML-BASED ANOMALY DETECTION (Residual Cleaning)
-  ═══════════════════════════════════════════════════════
-  - Mục tiêu: Phát hiện anomalies còn sót lại sau hard rule
-  - Method: Dùng batch ML models (KHÔNG dùng MemStream để
-    tránh circular dependency)
-
-  Models:
-  ┌────────────────┬────────────────────────────────────────────────────────┐
-  │ Model          │ Config                                                  │
-  ├────────────────┼────────────────────────────────────────────────────────┤
-  │ IsolationForest│ n_estimators=200, max_samples=512, contamination=0.01 │
-  │ HBOS           │ n_bins=20, alpha=0.05, contamination=0.01             │
-  │ Stat-threshold │ fare_per_mile > p99 OR speed > p99 theo context cell │
-  └────────────────┴────────────────────────────────────────────────────────┘
-
-  Approach:
-  1. Fit IF + HBOS trên tier1 data (all months combined)
-  2. Ensemble: record là anomaly nếu ≥ 2/3 models flag
-  3. Human review sample (top 100 scored records) trước khi drop
-  4. Soft flag: ghi log anomaly potential để có thể revert
-
-  NOTE: quantile-based threshold per context cell (10 NB × 8 time contexts)
-  NOTE: Không dùng MemStream vì circular — MemStream cần clean data
-        để train, nên không thể dùng chính nó để clean
-
-  Output:
-  - data/clean/clean_2024.parquet       (Jan 2024 - Dec 2024, 0% anomaly)
-  - data/clean/clean_2025.parquet       (Jan 2025 - Dec 2025, 0% anomaly)
-  - data/clean/clean_2024_log.json      (Chi tiết: records removed, by which tier/rule)
-  - data/clean/clean_2025_log.json
-  - data/clean/ml_flagged.parquet       (Records flagged by ML, for review)
-
-
-BƯỚC 4: EDA on CLEAN — Xác Nhận Dữ Liệu Sạch
--------------------------------------------------
-- Script: scripts/eda_clean.py
-- Mục tiêu: Xác nhận tất cả anomalies đã được loại bỏ,
-              distribution hợp lý, không có data leakage
-
-  Phân tích:
-  - Verify all cleaning rules applied (no violations remain)
-  - Distribution of features: fare_amount, trip_distance, speed, passenger_count
-  - Temporal patterns post-cleaning: hourly, weekday/weekend
-  - Correlation matrix of 34D features
-  - Neighborhood distribution (10 neighborhoods)
-  - Compare with EDA on RAW: how many records removed, by which rule
-  - Seasonality: ACF (24h, 168h periodicity) post-cleaning
-
-  Output: data/eda/clean/
-  - eda_summary.json
-  - fig/clean_null_rates.png
-  - fig/clean_violations_heatmap.png
-  - fig/clean_fare_distribution.png
-  - fig/clean_trip_distance_distribution.png
-  - fig/clean_speed_distribution.png
-  - fig/clean_hourly_pattern.png
-  - fig/clean_weekday_pattern.png
-  - fig/clean_correlation_matrix.png
-  - fig/clean_neighborhood_distribution.png
-  - fig/clean_seasonality_acf.png
-  - fig/clean_records_removed_by_rule.png
-  NOTE: Mỗi fig chỉ chứa 1 biểu đồ duy nhất
-
-
-BƯỚC 5: INJECT — Icewafl-Inspired Polluter (Data Polluter)
-----------------------------------------------------------
-- Script: scripts/inject_polluter.py
-- Framework: p = (e, c, A_p) — theo Icewafl EDBT 2025
-
-  Polluter Pipeline (Icewafl-inspired):
-  ┌────────────────────────────────────────────────────────────────────────────────────┐
-  │ Polluter             │ Type    │ Rate  │ Condition    │ Attributes              │
-  ├──────────────────────┼─────────┼───────┼──────────────┼────────────────────────┤
-  │ NULLLocationPolluter │ POINT   │ 2.0%  │ always       │ PULocationID,DOLocID   │
-  │ PlaceholderPolluter  │ POINT   │ 0.1%  │ always       │ passenger_count        │
-  │ NegativeFarePolluter │ POINT   │ 0.1%  │ always       │ fare_amount            │
-  │ OutlierFarePolluter  │ POINT   │ 1.3%  │ always       │ fare_amount            │
-  │ DuplicatePolluter    │ POINT   │ 1.0%  │ always       │ all                   │
-  │ OutOfOrderPolluter   │ POINT   │ 0.5%  │ temporal     │ pickup_datetime        │
-  └──────────────────────┴─────────┴───────┴──────────────┴────────────────────────┘
-  Point anomaly: tổng = 5.0% (valid/test), dùng để benchmark model detect point anomalies.
-
-  ════════════════════════════════════════════════════════
-  CONCEPT DRIFT POLLUTERS (chi áp dụng cho PRODUCTION)
-  ════════════════════════════════════════════════════════
-  3 loại concept drift KHÔNG phải anomaly point — MemStream ADAPT
-  chứ không detect dưới dạng anomaly. Production = 5% point + 3% drift.
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ 1. AbruptDriftPolluter (CONCEPT — Sudden Shift)                              │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ Trigger    : time > drift_point (dp) — chọn ngẫu nhiên 1 ngày trong period  │
-  │ Mechanic   : fare_amount = fare_amount × 1.5 (tăng đột ngột 50%)            │
-  │             trip_distance giữ nguyên → fare_per_mile tăng tương ứng            │
-  │ Scope      : tất cả records SAU dp trong production (30% records sau dp)     │
-  │ Validation : before/after mean(fare_amount) nên có gap rõ ràng ở dp         │
-  │ Ground Truth: dp_timestamp → dp_timestamp + end_of_production                │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ 2. IncrementalDriftPolluter (CONCEPT — Gradual Covariate Shift)               │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ Trigger    : always — bắt đầu từ ngày đầu của production                   │
-  │ Mechanic   : fare_amount = fare_amount × (1 + 0.3 × progress)                │
-  │             progress = (current_idx - start_idx) / total_records             │
-  │             → tăng tuyến tính 0% → 30% trong toàn bộ production period      │
-  │ Scope      : tất cả records trong production period                         │
-  │ Validation : rolling_mean(fare_amount) nên tăng dần, không jump             │
-  │ Ground Truth: start_timestamp → end_of_production                            │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ 3. CyclicalDriftPolluter (CONCEPT — Periodic Seasonal Shift)                 │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ Trigger    : always — bắt đầu từ ngày đầu của production                   │
-  │ Mechanic   : fare_amount = fare_amount × (1 + 0.15 × sin(2π × week/4))      │
-  │             → chu kỳ 4 tuần: tuần 0 → peak (+15%), tuần 2 → trough (-15%)  │
-  │             → mô phỏng seasonal demand cycle (weekend surge)                │
-  │ Scope      : tất cả records trong production period                         │
-  │ Validation : ACF(168h) nên có peak rõ ở lag 672 (4 tuần)                    │
-  │ Ground Truth: start_timestamp → end_of_production (persistent)              │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-  LƯU Ý QUAN TRỌNG:
-  - 6 loại POINT ANOMALY → MemStream CÓ THỂ detect (score cao bất thường)
-  - 3 loại CONCEPT DRIFT → MemStream ADAPT (score thay đổi từ từ, không spike)
-  - Tách ground truth mask riêng: point_mask vs drift_mask
-  - Khuyến nghị: tạo ground truth events từ các tác động
-    thời tiết/ngày lễ thực tế của 2024-2025 (NYC, Uber/Lyft patterns)
-
-  Output:
-  - data/polluted/valid/polluted_valid.parquet    (5%, 2024)
-  - data/polluted/test/polluted_test.parquet       (5%, 2024)
-  - data/polluted/production/polluted_prod.parquet  (8%, Jan-Feb 2025)
-  - data/polluted/*/ground_truth_mask.npy          (0=clean, 1=polluted)
-  - data/polluted/*/ground_truth_per_type.json    (per polluter type)
-  - data/polluted/*/injection_log.json
-
-  NOTE: 5% = 2.0+0.1+0.1+1.3+1.0+0.5 = 5.0% (point anomalies)
-  8% production = 5% point + 3% additional concept drift events
-
-
-BƯỚC 6: EDA on INJECTED — Xác Nhận Ground Truth
--------------------------------------------------
-- Script: scripts/eda_injected.py
-- Mục tiêu: Xác nhận ground truth mask CHÍNH XÁC,
-              visualize ĐÚNG what was injected, không phải random sampling
-
-  ⚠️ NGUYÊN TẮC: Tất cả visualizations phải dùng ground_truth_mask.npy
-  và ground_truth_per_type.json làm reference — không visualize random.
-
-  Phân tích:
-  - Verify ground truth mask coverage per polluter type (đếm chính xác %)
-  - Distribution shift vs clean data (fare_amount, trip_distance, speed) — dùng
-    ground truth để filter injected vs clean rồi so sánh histogram/KDE
-  - Anomaly rate by neighborhood, hour, day-of-week — dùng ground truth mask
-    để tính rate, không phải model score
-  - Drift point placement validation: visualize the 3 drift points (abrupt jump,
-    incremental slope, cyclical sine wave) trên time-series plot
-  - Compare with EDA on CLEAN: dùng paired comparison (same time windows)
-  - Ground truth label distribution: % per polluter type (stacked bar)
-
-  Output: data/eda/injected/
-  - eda_summary.json
-  - fig/injected_ground_truth_coverage_bar.png    (per polluter type %)
-  - fig/injected_fare_distribution_shift.png        (clean vs polluted, paired)
-  - fig/injected_speed_distribution_shift.png       (clean vs polluted, paired)
-  - fig/injected_anomaly_rate_by_neighborhood.png  (from ground truth mask)
-  - fig/injected_anomaly_rate_by_hour.png          (from ground truth mask)
-  - fig/injected_anomaly_rate_by_dow.png           (from ground truth mask)
-  - fig/injected_drift_abrupt_timeseries.png       (abrupt drift point)
-  - fig/injected_drift_incremental_rolling.png     (incremental slope)
-  - fig/injected_drift_cyclical_acf.png           (4-week periodicity)
-  - fig/injected_label_stacked_bar.png            (stacked % per polluter type)
-  NOTE: Mỗi fig chỉ chứa 1 biểu đồ duy nhất
-
-
-BƯỚC 7: FEATURE ENGINEERING (Dùng Chung)
-
-  WARNING - NORMALIZATION GAP (cần fix):
-  Các giá trị denominators (2.5, 0.67, 12.0) là hardcoded từ benchmark
-  v10, KHÔNG phải từ fitted statistics trên actual data. Nếu NYC taxi
-  data distribution thay đổi (ví dụ: surge pricing thay đổi average fare),
-  các denominators này có thể không còn optimal.
-  FIX: Tính denominators bằng percentile-based approach trên clean data:
-    - fare_per_mile_denom = 95th percentile của fare_per_mile
-    - fare_per_min_denom   = 95th percentile của fare_per_min
-    - speed_denom          = 95th percentile của speed
-  → Đây là fitted approach, không còn hardcoded.
-
-  34D Features (PCA PROHIBITED):
-  - Raw (6D):     trip_distance, dur_min, fare_amount, passenger_count,
-                  total_amount, speed_mph
-  - Derived (3D):   fare_per_mile, fare_per_min, fare_per_pax
-  - Temporal (3D):  pickup_hour, pickup_dow, is_weekend
-  - Spatial (4D):  PU_Grid_X/Y, DO_Grid_X/Y (16×17 grid)
-  - Normalized (4D): fare_per_mile_norm, fare_per_min_norm,
-                      speed_norm, pax_per_mile
-  - Cyclic (5D):    hour_sin/cos, dow_sin/cos, dist_squared
-  - One-hot (5D):  ratecode_1..5
-  - Binary (1D):    is_night (hour >= 20 hoặc hour <= 6)
-  - Log (2D):      log_fare, log_distance
-  - Inter-zone (1D): inter_borough_rough
-
-  10 Neighborhoods (Geographic):
-  0: manhattan | 1: brooklyn | 2: queens_lower | 3: queens_upper | 4: bronx
-  5: staten_island | 6: ewr | 7: jfk | 8: nalp | 9: unknown
-
-
-BƯỚC 8: BENCHMARK — Hyperparameter Tuning (Per-Model, on Val Dataset)
-------------------------------------------------------------------------
-
-  ⚠️  RESOURCE MONITORING — ÁP DỤNG CHO TẤT CẢ PHASES
-  ⚠️  Kiểm tra RAM / GPU VRAM / CPU usage TRƯỚC và TRONG khi chạy.
-  ⚠️  KHÔNG BAO GIỜ max out resource — luôn giữ buffer:
-     • RAM: không vượt 80% available
-     • GPU VRAM: không vượt 85% available
-     • CPU: không vượt 90% available cores
-  ⚠️  Nếu OOM xảy ra → giảm batch_size hoặc memory_len TRƯỚC KHI retry.
-  Script: scripts/resource_monitor.py (chạy nền, log resource usage mỗi 30s).
-
-  NOTE: Bước 8 chạy trên Val dataset (Sep-Oct 2024, 5% anomaly).
-  Bước 10 (Ablation Study) dùng optimal HP từ Bước 8 để chạy
-  component-level analysis trên Test dataset (Nov-Dec 2024).
-  Bảng MS-1→MS-6 là PRELIMINARY. Kết quả cuối ghi vào AB-1→AB-6 (Bước 10).
-  ⚠️ STREAMING EVAL BẮT BUỘC cho MemStream và streaming-capable models.
-
-  Train data: PER-MODEL — mỗi model train trên data riêng (xem table bên dưới)
-  Val data: SHARED — Sep-Oct 2024 (~10.5M rows, 5% anomaly) — validate HP
-  Test data: SHARED — Nov-Dec 2024 (~10.5M rows, 5% anomaly) — evaluate
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ STREAMING-CAPABLE MODELS (BướC 8A, 8C) — Primary benchmark cho drift     │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ MemStream    : Streaming — record-by-record, ADWIN active                     │
-  │ iForestASD   : Streaming — River API, continuous scoring                   │
-  │ RCF          : Streaming — River RandomTrees, per-record scoring            │
-  │ xStream      : Streaming — River Streaming SH-ESOM                         │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ BATCH-ONLY MODELS (BướC 8B, 8D, 8E) — Point anomaly comparison only       │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ IsolationForest: BATCH only — train once, score once. KHÔNG dùng cho drift │
-  │ OC-SVM         : BATCH only — train once, score once. KHÔNG dùng cho drift │
-  │ HBOS           : BATCH only — train once, score once. KHÔNG dùng cho drift │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-  ┌──────────────────────────────────────────────────────────────────────────────┐
-  │ TRAIN DATA PER MODEL — CHIA RIÊNG, DÙNG CHUNG Val/Test                   │
-  ├──────────────────────────────────────────────────────────────────────────────┤
-  │ MemStream    : Train = Jan-Aug 2024 (~46.7M rows)                       │
-  │               • warmup_epochs: 5000 (paper default) — tối thiểu         │
-  │               • warmup_lr: 0.01 (paper default) — tối thiểu            │
-  │               • memory_len: 50000 (current), cần test {256..50000}       │
-  │               • Min 50,000 samples enforce (hard-block in code)           │
-  │               • AE architecture: 34→68→34 (in→hidden→out)               │
-  │               • Beta threshold: fitted from warmup scores (p95)           │
-  │                                                                            │
-  │ iForestASD   : Train = Jan-Aug 2024 (~46.7M rows)                       │
-  │               • River library — online learning, n_samples per tree       │
-  │               • Chunk-based training: sliding window over train data       │
-  │                                                                            │
-  │ RCF          : Train = Jan-Aug 2024 (~46.7M rows)                       │
-  │               • River library — Random Continuous Forest                   │
-  │               • number of trees, height limit per tree                   │
-  │                                                                            │
-  │ xStream      : Train = Jan-Aug 2024 (~46.7M rows)                       │
-  │               • River library — Streaming Half-Space ESOM                 │
-  │               • Buffer size, number of neurons                            │
-  │                                                                            │
-  │ IsolationForest: Train = Jan-Aug 2024 (~46.7M rows)                     │
-  │               • Batch sklearn — n_estimators, max_samples                 │
-  │                                                                            │
-  │ OC-SVM       : Train = Jan-Aug 2024 (~46.7M rows)                       │
-  │               • Batch sklearn — kernel, nu                               │
-  │                                                                            │
-  │ HBOS         : Train = Jan-Aug 2024 (~46.7M rows)                       │
-  │               • Batch pyod — n_bins, alpha                               │
-  │                                                                            │
-  │ ARIMA        : Train = Jan-Aug 2024 + Sep 2024 (9 tháng)                │
-  │               • STL decomposition for seasonal/tred components             │
-  │               • Rolling forecast — predict t+1 from t, t-1, ...           │
-  │                                                                            │
-  │ Naive        : Train = không cần train                                    │
-  │               • Seasonal naive: same hour, same DOW last week            │
-  └──────────────────────────────────────────────────────────────────────────────┘
-
-  8A. MEMSTREAM — Hyperparameter Table (Preliminary — Val Dataset)
-  ================================================================
-
-  Paper defaults (MemStream WWW 2022, Bhatia et al.):
-    epochs=5000, lr=0.01, memory_len=2048 (small datasets), beta=fitted
-
-  NOTE: Current code dùng tạm warmup_epochs=500, warmup_lr=1e-3.
-  Cần benchmark: train với paper defaults (5000 epochs, lr=0.01) trước,
-  rồi test lower epochs (500, 1000) để trade-off speed vs accuracy.
-  Cần benchmark memory_len: paper dùng 4-2048 cho small datasets;
-  NYC taxi ~46.7M train rows → test {256, 1024, 2048, 4096, 8192, 16384, 32768, 50000}.
-
-  Table MS-1: Memory Size (Preliminary)
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ memory_len        │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Warmup    │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 256               │  TBD     │  TBD     │  TBD     │  256       │
-  │ 1024              │  TBD     │  TBD     │  TBD     │  1024      │
-  │ 2048              │  TBD     │  TBD     │  TBD     │  2048      │
-  │ 4096              │  TBD     │  TBD     │  TBD     │  4096      │
-  │ 8192              │  TBD     │  TBD     │  TBD     │  8192      │
-  │ 16384             │  TBD     │  TBD     │  TBD     │  16384     │
-  │ 32768             │  TBD     │  TBD     │  TBD     │  32768     │
-  │ 50000             │  TBD     │  TBD     │  TBD     │  50000     │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-  → Kết quả cuối: xem AB-4 (Bước 10, Test dataset)
-
-  Table MS-2: Hidden Dimension (D)
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ hidden_dim        │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Params(M)  │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 17  (D/2)        │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 34  (D×1)        │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 51  (D×1.5)      │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 68  (D×2)        │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 85  (D×2.5)      │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 102 (D×3)        │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-  NOTE: D = in_dim = 34. hidden_dim là bottleneck dimension.
-  NOTE: Original MemStream paper dùng out_dim = in_dim × 2, latent = in_dim.
-        Hiện tại dùng hidden_dim làm AE bottleneck.
-
-  Table MS-3: k (Number of Neighbors) — Final: xem AB-2
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ k                 │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ MTD (min)  │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 3                 │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 5                 │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 10                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 15                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 20                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 30                │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-  → Kết quả cuối: xem AB-2 (Bước 10, Test dataset)
-
-  Table MS-4: gamma (Decay Factor) — Final: xem AB-3
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ gamma             │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ MTD (min)  │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 0.0               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.3               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.5               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.7               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.9               │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-  → Kết quả cuối: xem AB-3 (Bước 10, Test dataset)
-
-  Table MS-5: ContextBeta Cell Configuration
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ config            │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Cells      │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ Global            │  TBD     │  TBD     │  TBD     │  1         │
-  │ 4 cells (NB×2)    │  TBD     │  TBD     │  TBD     │  4         │
-  │ 8 cells (NB×8)    │  TBD     │  TBD     │  TBD     │  8         │
-  │ 16 cells (NB×16)  │  TBD     │  TBD     │  TBD     │  16        │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  Table MS-6: ADWIN vs Static Threshold
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ drift handling    │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Adapt Time │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ Static            │  TBD     │  TBD     │  TBD     │  N/A       │
-  │ ADWIN             │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  8B. ISOLATIONFOREST — Hyperparameter Table (BATCH-ONLY)
-  NOTE: Final results in BướC 10 (Test dataset)
-  NOTE: BATCH only — KHÔNG dùng cho concept drift evaluation.
-
-  Table IF-1:
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ n_estimators      │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Train(s)   │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 50                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 100               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 200               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 500               │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  Table IF-2:
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ max_samples       │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Train(s)   │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 128               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 256               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 512               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 1024              │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  8C. iForestASD (River) — Hyperparameter Table (STREAMING — Preliminary)
-  NOTE: Final results in BướC 10 (Test dataset)
-  ======================================
-  Streaming-capable: cảnh báo rõ
-  Table IA-1:
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ n_trees           │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Train(s)   │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 50                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 100               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 200               │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  8D. OC-SVM — Hyperparameter Table (BATCH-ONLY)
-  NOTE: Final results in BướC 10 (Test dataset)
-  NOTE: BATCH only — KHÔNG dùng cho concept drift evaluation.
-  Table OSVM-1:
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ kernel / nu       │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Train(s)   │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ rbf, nu=0.01      │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ rbf, nu=0.05      │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ rbf, nu=0.10      │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ rbf, nu=0.20      │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  8E. HBOS — Hyperparameter Table (BATCH-ONLY)
-  NOTE: Final results in BướC 10 (Test dataset)
-  NOTE: BATCH only — KHÔNG dùng cho concept drift evaluation.
-  Table HBOS-1:
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ n_bins / alpha    │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Train(s)   │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 10 / 0.01         │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 20 / 0.01         │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 10 / 0.05         │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 20 / 0.05         │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  NOTE: "TBD" = To Be Determined — cần chạy experiments
-  NOTE: NAR-FPR = Normalized Alert-based False Positive Rate
-  NOTE: MemStream là trọng tâm chính — cần test kỹ tất cả bảng trên
-
-
-BƯỚC 9: INTER-MODEL BENCHMARK
--------------------------------
-
-  ⚠️  STREAMING EVAL BẮT BUỘC cho MemStream và streaming-capable models.
-
-  Dataset: Train/Val/Test split (time-ordered, leakage-free):
-  - Train:  Jan 2024 - Aug 2024  (~8 tháng, 0% anomaly)
-  - Val:    Sep 2024 - Oct 2024  (~2 tháng, 5% anomaly)
-  - Test:   Nov 2024 - Dec 2024  (~2 tháng, 5% anomaly)
-
-  Table IM-1: Inter-Model Comparison (Best HP per model)
-  S = Streaming-capable (concept drift eval OK), B = Batch-only (N/A for drift)
-  ┌────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┬─────────────┬─────────────┬──────────┬───────┐
-  │ Model           │ AUC-ROC │ AUC-PR  │ NAB     │ MTD(min) │ MTFA(hr) │ MDR(%)     │ BAR(%)      │ FPR(%)   │ Mode  │
-  ├────────────────┼─────────┼─────────┼─────────┼──────────┼──────────┼─────────────┼─────────────┼──────────┼───────┤
-  │ MemStream (best)│  TBD    │  TBD    │  TBD    │  TBD     │  TBD     │  TBD        │  TBD        │  TBD     │ S     │
-  │ IsolationForest │  TBD    │  TBD    │  TBD    │  N/A     │  TBD     │  TBD        │  TBD        │  TBD     │ B     │
-  │ iForestASD     │  TBD    │  TBD    │  TBD    │  TBD     │  TBD     │  TBD        │  TBD        │  TBD     │ S     │
-  │ OC-SVM         │  TBD    │  TBD    │  TBD    │  N/A     │  TBD     │  TBD        │  TBD        │  TBD     │ B     │
-  │ HBOS           │  TBD    │  TBD    │  TBD    │  N/A     │  TBD     │  TBD        │  TBD        │  TBD     │ B     │
-  │ RCF            │  TBD    │  TBD    │  TBD    │  TBD     │  TBD     │  TBD        │  TBD        │  TBD     │ S     │
-  │ xStream        │  TBD    │  TBD    │  TBD    │  TBD     │  TBD     │  TBD        │  TBD        │  TBD     │ S     │
-  │ ARIMA (baseline)│ TBD    │  TBD    │  TBD    │  TBD     │  TBD     │  TBD        │  TBD        │  TBD     │ S     │
-  │ Naive (baseline) │ TBD    │  TBD    │  TBD    │  TBD     │  TBD     │  TBD        │  TBD        │  TBD     │ S     │
-  └────────────────┴─────────┴─────────┴─────────┴──────────┴──────────┴─────────────┴─────────────┴──────────┴───────┘
-
-  NOTE: Batch-only models (IF, OC-SVM, HBOS) KHÔNG có concept drift metrics.
-
-  Concept Drift Sub-table (STREAMING MODELS ONLY — Production dataset Jan-Feb 2025)
-  ┌────────────────┬──────────┬──────────┬───────────────────┬─────────────────┬────────────────────────┐
-  │ Model           │ CDR(%)  │ ADR(h)   │ Adapt Recovery(m) │ ADWIN Events    │ Notes                 │
-  ├────────────────┼──────────┼──────────┼───────────────────┼─────────────────┼────────────────────────┤
-  │ MemStream       │  TBD     │  TBD     │  TBD              │  TBD            │ ADWIN-based detection  │
-  │ iForestASD     │  TBD     │  TBD     │  TBD              │  TBD            │ ADWIN-based detection  │
-  │ RCF            │  TBD     │  TBD     │  TBD              │  TBD            │ ADWIN-based detection  │
-  │ xStream        │  TBD     │  TBD     │  TBD              │  TBD            │ ADWIN-based detection  │
-  │ ARIMA          │  TBD     │  TBD     │  TBD              │  TBD            │ STL decomposition      │
-  └────────────────┴──────────┴──────────┴───────────────────┴─────────────────┴────────────────────────┘
-  CDR = Concept Drift Recall (% of injected drift events detected)
-  ADR = Adaptation Detection Rate (% of production time adapted successfully)
-  Adapt Recovery = time to return to normal detection after drift (minutes)
-
-  Table IM-2: Statistical Significance (McNemar's Test)
-  ┌────────────────┬──────────┬──────────┬────────────────┐
-  │ Pair           │ p-value  │ Winner   │ Significant?   │
-  ├────────────────┼──────────┼──────────┼────────────────┤
-  │ MemStream vs IF│  TBD     │  TBD     │  TBD           │
-  │ MemStream vs OSVM│  TBD   │  TBD     │  TBD           │
-  │ MemStream vs HBOS│ TBD    │  TBD     │  TBD           │
-  │ MemStream vs RCF│  TBD     │  TBD     │  TBD           │
-  └────────────────┴──────────┴──────────┴────────────────┘
-
-
-BƯỚC 10: ABLATION STUDY — Component-Level Analysis
---------------------------------------------------------------------------------
-
-  NOTE: Bước 10 chạy trên Test dataset (Nov-Dec 2024), dùng optimal HP từ Bước 8 (Val).
-  ⚠️ STREAMING EVAL BẮT BUỘC cho concept drift analysis.
-
-  Table AB-1: Ablation Study Summary
-  NOTE: Table numbering AB-{1..6} ≠ Ablation #{1..9}.
-    AB-2 = k (Ablation #3), AB-3 = gamma (Ablation #5),
-    AB-4 = memory+NB (Ablation #6), AB-5 = Norm (Ablation #7),
-    AB-6 = Component Breakdown (Ablation #9). See mapping below:
-    Ablation #1=Canary, #2=ADWIN, #3=k, #4=CB, #5=gamma,
-    #6=memory+NB, #7=Norm, #8=TempMem, #9=Components.
-  ┌──────────┬────────────────────────────────────────────────────────┬──────────┬──────────┬──────────┬──────────┬────────────────┐
-  │ Ablation │ Configuration                                          │ AUC-ROC  │ AUC-PR   │ MTD(min) │ NAB     │ Delta vs Full  │
-  ├──────────┼────────────────────────────────────────────────────────┼──────────┼──────────┼──────────┼──────────┼────────────────┤
-  │ Full     │ k=10, g=0.0, mem=50K, CB=80, FE+Norm+NB+Temp         │  TBD     │  TBD     │  TBD     │  TBD     │  baseline      │
-  │ #1       │ Canary Rules (with vs without)                        │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #2       │ ADWIN Drift (static vs adapt)                          │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #3       │ k ∈ {3,5,10,15,20,30}                                 │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #4       │ ContextBeta (global vs 80-cell)                        │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #5       │ gamma ∈ {0.0,0.3,0.5,0.7,0.9}                         │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #6       │ Per-Neighborhood Memory (shared vs per-NB)             │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #7       │ Normalization (hardcode vs fitted p95/p99)           │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  │ #8       │ Temporal Memory Update (FIFO vs ADWIN-guided)         │  TBD     │  TBD     │  TBD     │  TBD     │  TBD           │
-  └──────────┴────────────────────────────────────────────────────────┴──────────┴──────────┴──────────┴──────────┴────────────────┘
-
-  Table AB-6: Component-Level Ablation (Ablation #9 — Core Architecture Comparison)
-  ──────────────────────────────────────────────────────────────────────────
-  Câu hỏi: Mỗi component (AE, Memory, Feature Engineering, Neighborhood,
-  ContextBeta) đóng góp bao nhiêu vào AUC? Dùng để justify các design decisions.
-
-  Ablation #9: Component Breakdown
-  ┌────────────────────────────────┬──────────┬──────────┬─────────────────────┬────────────────────────────┐
-  │ Variant                        │ AUC-ROC  │ AUC-PR   │ Delta vs Full       │ Mô tả                      │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (A) AE Only                    │  TBD     │  TBD     │  TBD                │ DAE reconstruction error  │
-  │                                │          │          │                     │ score only, no memory     │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (B) AE + Memory               │  TBD     │  TBD     │  TBD                │ Original MemStream paper   │
-  │   (MemStream gốc)              │          │          │                     │ (kNN distance scoring,     │
-  │                                │          │          │                     │  FIFO memory, no FE)       │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (C) AE + Memory + FE          │  TBD     │  TBD     │  TBD                │ (B) + feature engineering  │
-  │                                │          │          │                     │ (34D features, no norm)   │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (D) AE + Memory + FE + Norm   │  TBD     │  TBD     │  TBD                │ (C) + fitted normalization │
-  │                                │          │          │                     │ (p95 denominators)          │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (E) AE + Mem + FE + Norm      │  TBD     │  TBD     │  TBD                │ (D) + per-neighborhood     │
-  │   + Neighborhood               │          │          │                     │ memory partitioning        │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (F) AE + Mem + FE + Norm      │  TBD     │  TBD     │  TBD                │ (E) + ContextBeta          │
-  │   + Neighborhood + CB          │          │          │                     │ (80 temporal cells)        │
-  ├────────────────────────────────┼──────────┼──────────┼─────────────────────┼────────────────────────────┤
-  │ (G) Full                      │  TBD     │  TBD     │  baseline           │ (F) + ADWIN + Canary       │
-  │   (Flow của ta — production) │          │          │                     │ + Temporal Update          │
-  └────────────────────────────────┴──────────┴──────────┴─────────────────────┴────────────────────────────┘
-  NOTE: Các variant (A)→(G) build incremental: mỗi bước thêm đúng 1 component.
-  Script: scripts/ablation_component.py — chạy 7 configs, log từng bước.
-  => Production: dùng (G) Full. Nếu (F) ≈ (G) → bỏ ADWIN/Canary overhead.
-
-  Variant definitions chi tiết:
-  (A) AE Only:
-      - Encoder + Decoder, train 5000 epochs trên clean data
-      - Score = ||input - reconstruction||² (MSE)
-      - Không có memory buffer
-      - Không có feature engineering (34D raw features)
-      - No normalization
-
-  (B) MemStream gốc (paper 2106.03837):
-      - (A) + kNN-based memory scoring
-      - FIFO memory, N = 50000 samples
-      - k = 3, gamma = 0 (paper default — khác với production k=10)
-      - NOTE: Production default k=10 (section 1.4). Variant (B) dùng paper default k=3 để so sánh.
-      - Input: raw 34D features (không FE, không normalization)
-      - Score = weighted_kNN_distance(encoder_output, memory)
-
-  (C) AE + Memory + Feature Engineering:
-      - (B) + 34D engineered features (theo BƯỚC 7)
-      - No normalization (FE: ratio, polynomial, cyclical encoding)
-      - Memory vẫn là FIFO global
-
-  (D) AE + Memory + FE + Normalization:
-      - (C) + fitted normalization (p95 denominators từ clean data)
-      - Features: engineered + normalized (zero-mean, p95-scaled)
-      - Memory: global FIFO
-
-  (E) AE + Memory + FE + Norm + Neighborhood:
-      - (D) + per-neighborhood memory partitioning (10 neighborhoods)
-      - Each neighborhood has its own memory buffer
-      - Score = kNN_distance within same-neighborhood memory
-      - Neighbors lookup = context-aware (same NB + temporal context)
-
-  (F) AE + Memory + FE + Norm + NB + ContextBeta:
-      - (E) + 80-cell ContextBeta (10 NB × 8 time contexts)
-      - beta threshold varies per cell (fitted p95 per cell)
-      - Memory update gated by ContextBeta
-
-  (G) Full (Flow của ta):
-      - (F) + ADWIN drift detector (restart/reconfigure on drift)
-      - + Canary Rules (early warning before drift)
-      - + Temporal Memory Update (ADWIN-guided memory refresh)
-
-  Table AB-2: k Ablation (Ablation #3)
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ k                 │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ MTD (min)  │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 3                 │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 5                 │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 10                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 15                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 20                │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 30                │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-  => Production: chọn k tốt nhất từ ablation này
-
-  Table AB-3: gamma Ablation (Ablation #5)
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ gamma             │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ MTD (min)  │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 0.0               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.3               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.5               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.7               │  TBD     │  TBD     │  TBD     │  TBD       │
-  │ 0.9               │  TBD     │  TBD     │  TBD     │  TBD       │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-  => Production: chọn gamma tốt nhất từ ablation này
-
-  Table AB-4: Memory Size Ablation (Ablation #6)
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────┐
-  │ N (memory_len)    │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Warmup     │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────┤
-  │ 256               │  TBD     │  TBD     │  TBD     │  256       │
-  │ 1024              │  TBD     │  TBD     │  TBD     │  1024      │
-  │ 2048              │  TBD     │  TBD     │  TBD     │  2048      │
-  │ 4096              │  TBD     │  TBD     │  TBD     │  4096      │
-  │ 8192              │  TBD     │  TBD     │  TBD     │  8192      │
-  │ 16384             │  TBD     │  TBD     │  TBD     │  16384     │
-  │ 32768             │  TBD     │  TBD     │  TBD     │  32768     │
-  │ 50000             │  TBD     │  TBD     │  TBD     │  50000     │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────┘
-
-  Table AB-5: Normalization Fix Ablation (Ablation #7)
-  ┌───────────────────┬──────────┬──────────┬──────────┬────────────────────┐
-  │ Norm approach     │ AUC-ROC  │ AUC-PR   │ NAR-FPR  │ Denominators       │
-  ├───────────────────┼──────────┼──────────┼──────────┼────────────────────┤
-  │ Hardcoded (v10)   │  TBD     │  TBD     │  TBD     │ 2.5, 0.67, 12.0   │
-  │ Fitted p95        │  TBD     │  TBD     │  TBD     │ from clean data    │
-  │ Fitted p99        │  TBD     │  TBD     │  TBD     │ from clean data    │
-  │ Fitted p90        │  TBD     │  TBD     │  TBD     │ from clean data    │
-  └───────────────────┴──────────┴──────────┴──────────┴────────────────────┘
-  => Nếu fitted tốt hơn → Cập nhật memstream_vectorizer.py
-
-
-BƯỚC 11: EVALUATE — Tính Metrics
---------------------------------
-- Script: scripts/eval_metrics.py
-
-  Metrics:
-  NOTE: NAR-FPR = Normalized Alert-based False Positive Rate.
-
-  Point Anomaly Metrics (All models):
-  - AUC-ROC: Area under ROC curve
-  - AUC-PR:  Area under Precision-Recall curve
-  - NAB Score: Numenta Anomaly Benchmark scoring
-  - MTD:     Mean Time to Detection (< 1 hour target)
-  - MTFA:    Mean Time Between False Alarms (> 24 hours target)
-  - MDR:     Missed Detection Rate (< 5%)
-  - BAR:     Budget Allocation Rate (1-5% label cost)
-  - FPR:     False Positive Rate (< 5%)
-
-  Concept Drift Metrics (STREAMING MODELS ONLY):
-  - CDR:     Concept Drift Recall (% of injected drift events detected by ADWIN)
-  - ADR:     Adaptation Detection Rate (% of production time adapted successfully)
-  - Adapt Recovery: Time to return to normal detection after drift (minutes)
-  - ADWIN Events: Count of ADWIN detection events per drift type
-  - Score Trend: Running mean score before/during/after drift (verify adaptation)
-
-  ⚠️  POINT anomaly metrics đo model sensitivity với sudden spikes.
-  ⚠️  CONCEPT DRIFT metrics đo ADWIN adaptation — KHÔNG phải anomaly detection.
-
-  Statistical Rigor:
-  - Block bootstrap 95% CIs (1-hour block size)
-  - McNemar's test for paired comparisons
-  - Effective sample size accounting for autocorrelation
-
-
-5. CẤU TRÚC THƯ MỤC
-
+# BENCHMARK GUIDE — MemStream NYC Taxi Anomaly Detection
+**Nguồn:** `data-benchmark/data.txt` (merged from `data-benchmark/checklist.md`, now deleted)
+**Merge:** 2026-05-17 — Single source of truth
+
+---
+
+## PHẦN A: NHỮNG QUY ĐỊNH THỐNG NHẤT (LOCKED)
+
+**Mọi phase phải tuân thủ. Không được thay đổi khi chưa có justification.**
+
+- `is_night`: `hour >= 20 OR hour <= 6` **[LOCKED — domain knowledge]**
+- `Feature dim`: 34 **[LOCKED — fixed architecture, PCA PROHIBITED]**
+- `Neighborhoods`: 10 vùng địa lý **[LOCKED — TLC geographic domain]**
+- `Ratecode`: chỉ chấp nhận `[1, 2, 3, 4, 5, 6, 99]` **[LOCKED — TLC domain]**
+- `memory_len`: TBD — tìm optimal bằng Ablation #6 (MS-1: Val, AB-4: Test) → `{256, 1024, 2048, 4096, 8192, 16384, 32768, 50000}`
+- `gamma`: TBD — tìm optimal bằng Ablation #5 (MS-4: Val, AB-3: Test) → `{0.0, 0.3, 0.5, 0.7, 0.9}`
+- `k`: TBD — tìm optimal bằng Ablation #3 (MS-3: Val, AB-2: Test) → `{3, 5, 10, 15, 20, 30}`
+- `ContextBeta`: TBD — tìm optimal bằng MS-5 (Val) → `{1 (global), 4 cells, 8 cells, 16 cells}`
+
+---
+
+## PHẦN B: STREAMING vs BATCH — NGUYÊN TẮC PHÂN BIỆT
+
+| | STREAMING (BẮT BUỘC cho concept drift) | BATCH (so sánh point anomaly) |
+|---|---|---|
+| **Models** | MemStream, iForestASD, RCF, xStream, ARIMA | IsolationForest, OC-SVM, HBOS |
+| **Data flow** | Record-by-record, time-ordered | Train once, score once |
+| **ADWIN** | Active — drift detector on running metrics | N/A |
+| **Concept drift** | MemStream ADAPT (score thay đổi từ từ) | KHÔNG đánh giá drift |
+| **Point anomaly** | MemStream CÓ THỂ detect (sudden spike) | Đánh giá bình thường |
+| **Primary script** | `scripts/benchmark_streaming.py` | `scripts/benchmark_batch.py` |
+| **Script** | eval_streaming_metrics.py (CDR, ADR, Adapt Recovery, ADWIN events) | N/A |
+
+**Script cho streaming:** `scripts/benchmark_streaming.py` (chính — dùng cho B8/B9/B10/B11)
+**Script cho batch:** `scripts/benchmark_batch.py` (phụ — chỉ cho point anomaly)
+
+---
+
+## PHẦN C: BỘ DATASET (DÙNG CHUNG CHO TẤT CẢ)
+
+### C1. Nguồn Dữ Liệu: TLC Trip Record Data (Jan 2024 - Dec 2025)
+
+| Tháng | File | Rows (dự kiến) |
+|---|---|---|
+| Jan 2024 | yellow_tripdata_2024-01.parquet | ~6.0M |
+| Feb 2024 | yellow_tripdata_2024-02.parquet | ~5.5M |
+| Mar 2024 | yellow_tripdata_2024-03.parquet | ~6.2M |
+| Apr 2024 | yellow_tripdata_2024-04.parquet | ~5.8M |
+| May 2024 | yellow_tripdata_2024-05.parquet | ~6.1M |
+| Jun 2024 | yellow_tripdata_2024-06.parquet | ~5.9M |
+| Jul 2024 | yellow_tripdata_2024-07.parquet | ~6.0M |
+| Aug 2024 | yellow_tripdata_2024-08.parquet | ~5.8M |
+| Sep 2024 | yellow_tripdata_2024-09.parquet | ~5.7M |
+| Oct 2024 | yellow_tripdata_2024-10.parquet | ~6.0M |
+| Nov 2024 | yellow_tripdata_2024-11.parquet | ~5.6M |
+| Dec 2024 | yellow_tripdata_2024-12.parquet | ~5.5M |
+| Jan 2025 | yellow_tripdata_2025-01.parquet | ~5.8M |
+| Feb 2025 | yellow_tripdata_2025-02.parquet | ~5.5M |
+| Mar 2025 | yellow_tripdata_2025-03.parquet | ~6.0M |
+| Apr 2025 | yellow_tripdata_2025-04.parquet | ~5.8M |
+| May 2025 | yellow_tripdata_2025-05.parquet | ~6.1M |
+| Jun 2025 | yellow_tripdata_2025-06.parquet | ~5.9M |
+| Jul 2025 | yellow_tripdata_2025-07.parquet | ~6.0M |
+| Aug 2025 | yellow_tripdata_2025-08.parquet | ~5.8M |
+| Sep 2025 | yellow_tripdata_2025-09.parquet | ~5.7M |
+| Oct 2025 | yellow_tripdata_2025-10.parquet | ~6.0M |
+| Nov 2025 | yellow_tripdata_2025-11.parquet | ~5.6M |
+| Dec 2025 | yellow_tripdata_2025-12.parquet | ~5.5M |
+
+Tải: https://www.nyc.gov/site/tlc/about/trip-record-data.page
+Tổng: ~150M rows (24 tháng)
+
+### C2. Dataset Specifications
+
+| Dataset | Period | Rows | Anomaly | Purpose |
+|---|---|---|---|---|
+| Raw | Jan2024-Dec2025 | ~150M | N/A | EDA only |
+| Clean 2024 | Jan2024-Dec2024 | ~70M | 0% | Fixed baseline (không sửa) |
+| Clean 2025 | Jan2025-Dec2025 | ~70M | 0% | Fixed baseline (không sửa) |
+| **Valid (SHARED)** | **Sep2024-Oct2024** | **~10.5M** | **5%** | **Validate HP (all models)** |
+| **Test (SHARED)** | **Nov2024-Dec2024** | **~10.5M** | **5%** | **Evaluate (leakage-free)** |
+| **Production** | **Jan2025-Feb2025** | **~11.3M** | **8%** | **Deployed system / concept drift eval** |
+
+### C3. Train Data Per Model
+
+| Model | Train Period | Rows | Train Config |
+|---|---|---|---|
+| MemStream | Jan-Aug 2024 | ~46.7M | AE: 5000 epochs, lr=0.01; Min 50K samples |
+| iForestASD | Jan-Aug 2024 | ~46.7M | Online learning via River, chunk-based sliding window |
+| RCF | Jan-Aug 2024 | ~46.7M | Online learning via River, Random Continuous Forest |
+| xStream | Jan-Aug 2024 | ~46.7M | Online learning via River, Streaming Half-Space ESOM |
+| IsolationForest | Jan-Aug 2024 | ~46.7M | Batch sklearn — n_estimators, max_samples |
+| OC-SVM | Jan-Aug 2024 | ~46.7M | Batch sklearn — kernel, nu |
+| HBOS | Jan-Aug 2024 | ~46.7M | Batch PyOD — n_bins, alpha |
+| ARIMA | Jan-Aug+Sep 2024 | ~52.2M | STL decomposition (9 tháng), rolling forecast t+1 |
+| Naive | (none) | — | Seasonal naive — no fitting needed |
+
+### C4. NAB Events (Numenta Anomaly Benchmark)
+
+Nguồn: https://github.com/numenta/NAB | Paper: https://arxiv.org/abs/1510.03336
+
+| NAB Events → POINT Anomaly | Concept Drift → Phân bố thay đổi từ từ |
+|---|---|
+| sudden drop (NYC Marathon 02/11/2014) | AbruptDriftPolluter: sudden shift |
+| massive drop (Thanksgiving 27/11/2014) | IncrementalDriftPolluter: gradual shift |
+| gap (Christmas 25/12/2014) | CyclicalDriftPolluter: periodic seasonal shift |
+| spike (New Year 01/01/2015) | |
+| extreme (Blizzard 26-27/01/2015) | |
+
+**NAB là synthetic/inspired reference cho point anomaly patterns. KHÔNG áp dụng NAB scoring profile trực tiếp vì production data không có NAB labels.**
+
+### C5. Icewafl Framework (EDBT 2025)
+
+Paper: Schinninger et al., EDBT 2025, Barcelona. GitHub: https://github.com/chri-schi/Icewafl
+
+```
+Polluter = (e, c, A_p)
+  e   = event (thời điểm/khoảng thời gian)
+  c   = condition (điều kiện kích hoạt)
+  A_p = attribute perturbation (cách thay đổi giá trị)
+```
+
+4 thành phần chính: Builder (PolluterBuilder pattern), Conditions (temporal/probability/function/composite), Polluters (replace/multiply/reduce precision/composite), Read/Write (CSV/Parquet/streaming).
+
+---
+
+## PHẦN D: DÒNG KHUNG QUY TRÌNH (11 BƯỚC)
+
+```
+TLC Parquet (thực tế)
+    |
+    v
+[BƯỚC 1: Ingestion]         --> Tải 24 tháng, giữ nguyên lỗi
+    |
+    v
+[BƯỚC 2: EDA on RAW]         --> Phân tích raw: NULL rates, out-of-range, duplicates
+    |
+    v
+[BƯỚC 3: Clean]              --> Tạo CLEAN dataset (100% sạch, 0% anomaly)
+    |
+    v
+[BƯỚC 4: EDA on CLEAN]       --> Verify anomalies removed, distribution stats
+    |
+    v
+[BƯỚC 5: Inject]             --> Tạo POLLUTED dataset (5% valid/test, 8% prod)
+    |
+    v
+[BƯỚC 6: EDA on INJECTED]     --> Verify ground truth, drift placement
+    |
+    v
+[BƯỚC 7: Feature Engineering] --> 34D features, normalization, neighborhoods
+    |
+    v
+[BƯỚC 8: Benchmark]          --> Train/Val/Test, hyperparameter tuning per model
+    |                          ⚠️ STREAMING eval cho concept drift metrics
+    v
+[BƯỚC 9: Inter-Model]        --> So sánh MemStream vs baselines
+    |                          ⚠️ STREAMING eval bắt buộc cho drift models
+    v
+[BƯỚC 10: Ablation Study]    --> Component-level ablation (AE→MemStream→Flow)
+    |                          ⚠️ STREAMING eval trên Test dataset
+    v
+[BƯỚC 11: Evaluate]         --> AUC-ROC, AUC-PR, NAB, MTD, MTFA, FPR
+    |                          ⚠️ STREAMING-only cho concept drift detection
+```
+
+Output paths:
+```
+[1]  Ingestion                   --> data/raw/
+[2]  EDA on RAW                  --> data/eda/raw/
+[3]  Clean (100% anomaly-free)   --> data/clean/
+[4]  EDA on CLEAN                --> data/eda/clean/
+[5]  Inject (5% valid/test, 8%)  --> data/polluted/
+[6]  EDA on INJECTED             --> data/eda/injected/
+[7]  Feature Engineering         --> src/features/
+[8]  Benchmark (per-model HP)    --> results/hp_benchmark/{model}/
+[9]  Inter-Model comparison      --> results/inter_model/
+[10] Ablation Study              --> results/ablation/
+[11] Evaluate                    --> results/final/
+```
+
+---
+
+## PHẦN E: CHI TIẾT TỪNG BƯỚC
+
+---
+
+### BƯỚC 1: INGESTION — Thu Thập Dữ Liệu Thô (Có Lỗi)
+
+- [ ] **Script:** `scripts/ingest_tlc_parquet.py`
+- [ ] Tải 24 tháng TLC parquet từ cloudfront URL (Jan 2024 - Dec 2025)
+- [ ] Giữ nguyên lỗi, không làm sạch
+- [ ] Xác minh mỗi file có đúng URL và kích thước hợp lý (~5-6M rows)
+- [ ] Kiểm tra network error — retry nếu download fail
+- [ ] **Output:** `data/raw/raw_YYYYMM.parquet` + `data/raw/raw_combined.parquet`
+- [ ] Tổng rows ≈ 150M (± 10%), tất cả 24 tháng present
+- [ ] File không corrupt (parquet readable)
+- [ ] **Resource:** Disk I/O — đủ disk space cho ~20GB parquet; single-threaded download OK
+
+---
+
+### BƯỚC 2: EDA on RAW — Khai Phá Dữ Liệu Thô
+
+- [ ] **Script:** `scripts/eda_raw.py`
+- [ ] Mục tiêu: Xác định tất cả lỗi CÓ TRONG RAW DATA trước khi clean
+
+**Phân tích:**
+- [ ] NULL rates theo cột và tháng → `eda_summary.json`
+- [ ] Out-of-range: RatecodeID (values ngoài [1,2,3,4,5,6,99]), PULocationID/DOLocationID (ngoài 1-263), passenger_count (ngoài 1-6)
+- [ ] Negative values: fare_amount < 0, trip_distance < 0, total_amount < 0
+- [ ] Duplicate records (exact copy), duplicates by month
+- [ ] Temporal coverage: Mon-Sun, 24h, missing hours identified
+- [ ] Speed outliers: speed_mph > 80, speed_mph < 0
+- [ ] Seasonality: ACF (24h và 168h periodicity), hourly/weekday patterns
+- [ ] Distribution of raw features (fare_amount, trip_distance, speed, passenger_count)
+
+**Output:** `data/eda/raw/`
+- [ ] `eda_summary.json`
+- [ ] `fig/raw_null_rates_by_month.png`
+- [ ] `fig/raw_out_of_range_by_month.png`
+- [ ] `fig/raw_negative_values.png`
+- [ ] `fig/raw_duplicates_by_month.png`
+- [ ] `fig/raw_temporal_coverage_heatmap.png`
+- [ ] `fig/raw_speed_distribution.png`
+- [ ] `fig/raw_seasonality_acf.png`
+- [ ] `fig/raw_hourly_pattern.png`
+- [ ] `fig/raw_fare_distribution.png`
+
+NOTE: Mỗi fig chỉ chứa 1 biểu đồ duy nhất.
+
+- [ ] **Resource:** RAM — đọc full dataset (~150M rows) — dùng chunked reading
+
+---
+
+### BƯỚC 3: CLEAN — Tạo Clean Dataset
+
+- [ ] **Script:** `scripts/clean_taxi_data.py`
+- [ ] Pipeline 3 tầng: Schema → Hard Rule → ML Detection
+
+**TẦNG 1: SCHEMA CLEANING**
+- [ ] Validate columns: drop unknown, rename TLC fields
+- [ ] Parse datetime: tpep_pickup_datetime, tpep_dropoff_datetime
+- [ ] Cast types: float64 for numerics, int for IDs
+- [ ] Handle encoding: unicode, trailing whitespace
+- [ ] Deduplicate column names
+
+**TẦNG 2: HARD RULE CLEANING (Rule-Based)**
+- [ ] Loại bỏ semantic violations tuyệt đối
+- [ ] `fare_amount >= 0`
+- [ ] `trip_distance >= 0`
+- [ ] `passenger_count`: 1-6
+- [ ] `RatecodeID`: [1, 2, 3, 4, 5, 6, 99] only
+- [ ] `PULocationID / DOLocationID`: 1-263
+- [ ] `duration_s`: > 0 và < 86400
+- [ ] `speed_mph`: > 0 và <= 80
+- [ ] **Output:** `data/clean/tier1_hardrule.parquet`
+
+**TẦNG 3: ML-BASED ANOMALY DETECTION (Residual Cleaning)**
+- [ ] KHÔNG dùng MemStream (circular dependency — MemStream cần clean data để train)
+- [ ] IsolationForest: n_estimators=200, max_samples=512, contamination=0.01
+- [ ] HBOS: n_bins=20, alpha=0.05, contamination=0.01
+- [ ] Stat-threshold: fare_per_mile > p99 OR speed > p99 theo context cell
+- [ ] Ensemble: record là anomaly nếu ≥ 2/3 models flag
+- [ ] Human review sample (top 100 scored records) trước khi drop
+- [ ] Soft flag: ghi log anomaly potential để có thể revert
+
+**Output:**
+- [ ] `data/clean/clean_2024.parquet` (Jan-Dec 2024, 0% anomaly, ≈70M rows ±10%)
+- [ ] `data/clean/clean_2025.parquet` (Jan-Dec 2025, 0% anomaly, ≈70M rows ±10%)
+- [ ] `data/clean/clean_2024_log.json` (records removed, by tier/rule)
+- [ ] `data/clean/clean_2025_log.json`
+- [ ] `data/clean/ml_flagged.parquet` (for review)
+
+- [ ] **Resource:** RAM — IF + HBOS trên tier1 data — chunked processing; CPU — sklearn models — multi-core OK
+
+---
+
+### BƯỚC 4: EDA on CLEAN — Xác Nhận Dữ Liệu Sạch
+
+- [ ] **Script:** `scripts/eda_clean.py`
+- [ ] Mục tiêu: Xác nhận tất cả anomalies đã được loại bỏ, distribution hợp lý, không có data leakage
+
+**Verification:**
+- [ ] No cleaning rule violations remain
+- [ ] Distribution: fare_amount, trip_distance, speed, passenger_count hợp lý
+- [ ] Temporal patterns post-cleaning: hourly, weekday/weekend consistent với raw
+- [ ] Correlation matrix of 34D features computed
+- [ ] Neighborhood distribution (10 neighborhoods) verified
+- [ ] Compare with EDA on RAW: how many records removed, by which rule
+- [ ] ACF: 24h và 168h periodicity vẫn present post-cleaning
+
+**Output:** `data/eda/clean/`
+- [ ] `eda_summary.json`
+- [ ] `fig/clean_null_rates.png`
+- [ ] `fig/clean_violations_heatmap.png`
+- [ ] `fig/clean_fare_distribution.png`
+- [ ] `fig/clean_trip_distance_distribution.png`
+- [ ] `fig/clean_speed_distribution.png`
+- [ ] `fig/clean_hourly_pattern.png`
+- [ ] `fig/clean_weekday_pattern.png`
+- [ ] `fig/clean_correlation_matrix.png`
+- [ ] `fig/clean_neighborhood_distribution.png`
+- [ ] `fig/clean_seasonality_acf.png`
+- [ ] `fig/clean_records_removed_by_rule.png`
+
+NOTE: Mỗi fig chỉ chứa 1 biểu đồ duy nhất.
+
+- [ ] **Resource:** RAM — đọc clean dataset (~70M rows) chunked
+
+---
+
+### BƯỚC 5: INJECT — Icewafl-Inspired Polluter (Data Polluter)
+
+- [ ] **Script:** `scripts/inject_polluter.py`
+- [ ] Framework: p = (e, c, A_p) — theo Icewafl EDBT 2025
+
+**Point Anomaly Injection (Valid/Test — 5%)**
+- [ ] NULLLocationPolluter: 2.0%, always, PULocationID/DOLocID
+- [ ] PlaceholderPolluter: 0.1%, always, passenger_count
+- [ ] NegativeFarePolluter: 0.1%, always, fare_amount
+- [ ] OutlierFarePolluter: 1.3%, always, fare_amount
+- [ ] DuplicatePolluter: 1.0%, always, all
+- [ ] OutOfOrderPolluter: 0.5%, temporal, pickup_datetime
+- [ ] **Tổng = 5.0%** (2.0+0.1+0.1+1.3+1.0+0.5) — dùng để benchmark model detect point anomalies
+
+**Concept Drift Injection (Production only — 3% additional)**
+
+⚠️ 3 loại concept drift KHÔNG phải anomaly point — MemStream ADAPT chứ không detect dưới dạng anomaly. Production = 5% point + 3% drift = 8% total.
+
+**1. AbruptDriftPolluter (CONCEPT — Sudden Shift)**
+- [ ] Trigger: time > drift_point (dp) — chọn ngẫu nhiên 1 ngày trong period
+- [ ] Mechanic: `fare_amount = fare_amount × 1.5` (tăng đột ngột 50%)
+- [ ] trip_distance giữ nguyên → fare_per_mile tăng tương ứng
+- [ ] Scope: tất cả records SAU dp trong production (30% records sau dp)
+- [ ] Validation: before/after mean(fare_amount) nên có gap rõ ràng ở dp
+- [ ] Ground Truth: dp_timestamp → dp_timestamp + end_of_production
+
+**2. IncrementalDriftPolluter (CONCEPT — Gradual Covariate Shift)**
+- [ ] Trigger: always — bắt đầu từ ngày đầu của production
+- [ ] Mechanic: `fare_amount = fare_amount × (1 + 0.3 × progress)`
+- [ ] progress = (current_idx - start_idx) / total_records → tăng tuyến tính 0%→30%
+- [ ] Scope: tất cả records trong production period
+- [ ] Validation: rolling_mean(fare_amount) nên tăng dần, không jump
+
+**3. CyclicalDriftPolluter (CONCEPT — Periodic Seasonal Shift)**
+- [ ] Trigger: always — bắt đầu từ ngày đầu của production
+- [ ] Mechanic: `fare_amount = fare_amount × (1 + 0.15 × sin(2π × week/4))`
+- [ ] Chu kỳ 4 tuần: tuần 0 → peak (+15%), tuần 2 → trough (-15%)
+- [ ] Scope: tất cả records trong production period
+- [ ] Validation: ACF(168h) nên có peak rõ ở lag 672 (4 tuần)
+
+**LƯU Ý:**
+- 6 loại POINT ANOMALY → MemStream CÓ THỂ detect (score cao bất thường)
+- 3 loại CONCEPT DRIFT → MemStream ADAPT (score thay đổi từ từ, không spike)
+- Tách ground truth mask riêng: point_mask vs drift_mask
+
+**Output:**
+- [ ] `data/polluted/valid/polluted_valid.parquet` (5%, 2024)
+- [ ] `data/polluted/test/polluted_test.parquet` (5%, 2024)
+- [ ] `data/polluted/production/polluted_prod.parquet` (8%, Jan-Feb 2025)
+- [ ] `data/polluted/*/ground_truth_mask.npy` (0=clean, 1=polluted)
+- [ ] `data/polluted/*/ground_truth_per_type.json` (per polluter type)
+- [ ] `data/polluted/*/injection_log.json`
+
+- [ ] **Resource:** CPU — injection logic lightweight
+
+---
+
+### BƯỚC 6: EDA on INJECTED — Xác Nhận Ground Truth
+
+- [ ] **Script:** `scripts/eda_injected.py`
+- [ ] Mục tiêu: Xác nhận ground truth mask CHÍNH XÁC, visualize ĐÚNG what was injected
+
+⚠️ **NGUYÊN TẮC:** Tất cả visualizations phải dùng `ground_truth_mask.npy` và `ground_truth_per_type.json` làm reference — không visualize random.
+
+**Ground Truth Verification:**
+- [ ] Dùng `ground_truth_mask.npy` — KHÔNG random sampling
+- [ ] Ground truth coverage per polluter type chính xác (đếm %)
+- [ ] Distribution shift vs clean data: fare_amount, trip_distance, speed — dùng ground truth filter injected vs clean rồi so sánh histogram/KDE
+- [ ] Anomaly rate by neighborhood từ ground truth mask
+- [ ] Anomaly rate by hour từ ground truth mask
+- [ ] Anomaly rate by day-of-week từ ground truth mask
+
+**Drift Point Validation:**
+- [ ] Abrupt drift: time-series plot show sudden jump at drift_point (rolling mean)
+- [ ] Incremental drift: rolling mean show gradual slope
+- [ ] Cyclical drift: ACF show peak at lag 672 (4 weeks)
+- [ ] Ground truth label distribution: % per polluter type (stacked bar)
+
+**Output:** `data/eda/injected/`
+- [ ] `eda_summary.json`
+- [ ] `fig/injected_ground_truth_coverage_bar.png` (per polluter type %)
+- [ ] `fig/injected_fare_distribution_shift.png` (clean vs polluted, paired)
+- [ ] `fig/injected_speed_distribution_shift.png` (clean vs polluted, paired)
+- [ ] `fig/injected_anomaly_rate_by_neighborhood.png` (from ground truth mask)
+- [ ] `fig/injected_anomaly_rate_by_hour.png` (from ground truth mask)
+- [ ] `fig/injected_anomaly_rate_by_dow.png` (from ground truth mask)
+- [ ] `fig/injected_drift_abrupt_timeseries.png` (abrupt drift point)
+- [ ] `fig/injected_drift_incremental_rolling.png` (incremental slope)
+- [ ] `fig/injected_drift_cyclical_acf.png` (4-week periodicity)
+- [ ] `fig/injected_label_stacked_bar.png` (stacked % per polluter type)
+
+NOTE: Mỗi fig chỉ chứa 1 biểu đồ duy nhất.
+
+- [ ] **Resource:** RAM — đọc injected datasets chunked
+
+---
+
+### BƯỚC 7: FEATURE ENGINEERING (Dùng Chung)
+
+⚠️ **RESOURCE MONITORING — ÁP DỤNG CHO TẤT CẢ CÁC PHASE TIẾP THEO**
+- RAM: không vượt 80% available
+- GPU VRAM: không vượt 85% available
+- CPU: không vượt 90% cores
+- Nếu OOM xảy ra → giảm batch_size hoặc memory_len TRƯỚC KHI retry
+- Script: `scripts/resource_monitor.py` (chạy nền, log resource usage mỗi 30s)
+
+⚠️ **NORMALIZATION GAP:** Các giá trị denominators (2.5, 0.67, 12.0) là hardcoded từ benchmark v10, KHÔNG phải từ fitted statistics trên actual NYC taxi data.
+**FIX:** Tính denominators bằng percentile-based approach trên clean data:
+- `fare_per_mile_denom = 95th percentile` của fare_per_mile
+- `fare_per_min_denom = 95th percentile` của fare_per_min
+- `speed_denom = 95th percentile` của speed
+
+**34D Features (PCA PROHIBITED):**
+- [ ] Raw (6D): trip_distance, dur_min, fare_amount, passenger_count, total_amount, speed_mph
+- [ ] Derived (3D): fare_per_mile, fare_per_min, fare_per_pax
+- [ ] Temporal (3D): pickup_hour, pickup_dow, is_weekend
+- [ ] Spatial (4D): PU_Grid_X/Y, DO_Grid_X/Y (16×17 grid)
+- [ ] Normalized (4D): fare_per_mile_norm, fare_per_min_norm, speed_norm, pax_per_mile
+- [ ] Cyclic (5D): hour_sin/cos, dow_sin/cos, dist_squared
+- [ ] One-hot (5D): ratecode_1..5
+- [ ] Binary (1D): is_night (`hour >= 20 OR hour <= 6`) **[LOCKED]**
+- [ ] Log (2D): log_fare, log_distance
+- [ ] Inter-zone (1D): inter_borough_rough
+- [ ] **Tổng = 34D [LOCKED]**
+
+**10 Neighborhoods (Geographic):**
+- [ ] 0: manhattan | 1: brooklyn | 2: queens_lower | 3: queens_upper | 4: bronx
+- [ ] 5: staten_island | 6: ewr | 7: jfk | 8: nalp | 9: unknown
+- [ ] **Neighborhoods = 10 [LOCKED]**
+
+**Normalization (Ablation #7):**
+- [ ] Fitted denominators từ clean data: p95 approach
+- [ ] fare_per_mile_denom = 95th percentile
+- [ ] fare_per_min_denom = 95th percentile
+- [ ] speed_denom = 95th percentile
+- [ ] KHÔNG hardcoded denominators (2.5, 0.67, 12.0)
+- [ ] **Script:** `scripts/compute_normalization_stats.py`
+- [ ] **Code:** `src/features/memstream_vectorizer.py` — đọc fitted values từ config
+- [ ] **Resource:** RAM — feature computation trên full dataset chunked
+
+---
+
+### BƯỚC 8: BENCHMARK — Hyperparameter Tuning (Per-Model, on Val Dataset)
+
+⚠️ Bước 8 chạy trên Val dataset (Sep-Oct 2024, 5% anomaly).
+⚠️ Bước 10 (Ablation Study) dùng optimal HP từ Bước 8 để chạy component-level analysis trên Test dataset (Nov-Dec 2024).
+⚠️ Bảng MS-1→MS-6 là PRELIMINARY. Kết quả cuối ghi vào AB-1→AB-6 (Bước 10).
+⚠️ **STREAMING EVAL BẮT BUỘC cho MemStream và streaming-capable models.**
+
+**Dataset:**
+- [ ] Train: PER-MODEL — mỗi model train trên data riêng (xem table bên dưới)
+- [ ] Valid (SHARED): Sep-Oct 2024 (~10.5M rows, 5% anomaly) — validate HP
+- [ ] Test (SHARED): Nov-Dec 2024 (~10.5M rows, 5% anomaly) — evaluate
+
+**Models:**
+| Model | Mode | Streaming eval | Dùng cho drift |
+|---|---|---|---|
+| MemStream | STREAMING | BẮT BUỘC | ✅ ADWIN |
+| iForestASD | STREAMING | BẮT BUỘC | ✅ River |
+| RCF | STREAMING | BẮT BUỘC | ✅ River |
+| xStream | STREAMING | BẮT BUỘC | ✅ River |
+| ARIMA | SEQUENTIAL | BẮT BUỘC | ✅ STL decomp |
+| Naive | SEQUENTIAL | Baseline only | ❌ No adaptation |
+| IsolationForest | BATCH | KHÔNG | ❌ Batch only |
+| OC-SVM | BATCH | KHÔNG | ❌ Batch only |
+| HBOS | BATCH | KHÔNG | ❌ Batch only |
+
+**Train Data Per Model:**
+- [ ] MemStream: Jan-Aug 2024 (~46.7M), AE: 5000 epochs, lr=0.01, Min 50K samples, AE: 34→68→34, Beta: p95 from warmup
+- [ ] iForestASD: Jan-Aug 2024 (~46.7M), River library, chunk-based
+- [ ] RCF: Jan-Aug 2024 (~46.7M), River library, Random Continuous Forest
+- [ ] xStream: Jan-Aug 2024 (~46.7M), River library, Streaming Half-Space ESOM
+- [ ] IsolationForest: Jan-Aug 2024 (~46.7M), batch sklearn
+- [ ] OC-SVM: Jan-Aug 2024 (~46.7M), batch sklearn
+- [ ] HBOS: Jan-Aug 2024 (~46.7M), batch PyOD
+- [ ] ARIMA: Jan-Aug+Sep 2024 (~52.2M), STL decomposition, rolling forecast t+1
+- [ ] Naive: no training needed
+
+**MemStream Paper Defaults (WWW 2022, Bhatia et al.):**
+- epochs=5000, lr=0.01, memory_len=2048 (small datasets), beta=fitted
+
+NOTE: Current code dùng tạm warmup_epochs=500, warmup_lr=1e-3. Cần benchmark với paper defaults (5000 epochs, lr=0.01) trước, rồi test lower epochs (500, 1000) để trade-off speed vs accuracy.
+
+**MemStream HP Tables (Preliminary — Val Dataset):**
+
+**Table MS-1: Memory Size**
+- [ ] memory_len ∈ {256, 1024, 2048, 4096, 8192, 16384, 32768, 50000}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, Warmup
+- → Kết quả cuối: xem AB-4 (Bước 10, Test dataset)
+
+**Table MS-2: Hidden Dimension (D)**
+- [ ] hidden_dim ∈ {17, 34, 51, 68, 85, 102} (D = in_dim = 34)
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, Params(M)
+- NOTE: Architectural parameter — KHÔNG có dedicated AB ablation table. Decision based on MS-2 Val results only.
+
+**Table MS-3: k (Number of Neighbors)**
+- [ ] k ∈ {3, 5, 10, 15, 20, 30}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, MTD (min)
+- → Kết quả cuối: xem AB-2 (Bước 10, Test dataset)
+
+**Table MS-4: gamma (Decay Factor)**
+- [ ] gamma ∈ {0.0, 0.3, 0.5, 0.7, 0.9}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, MTD (min)
+- → Kết quả cuối: xem AB-3 (Bước 10, Test dataset)
+
+**Table MS-5: ContextBeta Cell Configuration**
+- [ ] config ∈ {Global (1 cell), 4 cells (NB×2), 8 cells (NB×8), 16 cells (NB×16)}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, Cells
+
+**Table MS-6: ADWIN vs Static Threshold**
+- [ ] drift handling ∈ {Static, ADWIN}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, Adapt Time
+
+NOTE: Các cột 4th (Warmup, Params, MTD, Cells, Adapt Time) là task-specific. NAB scored trên Test dataset (Bước 10/11), không phải trên Val.
+
+**Other Model HP Tables:**
+
+**IsolationForest (BATCH-only):**
+- [ ] IF-1: n_estimators ∈ {50, 100, 200, 500}
+- [ ] IF-2: max_samples ∈ {128, 256, 512, 1024}
+
+**iForestASD (STREAMING):**
+- [ ] IA-1: n_trees ∈ {50, 100, 200}
+
+**OC-SVM (BATCH-only):**
+- [ ] OSVM-1: kernel=rbf, nu ∈ {0.01, 0.05, 0.10, 0.20}
+
+**HBOS (BATCH-only):**
+- [ ] HBOS-1: n_bins ∈ {10, 20}, alpha ∈ {0.01, 0.05}
+
+**RCF (STREAMING — River):**
+- [ ] RCF-1: n_trees ∈ {25, 50, 100, 200}
+- [ ] RCF-2: max_depth ∈ {unlimited, 8, 16, 32}
+
+**xStream (STREAMING — River):**
+- [ ] XS-1: n_batches ∈ {10, 50, 100, 200}
+- [ ] XS-2: depth ∈ {10, 20, 50, unlimited}
+
+**Output:**
+- [ ] `results/hp_benchmark/memstream/ms_table_*.csv`
+- [ ] `results/hp_benchmark/isolationforest/if_table_*.csv`
+- [ ] `results/hp_benchmark/iforestasd/ia_table_*.csv`
+- [ ] `results/hp_benchmark/ocsvm/osvm_table_*.csv`
+- [ ] `results/hp_benchmark/hbos/hbos_table_*.csv`
+- [ ] `results/hp_benchmark/rcf/rcf_table_*.csv`
+- [ ] `results/hp_benchmark/xstream/xs_table_*.csv`
+
+**OOM Protocol:**
+- [ ] Nếu OOM: giảm batch_size TRƯỚC, không retry ngay
+- [ ] Nếu OOM: giảm memory_len TRƯỚC, không retry ngay
+- [ ] Streaming eval phase: monitor RAM (score buffer flush định kỳ)
+
+**Resource:**
+- MemStream warmup: GPU heavy (AE training trên 46.7M rows) — **monitor GPU VRAM sát sao**
+- IsolationForest/OC-SVM/HBOS: CPU heavy, moderate RAM
+- iForestASD/RCF/xStream: CPU light, online learning
+
+---
+
+### BƯỚC 9: INTER-MODEL BENCHMARK
+
+⚠️ **STREAMING EVAL BẮT BUỘC cho MemStream và streaming-capable models.**
+
+**Dataset:** Train/Val/Test split (time-ordered, leakage-free):
+- Train: Jan 2024 - Aug 2024 (~8 tháng, 0% anomaly)
+- Val: Sep 2024 - Oct 2024 (~2 tháng, 5% anomaly)
+- Test: Nov 2024 - Dec 2024 (~2 tháng, 5% anomaly)
+
+**Table IM-1: Inter-Model Comparison (Best HP per model)**
+
+| Model | AUC-ROC | AUC-PR | NAB | MTD(min) | MTFA(hr) | MDR(%) | BAR(%) | FPR(%) | Mode |
+|---|---|---|---|---|---|---|---|---|---|
+| MemStream | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | S |
+| IsolationForest | TBD | TBD | TBD | N/A | TBD | TBD | TBD | TBD | B |
+| iForestASD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | S |
+| OC-SVM | TBD | TBD | TBD | N/A | TBD | TBD | TBD | TBD | B |
+| HBOS | TBD | TBD | TBD | N/A | TBD | TBD | TBD | TBD | B |
+| RCF | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | S |
+| xStream | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | S |
+| ARIMA | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | S |
+| Naive | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | S |
+
+S = Streaming-capable, B = Batch-only (KHÔNG có concept drift metrics)
+
+**Concept Drift Sub-table (STREAMING MODELS ONLY — Production dataset Jan-Feb 2025):**
+| Model | CDR(%) | ADR(h) | Adapt Recovery(m) | ADWIN Events |
+|---|---|---|---|---|
+| MemStream | TBD | TBD | TBD | TBD |
+| iForestASD | TBD | TBD | TBD | TBD |
+| RCF | TBD | TBD | TBD | TBD |
+| xStream | TBD | TBD | TBD | TBD |
+| ARIMA | TBD | TBD | TBD | TBD |
+
+- CDR = Concept Drift Recall (% of injected drift events detected)
+- ADR = Adaptation Detection Rate (% of production time adapted successfully)
+- Adapt Recovery = time to return to normal detection after drift (minutes)
+
+**Table IM-2: Statistical Significance (McNemar's Test)**
+- [ ] MemStream vs IsolationForest
+- [ ] MemStream vs OC-SVM
+- [ ] MemStream vs HBOS
+- [ ] MemStream vs RCF
+
+**Output:**
+- [ ] `results/inter_model/im_table_1.csv` (point anomaly)
+- [ ] `results/inter_model/im_table_2.csv` (McNemar's test)
+
+**Concept Drift Proof:**
+- [ ] Abrupt drift: sudden jump visible in rolling mean score (ADWIN fires)
+- [ ] Incremental drift: gradual score increase, ADWIN adapts continuously
+- [ ] Cyclical drift: periodic ADWIN firing pattern (4-week cycle)
+- [ ] Adaptation Recovery time measurable (minutes)
+- [ ] Streaming models (MemStream, iForestASD, RCF, xStream) ADWIN-evaluated
+
+---
+
+### BƯỚC 10: ABLATION STUDY — Component-Level Analysis (on Test Dataset)
+
+⚠️ Bước 10 chạy trên Test dataset (Nov-Dec 2024), dùng optimal HP từ Bước 8 (Val).
+⚠️ **STREAMING EVAL BẮT BUỘC cho concept drift analysis.**
+
+**Table AB-1: Ablation Study Summary**
+
+NOTE: Table numbering AB-{1..6} ≠ Ablation #{1..9}.
+AB-2 = k (Ablation #3), AB-3 = gamma (Ablation #5),
+AB-4 = memory_len + per-NB memory strategy (Ablation #6),
+AB-5 = Norm (Ablation #7), AB-6 = Component Breakdown (Ablation #9).
+See mapping: Ablation #1=Canary, #2=ADWIN, #3=k, #4=CB, #5=gamma, #6=memory+NB, #7=Norm, #8=TempMem, #9=Components.
+
+| Ablation | Configuration | AUC-ROC | AUC-PR | MTD(min) | NAB | Delta vs Full |
+|---|---|---|---|---|---|---|
+| Full | k=10, g=0.0, mem=50K, CB=80, FE+Norm+NB+Temp | TBD | TBD | TBD | TBD | baseline |
+| #1 | Canary Rules (with vs without) | TBD | TBD | TBD | TBD | TBD |
+| #2 | ADWIN Drift (static vs adapt) | TBD | TBD | TBD | TBD | TBD |
+| #3 | k ∈ {3,5,10,15,20,30} | TBD | TBD | TBD | TBD | TBD |
+| #4 | ContextBeta (global vs 80-cell) | TBD | TBD | TBD | TBD | TBD |
+| #5 | gamma ∈ {0.0,0.3,0.5,0.7,0.9} | TBD | TBD | TBD | TBD | TBD |
+| #6 | Per-Neighborhood Memory + Memory Size (shared vs per-NB; AB-4 tests len) | TBD | TBD | TBD | TBD | TBD |
+| #7 | Normalization (hardcode vs fitted p95/p99) | TBD | TBD | TBD | TBD | TBD |
+| #8 | Temporal Memory Update (FIFO vs ADWIN-guided) | TBD | TBD | TBD | TBD | TBD |
+
+**Table AB-2: k Ablation (Ablation #3)**
+- [ ] k ∈ {3, 5, 10, 15, 20, 30}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, MTD (min)
+- → Production: chọn k tốt nhất
+
+**Table AB-3: gamma Ablation (Ablation #5)**
+- [ ] gamma ∈ {0.0, 0.3, 0.5, 0.7, 0.9}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, MTD (min)
+- → Production: chọn gamma tốt nhất
+
+**Table AB-4: Memory Size Ablation (Ablation #6)**
+- [ ] N ∈ {256, 1024, 2048, 4096, 8192, 16384, 32768, 50000}
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR, Warmup
+
+**Table AB-5: Normalization Fix Ablation (Ablation #7)**
+- [ ] Hardcoded (v10): denominators 2.5, 0.67, 12.0
+- [ ] Fitted p90
+- [ ] Fitted p95
+- [ ] Fitted p99
+- Metrics: AUC-ROC, AUC-PR, NAR-FPR
+- → Nếu fitted tốt hơn → cập nhật `memstream_vectorizer.py`
+
+**Table AB-6: Component-Level Ablation (Ablation #9)**
+
+⚠️ Câu hỏi: Mỗi component (AE, Memory, Feature Engineering, Neighborhood, ContextBeta) đóng góp bao nhiêu vào AUC? Dùng để justify các design decisions.
+
+- [ ] **(A) AE Only:** DAE reconstruction error score only, no memory, no FE, no normalization
+- [ ] **(B) MemStream gốc (paper 2106.03837):** k=3, gamma=0, FIFO memory 50K, raw 34D features, no FE
+- [ ] **(C) AE + Memory + FE:** (B) + 34D engineered features (ratio, polynomial, cyclical), no norm
+- [ ] **(D) AE + Memory + FE + Norm:** (C) + fitted normalization (p95 denominators)
+- [ ] **(E) AE + Memory + FE + Norm + Neighborhood:** (D) + per-neighborhood memory partitioning
+- [ ] **(F) AE + Memory + FE + Norm + NB + ContextBeta:** (E) + 80-cell ContextBeta
+- [ ] **(G) Full (Flow):** (F) + ADWIN + Canary + Temporal Update
+
+**Script:** `scripts/ablation_component.py` — chạy 7 configs, log từng bước.
+**=> Production:** dùng (G) Full. Nếu (F) ≈ (G) → bỏ ADWIN/Canary overhead.
+
+**Output:**
+- [ ] `results/ablation/ab_table_1.csv` (summary)
+- [ ] `results/ablation/ab_table_2.csv` (k)
+- [ ] `results/ablation/ab_table_3.csv` (gamma)
+- [ ] `results/ablation/ab_table_4.csv` (memory)
+- [ ] `results/ablation/ab_table_5.csv` (normalization)
+- [ ] `results/ablation/ab_table_6.csv` (components)
+
+**Resource:** Component ablation: 7 configs × full eval — GPU intensive. Longest phase: ~1-2 ngày nếu 46.7M rows × 5000 epochs.
+
+---
+
+### BƯỚC 11: EVALUATE — Tính Metrics
+
+- [ ] **Script:** `scripts/eval_metrics.py`
+
+**Point Anomaly Metrics (All models):**
+- [ ] AUC-ROC: Area under ROC curve
+- [ ] AUC-PR: Area under Precision-Recall curve
+- [ ] NAB Score: Numenta Anomaly Benchmark scoring
+- [ ] MTD: Mean Time to Detection (< 1 hour target)
+- [ ] MTFA: Mean Time Between False Alarms (> 24 hours target)
+- [ ] MDR: Missed Detection Rate (< 5%)
+- [ ] BAR: Budget Allocation Rate (1-5% label cost)
+- [ ] FPR: False Positive Rate (< 5%)
+
+**Concept Drift Metrics (STREAMING MODELS ONLY):**
+- [ ] CDR: Concept Drift Recall (% of injected drift events detected by ADWIN)
+- [ ] ADR: Adaptation Detection Rate (% of production time adapted successfully)
+- [ ] Adapt Recovery: Time to return to normal detection after drift (minutes)
+- [ ] ADWIN Events: Count of ADWIN detection events per drift type
+- [ ] Score Trend: Running mean score before/during/after drift (verify adaptation)
+
+**Statistical Rigor:**
+- [ ] Block bootstrap 95% CIs (1-hour block size)
+- [ ] McNemar's test for paired comparisons
+- [ ] Effective sample size accounting for autocorrelation
+
+**Output:**
+- [ ] `results/final/auc_roc_scores.json`
+- [ ] `results/final/ablation_results.json`
+- [ ] `results/final/final_comparison_table.csv`
+- [ ] `results/final/figures/auc_roc_bar_chart.png`
+- [ ] `results/final/figures/pr_curves_comparison.png`
+- [ ] `results/final/figures/ablation_heatmap.png`
+- [ ] `results/final/figures/hp_heatmap_memstream.png`
+
+---
+
+## PHẦN F: CẤU TRÚC THƯ MỤC
+
+```
 data/
   raw/
-    raw_YYYYMM.parquet          # Raw 2024-2025, có lỗi
-    raw_combined.parquet         # Tất cả gộp lại
+    raw_YYYYMM.parquet              # Raw 2024-2025, có lỗi
+    raw_combined.parquet             # Tất cả gộp lại
   eda/
     raw/
-      eda_summary.json           # Thống kê lỗi raw
-      fig/
-        raw_*                    # Visualizations cho raw
+      eda_summary.json
+      fig/raw_*                      # 9 visualizations
     clean/
-      eda_summary.json           # Thống kê clean
-      fig/
-        clean_*                  # Visualizations cho clean
+      eda_summary.json
+      fig/clean_*                    # 11 visualizations
     injected/
-      eda_summary.json           # Thống kê injected
-      fig/
-        injected_*               # Visualizations cho injected
+      eda_summary.json
+      fig/injected_*                 # 10 visualizations
   clean/
-    clean_2024.parquet           # 100% sạch, 2024
-    clean_2025.parquet           # 100% sạch, 2025
+    clean_2024.parquet               # 100% sạch, 2024 (~70M rows)
+    clean_2025.parquet               # 100% sạch, 2025 (~70M rows)
     clean_2024_log.json
     clean_2025_log.json
+    ml_flagged.parquet               # for review
+    tier1_hardrule.parquet
   polluted/
     valid/
-      polluted_valid.parquet      # 5% anomaly, 2024
-      ground_truth_mask.npy      # 0=clean, 1=polluted
-      ground_truth_per_type.json # per polluter type
+      polluted_valid.parquet          # 5% anomaly, Sep-Oct 2024
+      ground_truth_mask.npy
+      ground_truth_per_type.json
       injection_log.json
     test/
-      polluted_test.parquet       # 5% anomaly, 2024
+      polluted_test.parquet          # 5% anomaly, Nov-Dec 2024
       ground_truth_mask.npy
       ground_truth_per_type.json
       injection_log.json
     production/
-      polluted_prod.parquet       # 8% anomaly, Jan-Feb 2025
+      polluted_prod.parquet          # 8% anomaly, Jan-Feb 2025
       ground_truth_mask.npy
       ground_truth_per_type.json
       injection_log.json
 
 scripts/
-  # ─── STREAMING (PRIMARY — required for concept drift proof) ───────────────
-  benchmark_streaming.py          # STREAMING eval: MemStream, iForestASD, RCF, xStream
-  eval_streaming_metrics.py       # Concept drift metrics: CDR, ADR, Adapt Recovery, ADWIN events
+  # STREAMING (PRIMARY)
+  benchmark_streaming.py             # STREAMING eval: MemStream, iForestASD, RCF, xStream
+  eval_streaming_metrics.py           # CDR, ADR, Adapt Recovery, ADWIN events
 
-  # ─── BATCH (SECONDARY — point anomaly comparison only) ─────────────────────
-  benchmark_batch.py              # BATCH eval: IsolationForest, OC-SVM, HBOS
+  # BATCH (SECONDARY)
+  benchmark_batch.py                  # BATCH eval: IsolationForest, OC-SVM, HBOS
 
-  # ─── DATA PIPELINE ──────────────────────────────────────────────────────────
-  ingest_tlc_parquet.py          # Tải 24 tháng 2024-2025
-  clean_taxi_data.py             # Clean + EDA (3 bộ)
-  inject_polluter.py             # Icewafl-inspired master polluter
-  eda_raw.py                     # EDA on RAW
-  eda_clean.py                   # EDA on CLEAN
-  eda_injected.py                # EDA on INJECTED
+  # DATA PIPELINE
+  ingest_tlc_parquet.py              # Tải 24 tháng 2024-2025
+  clean_taxi_data.py                 # Clean + 3-tier pipeline
+  inject_polluter.py                 # Icewafl-inspired master polluter
+  eda_raw.py
+  eda_clean.py
+  eda_injected.py
 
-  # ─── HP BENCHMARK SCRIPTS ───────────────────────────────────────────────────
-  benchmark_memstream.py         # MemStream HP search (Val dataset)
-  benchmark_isolationforest.py   # IsolationForest HP search
-  benchmark_iforestasd.py        # iForestASD HP search (streaming)
-  benchmark_ocsvm.py             # OC-SVM HP search
-  benchmark_hbos.py              # HBOS HP search
-  benchmark_rcf.py               # RCF HP search (streaming)
-  benchmark_xstream.py           # xStream HP search (streaming)
-  compute_normalization_stats.py # Fit normalization denominators
+  # HP BENCHMARK
+  benchmark_memstream.py             # MemStream HP search (MS-1→MS-6)
+  benchmark_isolationforest.py
+  benchmark_iforestasd.py            # streaming
+  benchmark_ocsvm.py
+  benchmark_hbos.py
+  benchmark_rcf.py                   # streaming (RCF-1, RCF-2)
+  benchmark_xstream.py               # streaming (XS-1, XS-2)
+  compute_normalization_stats.py     # Fit normalization denominators
 
-  # ─── ABLATION & EVALUATION ─────────────────────────────────────────────────
-  eval_metrics.py                # Tính point anomaly metrics
-  ablation_component.py          # Component-level ablation (AE→MemStream→Flow)
+  # ABLATION & EVALUATION
+  eval_metrics.py
+  ablation_component.py              # 7 component-level configs (A→G)
 
-  # ─── UTILITY ───────────────────────────────────────────────────────────────
-  resource_monitor.py            # Background resource monitor (RAM/GPU/CPU, log every 30s)
+  # UTILITY
+  resource_monitor.py                # Background: RAM/GPU/CPU, log every 30s
 
 results/
   hp_benchmark/
-    memstream/
-      ms_table_*.csv             # HP tables MS-1 → MS-6
-    isolationforest/
-      if_table_*.csv             # HP tables IF-1 → IF-2
-    iforestasd/
-      ia_table_*.csv
-    ocsvm/
-      osvm_table_*.csv
-    hbos/
-      hbos_table_*.csv
+    memstream/ms_table_*.csv         # MS-1 → MS-6
+    isolationforest/if_table_*.csv   # IF-1 → IF-2
+    iforestasd/ia_table_*.csv
+    ocsvm/osvm_table_*.csv
+    hbos/hbos_table_*.csv
+    rcf/rcf_table_*.csv              # RCF-1 → RCF-2
+    xstream/xs_table_*.csv           # XS-1 → XS-2
   inter_model/
-    im_table_1.csv               # Inter-model comparison
-    im_table_2.csv               # McNemar's test
+    im_table_1.csv                   # point anomaly comparison
+    im_table_2.csv                   # McNemar's test
   ablation/
-    ab_table_*.csv               # Ablation results
+    ab_table_1.csv through ab_table_6.csv
   final/
     auc_roc_scores.json
     ablation_results.json
     final_comparison_table.csv
-    figures/
-      auc_roc_bar_chart.png
-      pr_curves_comparison.png
-      ablation_heatmap.png
-      hp_heatmap_memstream.png
+    figures/                         # 4 publication figures
+```
 
+---
 
-6. GAP ANALYSIS — NORMALIZATION DENOMINATORS
+## PHẦN G: GAP ANALYSIS — NORMALIZATION DENOMINATORS
 
-  VẤN ĐỀ:
-  File src/features/memstream_vectorizer.py sử dụng hardcoded denominators:
-    - _FARE_PER_MILE_DENOM: float = 2.5
-    - _FARE_PER_MIN_DENOM: float = 0.67
-    - _SPEED_DENOM: float = 12.0
+**VẤN ĐỀ:**
+`src/features/memstream_vectorizer.py` sử dụng hardcoded denominators:
+- `_FARE_PER_MILE_DENOM: float = 2.5`
+- `_FARE_PER_MIN_DENOM: float = 0.67`
+- `_SPEED_DENOM: float = 12.0`
 
-  Các giá trị này là calibration từ benchmark v10, KHÔNG phải từ
-  fitted statistics trên actual NYC taxi data. Nếu data distribution
-  thay đổi (ví dụ: surge pricing thay đổi, TLC fare policy thay đổi),
-  denominators này có thể không còn optimal và làm giảm model performance.
+Các giá trị này là calibration từ benchmark v10, KHÔNG phải từ fitted statistics trên actual NYC taxi data.
 
-  ĐỘNG CƠ:
-  - Hardcoded denominators tạo ra artificial feature engineering
-  - Không đảm bảo generalizability khi data distribution shift
-  - So với original MemStream paper (dùng min-max từ benchmark datasets),
-    cách tiếp cận này có cùng hạn chế nhưng không transparent
+**GIẢI PHÁP:**
+1. Fit denominators từ CLEAN data statistics:
+   - `FARE_PER_MILE_DENOM = 95th percentile` của fare_per_mile
+   - `FARE_PER_MIN_DENOM = 95th percentile` của fare_per_min
+   - `SPEED_DENOM = 95th percentile` của speed
+2. Ghi lại fitted values vào checkpoint metadata
+3. Validate bằng Ablation #7 (fitted vs hardcoded)
 
-  GIẢI PHÁP:
-  1. Fit denominators từ CLEAN data statistics:
-     - FARE_PER_MILE_DENOM = 95th percentile của fare_per_mile
-     - FARE_PER_MIN_DENOM = 95th percentile của fare_per_min
-     - SPEED_DENOM = 95th percentile của speed
-  2. Ghi lại fitted values vào checkpoint metadata
-  3. Validate bằng Ablation #7 (fitted vs hardcoded)
+**CẬP NHẬT CODE:**
+- `scripts/compute_normalization_stats.py`: Fit denominators trên clean data
+- `src/features/memstream_vectorizer.py`: Đọc fitted values từ config
+- `results/ablation/ab_table_5.csv`: So sánh hardcoded vs fitted
 
-  CẬP NHẬT CODE:
-  - scripts/compute_normalization_stats.py: Fit denominators trên clean data
-  - src/features/memstream_vectorizer.py: Đọc fitted values từ config
-  - results/ablation/ab_table_5.csv: So sánh hardcoded vs fitted
+---
 
-  VÀI TRÒ TRONG EVALUATION:
-  - Ablation #7 cho phép quantify impact của normalization approach
-  - Nếu fitted tốt hơn → production nên dùng fitted
-  - Nếu không khác biệt → hardcoded vẫn acceptable
+## PHẦN H: MEMSTREAM PAPER — CÁC LỖI CẦN TRÁNH
 
+Đọc kỹ arxiv 2106.03837 (WWW 2022, Bhatia et al.) để tránh các lỗi cơ bản:
 
-7. MEMSTREAM PAPER — CÁC LỖI CẦN TRÁNH
+1. **MEMORY SIZE vs BUFFER SIZE:** Paper: Memory lưu encoded representations, KHÔNG phải raw features. Current code: MemoryModule lưu AE output (out_dim=34) — ĐÚNG.
 
-  Đọc kỹ arxiv 2106.03837 để tránh các lỗi cơ bản sau:
+2. **NORMALIZATION:** Paper: Dùng z-score trên AE output trước khi tính L1 distance. Current code: Features được normalized rồi passed qua AE. Review xem output AE đã được z-score normalized trước khi kNN chưa.
 
-  1. MEMORY SIZE vs BUFFER SIZE:
-     Paper: Memory lưu encoded representations, KHÔNG phải raw features.
-     Current code: MemoryModule lưu AE output (out_dim=34) — ĐÚNG.
+3. **AE TRAINING:** Paper: Train AE trên NORMAL samples only. Current code: warmup() filter anomalies — CẦN XÁC NHẬN lại.
 
-  2. NORMALIZATION:
-     Paper: Dùng z-score trên AE output trước khi tính L1 distance.
-     Current code: Features được normalized rồi passed qua AE.
-     Review xem output AE đã được z-score normalized trước khi kNN chưa.
+4. **kNN DISTANCE:** Paper: Dùng L1 (Manhattan) distance. Current code: Dùng L1 — ĐÚNG.
 
-  3. AE TRAINING:
-     Paper: Train AE trên NORMAL samples only.
-     Current code: warmup() filter anomalies — CẦN XÁC NHẬN lại.
-     Review xem warmup có đang filter đúng hay không.
+5. **GAMMA DECAY:** Paper: Gamma decay cho neighbors (closer = higher weight). Current code: gamma=0.0 skip decay, gamma>0 dùng exponential decay.
 
-  4. kNN DISTANCE:
-     Paper: Dùng L1 (Manhattan) distance.
-     Current code: Dùng L1 — ĐÚNG.
+6. **THRESHOLD FITTING:** Paper: Beta = percentile(train_scores, 100 - contamination_rate). Current code: ContextBeta dùng 95th percentile (5% contamination).
 
-  5. GAMMA DECAY:
-     Paper: Gamma decay cho neighbors (closer = higher weight).
-     Current code: gamma=0.0 skip decay, gamma>0 dùng exponential decay.
-     Review xem gamma decay implementation đúng với paper chưa.
+7. **WARMUP MINIMUM:** Paper: Không nói rõ minimum samples. Current code: memstream_core.py enforce 50,000 samples.
 
-  6. THRESHOLD FITTING:
-     Paper: Beta = percentile(train_scores, 100 - contamination_rate).
-     Current code: ContextBeta dùng 95th percentile (5% contamination).
-     Review xem percentile phù hợp với actual contamination rate không.
+---
 
-  7. WARMUP MINIMUM:
-     Paper: Không nói rõ minimum samples.
-     Current code: memstream_core.py enforce 50,000 samples.
-     Review xem có phù hợp với actual data size không.
+## PHẦN I: TRƯỚC KHI NỘP / PUBLISH
 
+### Config Locking
+- [ ] `is_night = hour >= 20 OR hour <= 6` **[LOCKED — domain knowledge]**
+- [ ] `Feature dim = 34` **[LOCKED — fixed architecture]**
+- [ ] `Neighborhoods = 10` **[LOCKED — TLC geographic]**
+- [ ] `Ratecode validation = [1,2,3,4,5,6,99]` **[LOCKED — TLC domain]**
+- [ ] `memory_len = optimal value từ AB-4`
+- [ ] `gamma = optimal value từ AB-3`
+- [ ] `k = optimal value từ AB-2`
+- [ ] `warmup_epochs = 5000 (paper default) hoặc optimal từ benchmark`
+- [ ] `warmup_lr = 0.01 (paper default) hoặc optimal từ benchmark`
+- [ ] `hidden_dim = optimal value từ MS-2`
 
-8. CHECKLIST TRƯỚC KHI CHẠY
+### Benchmark Tables Complete
+- [ ] MS-1 → MS-6 (MemStream HP — preliminary Val)
+- [ ] IF-1 → IF-2 (IsolationForest HP)
+- [ ] IA-1 (iForestASD HP)
+- [ ] OSVM-1 (OC-SVM HP)
+- [ ] HBOS-1 (HBOS HP)
+- [ ] RCF-1 → RCF-2 (RCF HP)
+- [ ] XS-1 → XS-2 (xStream HP)
+- [ ] IM-1 (Inter-Model point anomaly)
+- [ ] IM-1 concept drift sub-table (STREAMING MODELS ONLY)
+- [ ] IM-2 (McNemar's)
+- [ ] AB-1 → AB-6 (Ablation — Test dataset)
+- [ ] AB-6: Component-level ablation (AE→MemStream→Flow, 7 variants A→G)
 
-  ⚠️  STREAMING EVALUATION BẮT BUỘC cho concept drift proof.
-  ⚠️  Không dùng batch evaluation để đánh giá concept drift.
-  ⚠️  RAM ≤ 80%, GPU VRAM ≤ 85%, CPU ≤ 90% — KHÔNG max resource.
+### Narrative
+- [ ] NAB events ghi rõ là synthetic/inspired reference — không phải actual production events
+- [ ] Concept drift metrics ghi rõ là STREAMING ONLY
+- [ ] Batch models (IsolationForest, OC-SVM, HBOS) ghi rõ là BATCH-only, không dùng cho drift
+- [ ] Production concept drift: abrupt/incremental/cyclical đã verify bằng visualization
 
-[ ] TLC data đã tải (24 tháng: Jan 2024 - Dec 2025)
-[ ] EDA raw: báo cáo đầy đủ với visualizations
-[ ] Clean dataset đạt 10M+ rows, 3 tháng, Mon-Sun, 24h (2024 + 2025 riêng)
-[ ] EDA clean: verify all anomalies removed, distribution stats
-[ ] Polluted dataset valid/test có ground truth mask (5%)
-[ ] Polluted dataset production có ground truth mask (8%) + concept drift masks
-[ ] EDA injected: ground truth coverage per polluter type
-[ ] Feature extraction chạy trên cả clean và polluted
-[ ] Normalization denominators: Fitted từ clean data (Ablation #7)
+### Resource Final Check
+- [ ] Không có OOM incidents (nếu có: đã document và fix)
+- [ ] resource_monitor.py logs hoàn chỉnh cho tất cả phases
+- [ ] RAM/GPU/CPU logs lưu trong results/
+- [ ] NAR-FPR = Normalized Alert-based False Positive Rate
 
-  # ─── TRAIN DATA (PER-MODEL) ───────────────────────────────────────────────
-[ ] Valid (SHARED): Sep-Oct 2024 — 5% anomaly — HP validation
-[ ] Test (SHARED): Nov-Dec 2024 — 5% anomaly — evaluation
-[ ] Production (SHARED): Jan-Feb 2025 — 8% anomaly — concept drift eval
-[ ] MemStream warmup: ≥50K samples, epochs=5000, lr=0.01 (paper defaults)
-[ ] MemStream memory_len: test {256..50000} via AB-4 (Ablation #6)
-[ ] iForestASD: online training via River library
-[ ] RCF: online training via River library
-[ ] xStream: online training via River library
-[ ] IsolationForest: batch training on Jan-Aug 2024 clean data
-[ ] OC-SVM: batch training on Jan-Aug 2024 clean data
-[ ] HBOS: batch training on Jan-Aug 2024 clean data
-[ ] ARIMA: STL decomposition on Jan-Sep 2024 clean data
-[ ] Naive: no training needed
+---
 
-  # ─── RESOURCE MONITORING (BẮT BUỘC — TRƯỚC MỌI PHASE) ─────────────────
-[ ] Kiểm tra RAM / GPU VRAM / CPU trước khi chạy bất kỳ phase nào
-[ ] RAM ≤ 80% available — nếu vượt: giảm batch_size, memory_len, hoặc subsample
-[ ] GPU VRAM ≤ 85% available — nếu vượt: giảm batch_size, hidden_dim, memory_len
-[ ] CPU ≤ 90% cores — nếu vượt: giảm num_workers, prefetch_factor
-[ ] OOM xảy ra: KHÔNG retry ngay — giảm resource usage TRƯỚC
-[ ] resource_monitor.py chạy nền (log mỗi 30s) trong suốt training
-[ ] Warmup phase: monitor GPU VRAM sát sao (46.7M rows × AE training = heavy)
-[ ] Streaming eval phase: monitor RAM (score buffer grow unbounded nếu không flush)
+## CHECKLIST SUMMARY
 
-  # ─── STREAMING EVALUATION (BẮT BUỘC) ─────────────────────────────────────
-[ ] benchmark_streaming.py chạy trên Production dataset (Jan-Feb 2025)
-[ ] eval_streaming_metrics.py tính CDR, ADR, Adapt Recovery, ADWIN events
-[ ] ADWIN drift detection active trong streaming eval
-[ ] Ground truth drift events (abrupt/incremental/cyclical) được verify bằng
-    visualization trước khi benchmark
-[ ] Batch eval (benchmark_batch.py) CHỈ cho point anomaly — không dùng cho drift
+| Phase | Items | Streaming? | Resource Heavy? |
+|---|---|---|---|
+| 1. Ingestion | 7 | N/A | Disk |
+| 2. EDA RAW | 17 | N/A | RAM |
+| 3. Clean | 20 | N/A | CPU+RAM |
+| 4. EDA Clean | 14 | N/A | RAM |
+| 5. Inject | 12 | N/A | CPU |
+| 6. EDA Injected | 14 | N/A | RAM |
+| 7. Feature Eng | 11 | N/A | RAM |
+| 8. Benchmark HP | 45 | Mixed | GPU+CPU |
+| 9. Inter-Model | 22 | Yes (most) | CPU+RAM |
+| 10. Ablation | 44 | Yes | GPU+CPU |
+| 11. Evaluate | 16 | N/A | CPU |
+| Final | 16 | N/A | N/A |
+| **TOTAL** | **238** | | |
 
-  # ─── CONCEPT DRIFT PROOF ───────────────────────────────────────────────────
-[ ] Abrupt drift: sudden jump visible in rolling mean score (ADWIN fires)
-[ ] Incremental drift: gradual score increase, ADWIN adapts continuously
-[ ] Cyclical drift: periodic ADWIN firing pattern (4-week cycle)
-[ ] Adaptation Recovery time measurable (minutes)
-[ ] Streaming models (MemStream, iForestASD, RCF, xStream) ADWIN-evaluated
+---
 
-  # ─── HYPERPARAMETERS & CONFIG ───────────────────────────────────────────────
-[ ] is_night = hour >= 20 trong tất cả code
-[ ] memory_len = TBD (Ablation #6) — test {256..50000}
-[ ] gamma = TBD (Ablation #5) — test {0.0, 0.3, 0.5, 0.7, 0.9}
-[ ] k = TBD (Ablation #3) — test {3, 5, 10, 15, 20, 30}
-[ ] warmup_epochs = 5000 (paper default) — test {500, 1000, 5000}
-[ ] warmup_lr = 0.01 (paper default) — test {1e-3, 5e-3, 0.01}
-[ ] Ratecode validation chỉ chấp nhận [1,2,3,4,5,6,99]
-[ ] D = 34 (in_dim=out_dim=34, hidden_dim=68)
-[ ] hidden_dim = TBD (MS-2) — test {17, 34, 51, 68, 85, 102}
-[ ] RCF và xStream đã thêm vào baselines (streaming-capable)
-[ ] IsolationForest, OC-SVM, HBOS ghi rõ BATCH-only
-[ ] Hyperparameter tables cho từng model (MS-1→MS-6, IF-1→IF-2, IA-1, OSVM-1, HBOS-1)
-[ ] Inter-model benchmark table (IM-1: point anomaly, IM-1b: concept drift)
-[ ] Ablation benchmark tables (AB-1→AB-6)
-[ ] AB-6: Component-level ablation (AE→MemStream→Flow, 7 variants)
-[ ] NAB events được ghi rõ là synthetic/inspired
-[ ] Concept drift sub-table trong BướC 9 cho STREAMING models only
+## GHI CHÚ VỀ CÁC ISSUES ĐÃ ĐƯỢC RESOLVE
 
+### Issues Fixed During Audit (2026-05-17)
 
-================================================================================
-END OF FILE
-================================================================================
+| # | Issue | Fix |
+|---|---|---|
+| H1 | ARIMA & Naive missing from Bước 8 streaming box | Added ARIMA (STL, sequential) & Naive rows |
+| H2 | RCF & xStream had no Bước 8 HP subsections | Added 8F (RCF-1, RCF-2) and 8G (XS-1, XS-2) |
+| M1 | `is_night` incomplete — missing `or hour <= 6` | Updated to full: `hour >= 20 OR hour <= 6` |
+| M2 | Section 2.1 missing 5 distribution-shift figures | Added all 5 figures in flow chart description |
+| M3 | AB-1 row #6 label ambiguous | Clarified: "Per-Neighborhood Memory + Memory Size (shared vs per-NB; AB-4 tests len)" |
+| M4 | B8/B9/B10/B11 streaming warning missing B11 | Updated script note: "B8/B9/B10/B11" |
+| L1 | MS-2 hidden_dim no AB ablation table | Documented: architectural parameter, Val-only decision |
+| L2 | NAB metric absent from MS tables | Documented: NAB scored on Test, not Val — task-specific columns appropriate |
+| L3 | Naive in Phase 9 streaming eval misleading | Clarified: Naive baseline-only, no adaptation, excluded from drift sub-table |
+
+---
+
+**END OF FILE**

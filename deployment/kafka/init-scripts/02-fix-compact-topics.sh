@@ -37,6 +37,10 @@ fix_topic() {
     local expected_retention="$3"
     local expected_partitions="$4"
 
+    # Idempotent fix: use kafka-configs --alter instead of delete/recreate.
+    # Delete+recreate loses data and consumer offsets on every run.
+    # kafka-configs --alter only modifies config, preserving topic state.
+
     local config_output
     config_output=$(kafka-configs --bootstrap-server "${BOOTSTRAP}" \
         --entity-type topics \
@@ -49,36 +53,52 @@ fix_topic() {
     current_retention=$(echo "$config_output" | grep "retention.ms" | awk -F'=' '{print $3}' || echo "")
 
     if [ "$current_policy" = "$expected_policy" ]; then
-        echo "[fix-topics] ${topic}: cleanup.policy=${current_policy} (OK, no change)"
+        echo "[fix-topics] ${topic}: cleanup.policy=${current_policy} (OK, no change needed)"
         return 0
     fi
 
     if [ -z "$current_policy" ]; then
-        echo "[fix-topics] ${topic}: topic not found or no config — skipping"
+        # Topic does not exist — create it with the correct policy
+        if [ "$APPLY" = "false" ]; then
+            echo "[fix-topics] ${topic}: WOULD create with cleanup.policy=${expected_policy} (dry-run)"
+        else
+            echo "[fix-topics] ${topic}: creating with cleanup.policy=${expected_policy}..."
+            kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+                --create --if-not-exists \
+                --topic "${topic}" \
+                --partitions "${expected_partitions}" --replication-factor 1 \
+                --config "cleanup.policy=${expected_policy}" \
+                --config "retention.ms=${expected_retention}" \
+                > /dev/null 2>&1
+            echo "[fix-topics] ${topic}: created with cleanup.policy=${expected_policy}"
+        fi
         return 0
     fi
 
-    echo "[fix-topics] ${topic}: current cleanup.policy=${current_policy}, expected=${expected_policy}"
+    # Topic exists but has wrong policy — alter the config instead of deleting
+    echo "[fix-topics] ${topic}: current cleanup.policy=${current_policy}, setting to ${expected_policy}"
 
     if [ "$APPLY" = "false" ]; then
-        echo "[fix-topics] ${topic}: WOULD delete and recreate with ${expected_policy} (dry-run)"
+        echo "[fix-topics] ${topic}: WOULD alter cleanup.policy to ${expected_policy} (dry-run)"
         return 0
     fi
 
-    echo "[fix-topics] ${topic}: deleting and recreating..."
-    kafka-topics --bootstrap-server "${BOOTSTRAP}" \
-        --delete --topic "${topic}" 2>/dev/null || true
-    sleep 2
+    kafka-configs --bootstrap-server "${BOOTSTRAP}" \
+        --entity-type topics \
+        --entity-name "${topic}" \
+        --alter --add-config "cleanup.policy=${expected_policy}" \
+        > /dev/null 2>&1 || {
+        echo "[fix-topics] ${topic}: kafka-configs alter failed — trying create-if-not-exists..."
+        kafka-topics --bootstrap-server "${BOOTSTRAP}" \
+            --create --if-not-exists \
+            --topic "${topic}" \
+            --partitions "${expected_partitions}" --replication-factor 1 \
+            --config "cleanup.policy=${expected_policy}" \
+            --config "retention.ms=${expected_retention}" \
+            > /dev/null 2>&1
+    }
 
-    kafka-topics --bootstrap-server "${BOOTSTRAP}" \
-        --create --if-not-exists \
-        --topic "${topic}" \
-        --partitions "${expected_partitions}" --replication-factor 1 \
-        --config "retention.ms=${expected_retention}" \
-        --config "cleanup.policy=${expected_policy}" \
-        > /dev/null 2>&1
-
-    echo "[fix-topics] ${topic}: recreated with cleanup.policy=${expected_policy}"
+    echo "[fix-topics] ${topic}: cleanup.policy set to ${expected_policy}"
 }
 
 echo "[fix-topics] Scanning topics for incorrect cleanup policies..."
