@@ -12,11 +12,11 @@ This thesis presented \textbf{CA-DQStream}, a context-aware framework for stream
 \begin{enumerate}
     \item \textbf{4D Context-Aware Thresholding Framework:} A multi-dimensional threshold matrix (588 cells: trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood) with automated threshold computation and drift-aware recalibration via IEC. Achieves 4.9$\times$ FPR reduction (38.7\% $\to$ 4.2\% weighted average; 9.2$\times$ raw ratio), with 10$\times$ improvement on airport trips (Newark: 68.9\% $\to$ 6.7\%).
 
-    \item \textbf{Rendezvous Pipeline Architecture:} A fork-join architecture that parallelizes Canary (rule-based) and Complex (ML-based) validation branches, converging at a MetaAggregator rendezvous point. Achieves 1.20$\times$ latency reduction (65ms $\to$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec), with 13.5\% of records bypassing ML scoring via early exit.
+    \item \textbf{Sequential Processing Pipeline with Early Exit Optimization:} A four-stage sequential pipeline (Schema Validation $\rightarrow$ Business Rules $\rightarrow$ Online Autoencoder $\rightarrow$ MetaAggregator) that exploits early exit opportunities, routing records failing lightweight validation stages directly to output without incurring ML inference costs. Achieves 1.20$\times$ latency reduction (65ms $\to$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec), with 13.5\% of records bypassing ML scoring via early exit.
 
     \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies:} ADWIN-based drift detection with multi-strategy adaptation (Continuous Evolution, Switching, METER, Spatial Tracking). Resolves 93\% of drift events via lightweight updates (78\% Continuous Evolution + 15\% Switching), reducing retraining frequency to 0.67 per month.
 
-    \item \textbf{Online Autoencoder + Memory Module:} Hybrid anomaly detection combining K-Means clustering for context boundaries with Online Autoencoder and Memory Module. Achieves MCC 0.847 (+38.4\% over global IF) and BAR 0.862 (+34.5\% over global IF), enabling multivariate detection of meter tampering and short-trip fraud.
+    \item \textbf{Online Autoencoder with Memory Module:} Anomaly detection combining Online Autoencoder and Memory Module for multivariate detection. Achieves MCC 0.847 (+38.4\% over global IF) and BAR 0.862 (+34.5\% over global IF), enabling multivariate detection of meter tampering and short-trip fraud.
 \end{enumerate}
 
 All five hypotheses were supported or conditionally supported by experimental evidence:
@@ -24,7 +24,7 @@ All five hypotheses were supported or conditionally supported by experimental ev
     \item H1 (Multi-layer coverage): 79.7\% of anomalies unique to Layer 3
     \item H2 (Online AE + Memory Module): F1=0.828 on Easy, FPR=2.99\%
     \item H3 (IEC adaptation): Conditionally supported, avg 21-hour detection, 93\% lightweight resolution
-    \item H4 (Rendezvous performance): 1.20$\times$ latency reduction, 2.2$\times$ throughput improvement
+    \item H4 (Sequential Pipeline with Early Exit): 1.20$\times$ latency reduction (65ms $\rightarrow$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\rightarrow$ 18,450 events/sec) through early exit optimization where records failing schema validation (10.1\%) or business rules (3.4\%) bypass ML scoring.
     \item H5 (4D thresholds): 4.9$\times$ FPR reduction, exceeding 5$\times$ target
 \end{itemize}
 

@@ -6,88 +6,73 @@
 \contentsline {section}{\numberline {1.4}Contribution Highlights}{3}{section.1.4}%
 \contentsline {section}{\numberline {1.5}Thesis Content}{3}{section.1.5}%
 \contentsline {chapter}{\numberline {2}BACKGROUND}{5}{chapter.2}%
-\contentsline {section}{\numberline {2.1}Overview}{5}{section.2.1}%
-\contentsline {section}{\numberline {2.2}Streaming Data Processing}{5}{section.2.2}%
-\contentsline {subsection}{\numberline {2.2.1}Apache Kafka: Event Streaming Platform}{5}{subsection.2.2.1}%
-\contentsline {subsection}{\numberline {2.2.2}Apache Flink: Stateful Stream Processing}{7}{subsection.2.2.2}%
-\contentsline {section}{\numberline {2.3}MLOps: Machine Learning Operations}{8}{section.2.3}%
-\contentsline {subsection}{\numberline {2.3.1}MLOps Maturity Levels}{9}{subsection.2.3.1}%
-\contentsline {section}{\numberline {2.4}DAMA-DMBOK Data Quality Dimensions}{9}{section.2.4}%
-\contentsline {section}{\numberline {2.5}Chapter Summary}{10}{section.2.5}%
-\contentsline {chapter}{\numberline {3}RELATED WORK}{11}{chapter.3}%
-\contentsline {section}{\numberline {3.1}Overview}{11}{section.3.1}%
-\contentsline {section}{\numberline {3.2}Batch-Oriented Data Quality Frameworks}{11}{section.3.2}%
-\contentsline {section}{\numberline {3.3}Streaming Data Quality Monitoring}{11}{section.3.3}%
-\contentsline {section}{\numberline {3.4}Industrial Streaming Platforms and Case Studies}{12}{section.3.4}%
-\contentsline {section}{\numberline {3.5}Concept Drift Handling in ML Systems}{13}{section.3.5}%
-\contentsline {subsection}{\numberline {3.5.1}ADWIN Variants for Scalable Drift Detection}{13}{subsection.3.5.1}%
-\contentsline {section}{\numberline {3.6}Context-Aware Anomaly Detection}{14}{section.3.6}%
-\contentsline {section}{\numberline {3.7}Anomaly Detection Methods and Benchmarks}{14}{section.3.7}%
-\contentsline {section}{\numberline {3.8}Memory-Based Streaming Anomaly Detection}{15}{section.3.8}%
-\contentsline {section}{\numberline {3.9}Chapter Summary}{16}{section.3.9}%
-\contentsline {chapter}{\numberline {4}PROBLEM DEFINITION AND RESEARCH QUESTIONS}{17}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Introduction}{17}{section.4.1}%
-\contentsline {section}{\numberline {4.2}Empirical Evidence: NYC Yellow Taxi Dataset}{17}{section.4.2}%
-\contentsline {section}{\numberline {4.3}Research Gaps}{18}{section.4.3}%
-\contentsline {subsection}{\numberline {4.3.1}Gap 1: Context Collapse in Heterogeneous Streaming Data}{18}{subsection.4.3.1}%
-\contentsline {subsection}{\numberline {4.3.2}Gap 2: Sequential Validation Underutilizes Structural Heterogeneity}{18}{subsection.4.3.2}%
-\contentsline {subsection}{\numberline {4.3.3}Gap 3: Single-Strategy Drift Adaptation Cannot Differentiate Drift Severity}{18}{subsection.4.3.3}%
-\contentsline {section}{\numberline {4.4}Research Questions}{19}{section.4.4}%
-\contentsline {subsection}{\numberline {4.4.1}RQ1: How Does Context Granularity Affect Anomaly Detection in Heterogeneous Streaming Data?}{19}{subsection.4.4.1}%
-\contentsline {subsection}{\numberline {4.4.2}RQ2: What Determines the Optimal Parallelization Strategy in Heterogeneous Validation Pipelines?}{19}{subsection.4.4.2}%
-\contentsline {subsection}{\numberline {4.4.3}RQ3: Can Drift Characteristics Be Classified to Select Appropriate Adaptation Strategies Automatically?}{19}{subsection.4.4.3}%
-\contentsline {subsection}{\numberline {4.4.4}RQ4: How Do Rule-Based and Learned Anomaly Detection Methods Complement Each Other in Streaming Quality Monitoring?}{20}{subsection.4.4.4}%
-\contentsline {subsection}{\numberline {4.4.5}RQ5: How Does Memory Capacity Interact with Drift Speed and Context Dimensionality in Streaming Anomaly Detection?}{20}{subsection.4.4.5}%
-\contentsline {subsection}{\numberline {4.4.6}Ground Truth and Evaluation Methodology}{21}{subsection.4.4.6}%
-\contentsline {section}{\numberline {4.5}Chapter Summary}{21}{section.4.5}%
-\contentsline {chapter}{\numberline {5}CA-DQStream: Context-Aware Data Quality Streaming System}{22}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Approach Direction}{22}{section.5.1}%
-\contentsline {section}{\numberline {5.2}Data Exploration}{22}{section.5.2}%
-\contentsline {subsection}{\numberline {5.2.1}Raw Data EDA}{22}{subsection.5.2.1}%
-\contentsline {subsection}{\numberline {5.2.2}Concept Drift Example}{22}{subsection.5.2.2}%
-\contentsline {subsection}{\numberline {5.2.3}Injected Data}{22}{subsection.5.2.3}%
-\contentsline {section}{\numberline {5.3}Proposed Method}{23}{section.5.3}%
-\contentsline {subsection}{\numberline {5.3.1}Overview}{23}{subsection.5.3.1}%
-\contentsline {subsection}{\numberline {5.3.2}Feature Engineering}{23}{subsection.5.3.2}%
-\contentsline {subsection}{\numberline {5.3.3}Layer 1: Baseline Validation}{24}{subsection.5.3.3}%
-\contentsline {subsection}{\numberline {5.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{25}{subsection.5.3.4}%
-\contentsline {subsection}{\numberline {5.3.5}Layer 3: Meta-Aggregation}{26}{subsection.5.3.5}%
-\contentsline {subsection}{\numberline {5.3.6}Layer 4: Intelligent Evolution Controller}{27}{subsection.5.3.6}%
-\contentsline {subsection}{\numberline {5.3.7}Fault Tolerance}{29}{subsection.5.3.7}%
-\contentsline {section}{\numberline {5.4}Chapter Summary}{29}{section.5.4}%
-\contentsline {chapter}{\numberline {6}EXPERIMENTS \& EVALUATION}{30}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Overview}{30}{section.6.1}%
-\contentsline {section}{\numberline {6.2}Experiment Environment}{30}{section.6.2}%
-\contentsline {section}{\numberline {6.3}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{31}{section.6.3}%
-\contentsline {subsection}{\numberline {6.3.1}Experiment 1: Four-Stage Layer Coverage Analysis}{31}{subsection.6.3.1}%
-\contentsline {subsection}{\numberline {6.3.2}Experiment 2: Ablation Study}{32}{subsection.6.3.2}%
-\contentsline {section}{\numberline {6.4}RQ2: Does Online Autoencoder + Memory Module Outperform Baselines? [Exp 3, 4]}{32}{section.6.4}%
-\contentsline {subsection}{\numberline {6.4.1}Experiment 3: Online Autoencoder Anomaly Detection}{33}{subsection.6.4.1}%
-\contentsline {subsection}{\numberline {6.4.2}Experiment 4: Comparison with Existing DQ Tools}{33}{subsection.6.4.2}%
-\contentsline {section}{\numberline {6.5}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{37}{section.6.5}%
-\contentsline {subsection}{\numberline {6.5.1}Experiment 6: ADWIN Drift Detection Effectiveness}{37}{subsection.6.5.1}%
-\contentsline {section}{\numberline {6.6}RQ4: Does Rendezvous Architecture Improve Performance? [Exp 7, 8]}{37}{section.6.6}%
-\contentsline {subsection}{\numberline {6.6.1}Experiment 7: Rendezvous vs Linear Pipeline}{38}{subsection.6.6.1}%
-\contentsline {subsection}{\numberline {6.6.2}Experiment 8: End-to-End Throughput Benchmark}{39}{subsection.6.6.2}%
-\contentsline {section}{\numberline {6.7}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{39}{section.6.7}%
-\contentsline {subsection}{\numberline {6.7.1}Experiment 9: Context-Aware vs Global Thresholds}{40}{subsection.6.7.1}%
-\contentsline {subsection}{\numberline {6.7.2}Experiment 10: Temporal Validation}{41}{subsection.6.7.2}%
-\contentsline {section}{\numberline {6.8}Additional Validation Experiments [Exp 5, 11, 12, 13]}{42}{section.6.8}%
-\contentsline {subsection}{\numberline {6.8.1}Experiment 5: Business Rules Effectiveness}{42}{subsection.6.8.1}%
-\contentsline {subsection}{\numberline {6.8.2}Experiment 11: Fixed-Rule Baseline Comparison}{42}{subsection.6.8.2}%
-\contentsline {subsection}{\numberline {6.8.3}Experiment 12: MinIO Write Performance}{43}{subsection.6.8.3}%
-\contentsline {subsection}{\numberline {6.8.4}Experiment 13: Grafana Dashboard Usability}{43}{subsection.6.8.4}%
-\contentsline {section}{\numberline {6.9}Chapter Summary}{43}{section.6.9}%
-\contentsline {chapter}{\numberline {7}CONCLUSION \& FUTURE WORK}{44}{chapter.7}%
-\contentsline {section}{\numberline {7.1}Conclusions}{44}{section.7.1}%
-\contentsline {section}{\numberline {7.2}Limitations}{45}{section.7.2}%
-\contentsline {subsection}{\numberline {7.2.1}Limitation 1: Single-Domain Validation}{45}{subsection.7.2.1}%
-\contentsline {subsection}{\numberline {7.2.2}Limitation 2: Supervised Ground Truth}{45}{subsection.7.2.2}%
-\contentsline {subsection}{\numberline {7.2.3}Limitation 3: No Anomaly Explanation}{45}{subsection.7.2.3}%
-\contentsline {subsection}{\numberline {7.2.4}Limitation 4: Single-Region Deployment}{45}{subsection.7.2.4}%
-\contentsline {section}{\numberline {7.3}Future Work}{46}{section.7.3}%
-\contentsline {subsection}{\numberline {7.3.1}Future Direction 1: Multi-Domain Validation}{46}{subsection.7.3.1}%
-\contentsline {subsection}{\numberline {7.3.2}Future Direction 2: Advanced Deep Learning Integration}{46}{subsection.7.3.2}%
-\contentsline {subsection}{\numberline {7.3.3}Future Direction 3: Memory Module Optimization}{46}{subsection.7.3.3}%
-\contentsline {subsection}{\numberline {7.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{46}{subsection.7.3.4}%
-\contentsline {chapter}{REFERENCES}{47}{section.7.3}%
+\contentsline {section}{\numberline {2.1}Data Streaming Systems}{5}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Apache Kafka}{6}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}Apache Flink}{7}{subsection.2.1.2}%
+\contentsline {section}{\numberline {2.2}MLOps and Continuous Learning}{7}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Data Quality and Anomaly Detection}{8}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Concept Drift Detection}{9}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Memory-Augmented Neural Networks}{10}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Context-Aware Systems}{11}{section.2.6}%
+\contentsline {section}{\numberline {2.7}Chapter Summary}{13}{section.2.7}%
+\contentsline {chapter}{\numberline {3}RELATED WORK}{14}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Streaming Data Quality Monitoring}{14}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Concept Drift Handling in ML Systems}{15}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Context-Aware Anomaly Detection}{16}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Anomaly Detection Methods and Benchmarks}{16}{subsection.3.3.1}%
+\contentsline {section}{\numberline {3.4}Memory-Based Streaming Anomaly Detection}{17}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Chapter Summary}{18}{section.3.5}%
+\contentsline {chapter}{\numberline {4}CA-DQStream: Context-Aware Data Quality Streaming System}{19}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Approach Direction}{19}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Data Exploration}{19}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Raw Data EDA}{19}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{19}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}Injected Data}{19}{subsection.4.2.3}%
+\contentsline {section}{\numberline {4.3}Proposed Method}{20}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Overview}{20}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{20}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{22}{subsection.4.3.3}%
+\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{22}{subsection.4.3.4}%
+\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{23}{subsection.4.3.5}%
+\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{24}{subsection.4.3.6}%
+\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{26}{subsection.4.3.7}%
+\contentsline {section}{\numberline {4.4}Chapter Summary}{27}{section.4.4}%
+\contentsline {chapter}{\numberline {5}EXPERIMENTS}{28}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Implementation Setup}{28}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{29}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{29}{subsection.5.1.2}%
+\contentsline {section}{\numberline {5.2}Results}{31}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{31}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}Experiment 1: Four-Stage Layer Coverage Analysis}{31}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}Experiment 2: Ablation Study}{32}{subsection.5.2.3}%
+\contentsline {subsection}{\numberline {5.2.4}RQ2: Does Online Autoencoder + Memory Module Outperform Baselines? [Exp 3, 4]}{32}{subsection.5.2.4}%
+\contentsline {subsection}{\numberline {5.2.5}Experiment 3: Online Autoencoder Anomaly Detection}{33}{subsection.5.2.5}%
+\contentsline {subsection}{\numberline {5.2.6}Experiment 4: Comparison with Existing DQ Tools}{34}{subsection.5.2.6}%
+\contentsline {subsection}{\numberline {5.2.7}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{37}{subsection.5.2.7}%
+\contentsline {subsection}{\numberline {5.2.8}Experiment 6: ADWIN Drift Detection Effectiveness}{38}{subsection.5.2.8}%
+\contentsline {subsection}{\numberline {5.2.9}RQ4: Does Sequential Pipeline with Early Exit Optimization Improve Performance? [Exp 7, 8]}{38}{subsection.5.2.9}%
+\contentsline {subsection}{\numberline {5.2.10}Experiment 7: Sequential Pipeline with vs without Early Exit}{38}{subsection.5.2.10}%
+\contentsline {subsection}{\numberline {5.2.11}Experiment 8: End-to-End Throughput Benchmark}{39}{subsection.5.2.11}%
+\contentsline {subsection}{\numberline {5.2.12}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{40}{subsection.5.2.12}%
+\contentsline {subsection}{\numberline {5.2.13}Experiment 9: Context-Aware vs Global Thresholds}{41}{subsection.5.2.13}%
+\contentsline {subsection}{\numberline {5.2.14}Experiment 10: Temporal Validation}{43}{subsection.5.2.14}%
+\contentsline {subsection}{\numberline {5.2.15}Additional Validation Experiments [Exp 5, 11, 12, 13]}{43}{subsection.5.2.15}%
+\contentsline {subsection}{\numberline {5.2.16}Experiment 5: Business Rules Effectiveness}{43}{subsection.5.2.16}%
+\contentsline {subsection}{\numberline {5.2.17}Experiment 11: Fixed-Rule Baseline Comparison}{44}{subsection.5.2.17}%
+\contentsline {subsection}{\numberline {5.2.18}Experiment 12: MinIO Write Performance}{44}{subsection.5.2.18}%
+\contentsline {subsection}{\numberline {5.2.19}Experiment 13: Grafana Dashboard Usability}{44}{subsection.5.2.19}%
+\contentsline {section}{\numberline {5.3}Chapter Summary}{44}{section.5.3}%
+\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{46}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Conclusions}{46}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Limitations}{46}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{47}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{47}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{47}{subsection.6.2.3}%
+\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{47}{subsection.6.2.4}%
+\contentsline {section}{\numberline {6.3}Future Work}{47}{section.6.3}%
+\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{47}{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{47}{subsection.6.3.2}%
+\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{47}{subsection.6.3.3}%
+\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{48}{subsection.6.3.4}%
+\contentsline {chapter}{Appendix B: Statistical Appendix}{49}{chapter*.20}%
+\contentsline {chapter}{REFERENCES}{53}{table.6.6}%

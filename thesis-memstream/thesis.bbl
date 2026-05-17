@@ -1,4 +1,4 @@
-\begin{thebibliography}{67}
+\begin{thebibliography}{54}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -19,41 +19,36 @@
 \newblock \url{https://kafka.apache.org/intro}, 2024.
 \newblock Available at: \url{https://kafka.apache.org/intro}.
 
-\bibitem[{Apache Software Foundation}(2024{\natexlab{a}})]{flinkdocs2024}
+\bibitem[{Apache Software Foundation}(2024)]{flinkdocs2024}
 {Apache Software Foundation}.
 \newblock Apache flink documentation.
-\newblock \url{https://flink.apache.org/}, 2024{\natexlab{a}}.
+\newblock \url{https://flink.apache.org/}, 2024.
 \newblock Available at: \url{https://flink.apache.org/}.
 
-\bibitem[{Apache Software Foundation}(2024{\natexlab{b}})]{spark_docs}
-{Apache Software Foundation}.
-\newblock Apache spark documentation.
-\newblock \url{https://spark.apache.org/docs/latest/}, 2024{\natexlab{b}}.
-\newblock Accessed: 2025-04-26.
-
-\bibitem[Assis and Souza(2025)]{adwinu2025}
+\bibitem[Assis and Souza(2025{\natexlab{a}})]{adwin2025}
 D.~N. Assis and V.~M.~A. Souza.
 \newblock Adwin-u: Adaptive windowing for unsupervised drift detection on data
   streams.
 \newblock \emph{Knowledge and Information Systems}, 67:\penalty0 10005--10034,
-  2025.
+  2025{\natexlab{a}}.
+\newblock \doi{10.1007/s10115-025-02523-1}.
+
+\bibitem[Assis and Souza(2025{\natexlab{b}})]{adwinu2025}
+D.~N. Assis and V.~M.~A. Souza.
+\newblock Adwin-u: Adaptive windowing for unsupervised drift detection on data
+  streams.
+\newblock \emph{Knowledge and Information Systems}, 67:\penalty0 10005--10034,
+  2025{\natexlab{b}}.
 \newblock \doi{10.1007/s10115-025-02523-1}.
 \newblock Skewness/Kurtosis divergence measures for unsupervised drift
   detection.
 
-\bibitem[Baier et~al.(2020{\natexlab{a}})Baier, Kellner, Kuhl, and
-  Satzger]{baier2020}
-L.~Baier, V.~Kellner, N.~Kuhl, and G.~Satzger.
-\newblock Switching scheme: A novel approach for handling incremental concept
-  drift in real-world data sets.
-\newblock \emph{arXiv preprint arXiv:2011.02738}, 2020{\natexlab{a}}.
-
-\bibitem[Baier et~al.(2020{\natexlab{b}})Baier, Kellner, K\"uhl, and
+\bibitem[Baier et~al.(2020)Baier, Kellner, K\"uhl, and
   Satzger]{baier2020switching}
 Lucas Baier, Vincent Kellner, Niklas K\"uhl, and Gerhard Satzger.
 \newblock Switching scheme: A novel approach for handling incremental concept
   drift in real-world data sets.
-\newblock 2020{\natexlab{b}}.
+\newblock 2020.
 \newblock arXiv:2011.02738.
 
 \bibitem[Bhatia et~al.(2022)Bhatia, Kumar, Ziemba, and
@@ -68,18 +63,6 @@ Shashank Bhatia, Rohit Kumar, Justin Ziemba, and Ryan Kramer.
 Albert Bifet and Ricard Gavalda.
 \newblock Learning from time-changing data with adaptive windowing.
 \newblock pages 443--448, 2007.
-
-\bibitem[Bifet et~al.(2025)Bifet, Gavalda, et~al.]{adwin2025}
-Albert Bifet, Ricard Gavalda, et~al.
-\newblock Adwin-u: Adaptive windowing algorithm with univariate drift
-  detection.
-\newblock \emph{Knowledge and Information Systems}, 2025.
-
-\bibitem[Bogdoll et~al.(2024)]{anovox2024}
-D.~Bogdoll et~al.
-\newblock Anovox: A benchmark for anomalous sound detection in autonomous
-  driving.
-\newblock 2024.
 
 \bibitem[Braei and Wagner(2020)]{braei2020timeseries}
 Mohammad Braei and Sebastian Wagner.
@@ -168,16 +151,10 @@ X.~Chen, J.~Park, M.~Garcia, and E.~Rundensteiner.
 \newblock Reference: only ~1\% of companies reach highest streaming maturity
   level; 8 types of bad data.
 
-\bibitem[{Confluent Inc.}(2024{\natexlab{a}})]{confluent_siemens2024}
-{Confluent Inc.}
-\newblock Siemens healthineers: 8 million messages per day via confluent cloud.
-\newblock 2024{\natexlab{a}}.
-\newblock Enterprise scale streaming; catching manufacturing defects instantly.
-
-\bibitem[{Confluent Inc.}(2024{\natexlab{b}})]{siemens_confluent2024}
+\bibitem[{Confluent Inc.}(2024)]{siemens_confluent2024}
 {Confluent Inc.}
 \newblock Siemens healthineers: 8 million messages daily via confluent.
-\newblock 2024{\natexlab{b}}.
+\newblock 2024.
 \newblock URL
   \url{https://www.confluent.io/blog/making-data-quality-scalable-with-real-time-streaming-architectures/}.
 \newblock Enterprise case study.
@@ -189,12 +166,6 @@ X.~Chen, J.~Park, M.~Garcia, and E.~Rundensteiner.
 \newblock URL
   \url{https://www.confluent.io/blog/shift-left-bad-data-in-event-streams-part-1/}.
 \newblock Shift-left data quality principles.
-
-\bibitem[Coursey et~al.(2024)]{ft_aed2024}
-K.~Coursey et~al.
-\newblock Ft-aed: Benchmark dataset for freeway traffic anomalous event
-  detection.
-\newblock 2024.
 
 \bibitem[{Data Management Association}(2017)]{dama2017dmbok}
 {Data Management Association}.
@@ -216,12 +187,15 @@ Joao Gama, Indre Zliobaite, Albert Bifet, Mykola Pechenizkiy, and Abdelhamid
 \newblock \emph{ACM Computing Surveys}, 46\penalty0 (4):\penalty0 1--37, 2014.
 \newblock \doi{10.1145/2523813}.
 
-\bibitem[{Grab Engineering}(2024{\natexlab{a}})]{grab_coban2024}
+\bibitem[{Grab Engineering}(2024{\natexlab{a}})]{grab_coban_platform}
 {Grab Engineering}.
-\newblock Coban: Real-time data quality monitoring for apache kafka.
+\newblock Coban: Real-time data quality monitoring platform for apache kafka
+  streams.
 \newblock 2024{\natexlab{a}}.
-\newblock Syntactic + semantic test rules; 100+ topics monitored; <10ms/record
-  latency.
+\newblock URL
+  \url{https://engineering.grab.com/the-complete-stream-processing-journey-on-flinksql}.
+\newblock FlinkSQL-based declarative rule definitions for human-readable and
+  computationally efficient data quality testing.
 
 \bibitem[{Grab Engineering}(2024{\natexlab{b}})]{grab_streaming_dq}
 {Grab Engineering}.
@@ -238,14 +212,6 @@ Joao Gama, Indre Zliobaite, Albert Bifet, Mykola Pechenizkiy, and Abdelhamid
   \url{https://engineering.grab.com/real-time-data-quality-monitoring}.
 \newblock Accessed: 2025-06-01.
 
-\bibitem[Grulich et~al.(2018)Grulich, Sternke, Bifet, and
-  Rabl]{grulich2018parallel}
-Lena Grulich, Felix Sternke, Albert Bifet, and Tilmann Rabl.
-\newblock Scalable detection of concept drifts on data streams with parallel
-  adaptive windowing.
-\newblock In \emph{Proceedings of the 21st International Conference on
-  Extending Database Technology (EDBT)}, pages 526--537. OpenProceedings, 2018.
-
 \bibitem[Han et~al.(2022)Han, Li, et~al.]{adbench2022}
 X.~Han, Y.~Li, et~al.
 \newblock Adbench: Anomaly detection benchmark.
@@ -257,12 +223,6 @@ H.~Hojjati, T.~K.~K. Ho, and N.~Armanfard.
 \newblock Self-supervised anomaly detection: A survey and outlook.
 \newblock \emph{Neural Networks}, 170:\penalty0 1083--1096, 2025.
 \newblock \doi{10.1016/j.neunet.2023.10.034}.
-
-\bibitem[Hojjati et~al.(2026)]{enginead2026}
-H.~Hojjati et~al.
-\newblock Enginead: Anomaly detection in vehicle engine sensor data.
-\newblock 2026.
-\newblock arXiv:2603.25955.
 
 \bibitem[{IBM}(2022)]{ibm_data_quality_cost}
 {IBM}.
@@ -285,31 +245,11 @@ Pawel Karczmarek, Adam Kiersztyn, Witold Pedrycz, and Ebru Al.
 \newblock \emph{Knowledge-Based Systems}, 195:\penalty0 105659, 2020.
 \newblock \doi{10.1016/j.knosys.2020.105659}.
 
-\bibitem[Kim et~al.(2025)]{maritime2025}
-J.~Kim et~al.
-\newblock Maritime anomaly detection with spatio-temporal graph neural
-  networks.
-\newblock 2025.
-
-\bibitem[Krishnan et~al.(2026)Krishnan, Patel, Brown, and Zhang]{dtd_2026}
-S.~Krishnan, R.~Patel, M.~Brown, and H.~Zhang.
-\newblock Dtd: Dynamic threshold discovery -- no fixed threshold is universally
-  optimal.
-\newblock 2026.
-\newblock Formal proof: no single fixed threshold universally optimal; 3-way
-  comparison.
-
 \bibitem[Lavine et~al.(2020)Lavine, Lamb, and Ahmad]{nab2020}
 S.~Lavine, J.~Lamb, and S.~Ahmad.
 \newblock Nab: Numenta anomaly benchmark.
 \newblock In \emph{Sensor Networks and Smart Systems}. Springer, 2020.
 \newblock Labeled NYC taxi 30-minute aggregation with 5 ground-truth anomalies.
-
-\bibitem[Leveni et~al.(2025)]{iforest_extended}
-P.~Leveni et~al.
-\newblock Online isolation forest performance analysis.
-\newblock 2025.
-\newblock Median AUC=0.866 across 11 datasets; fastest execution time.
 
 \bibitem[Liu et~al.(2008)Liu, Ting, and Zhou]{liu2008isolation}
 Fei~Tony Liu, Kai~Ming Ting, and Zhi-Hua Zhou.
@@ -323,12 +263,19 @@ Jie Lu, Anjin Liu, Fan Dong, Fan Pei, Yuchi Guruler, and Alexander Savachkin.
 \newblock \emph{IEEE Transactions on Knowledge and Data Engineering},
   31\penalty0 (12):\penalty0 2346--2363, 2018.
 
-\bibitem[Lu et~al.(2026)Lu, Lu, Liu, Yu, and Zhang]{dtd2026}
+\bibitem[Lu et~al.(2026{\natexlab{a}})Lu, Lu, Liu, Yu, and Zhang]{dtd2026}
 P.~Lu, J.~Lu, A.~Liu, E.~Yu, and G.~Zhang.
 \newblock Autonomous concept drift threshold determination.
 \newblock In \emph{Proceedings of the AAAI Conference on Artificial
-  Intelligence (AAAI 2026)}, 2026.
+  Intelligence (AAAI 2026)}, 2026{\natexlab{a}}.
 \newblock Dynamic threshold achieves 58.31\% vs 48.64\% fixed threshold.
+
+\bibitem[Lu et~al.(2026{\natexlab{b}})Lu, Lu, Liu, Yu, and Zhang]{dtd_2026}
+Peng Lu, Jie Lu, Anjin Liu, Enghong Yu, and Guang Zhang.
+\newblock Autonomous concept drift threshold determination.
+\newblock 2026{\natexlab{b}}.
+\newblock arXiv preprint; formal proof that no fixed threshold is universally
+  optimal; 3-way comparison framework.
 
 \bibitem[Luo et~al.(2020)Luo, Meng, Wu, Zhang, Li, and Zheng]{read2020}
 H.~Luo, C.~Meng, B.~Wu, J.~Zhang, T.~Li, and Y.~Zheng.
@@ -338,29 +285,16 @@ H.~Luo, C.~Meng, B.~Wu, J.~Zhang, T.~Li, and Y.~Zheng.
 \newblock arXiv:2007.06794; dynamic partition-based thresholds outperform fixed
   grids.
 
-\bibitem[Ma et~al.(2025{\natexlab{a}})Ma, Zhang, et~al.]{scar2025}
-X.~Ma, Y.~Zhang, et~al.
-\newblock Scar: Revisiting streaming anomaly detection -- a comprehensive
-  benchmark and evaluation.
-\newblock In \emph{Artificial Intelligence Review}. Springer,
-  2025{\natexlab{a}}.
-\newblock Evaluates 9 streaming + 4 adapted static algorithms on 76 synthetic +
-  74 real datasets.
-
-\bibitem[Ma et~al.(2025{\natexlab{b}})]{scar2025benchmark}
-Y.~Ma et~al.
+\bibitem[Ma et~al.(2025)Ma, Zhang, et~al.]{scar2025benchmark}
+Yixiao Ma, Yang Zhang, et~al.
 \newblock Revisiting streaming anomaly detection: Benchmark and evaluation.
-\newblock \emph{Artificial Intelligence Review}, 58\penalty0 (8),
-  2025{\natexlab{b}}.
+\newblock \emph{Artificial Intelligence Review}, 58\penalty0 (8):\penalty0
+  1--45, 2025.
 \newblock \doi{10.1007/s10462-024-10995-w}.
-
-\bibitem[Moharram et~al.(2022)Moharram, Awad, and
-  El-Kafrawy]{moharram2022adwinpp}
-H.~Moharram, A.~Awad, and P.~M. El-Kafrawy.
-\newblock Optimizing adwin for steady streams.
-\newblock In \emph{Proceedings of the 37th ACM/SIGAPP Symposium on Applied
-  Computing (SAC)}, pages 480--487. ACM, 2022.
-\newblock \doi{10.1145/3477314.3507255}.
+\newblock URL
+  \url{https://link.springer.com/article/10.1007/s10462-024-10995-w}.
+\newblock Evaluates 9 streaming + 4 adapted static algorithms on 76 synthetic +
+  74 real datasets; GitHub: github.com/yixiaoma666/SCAR.
 
 \bibitem[Montiel et~al.(2021)Montiel, Read, Bifet, and
   Abdessalem]{montiel2021river}
@@ -368,19 +302,12 @@ Jacob Montiel, Jesse Read, Albert Bifet, and Talel Abdessalem.
 \newblock River: Machine learning for streaming data in python.
 \newblock \emph{arXiv preprint arXiv:2104.09315}, 2021.
 
-\bibitem[{NYC Taxi and Limousine Commission}(2024{\natexlab{a}})]{nyctlc}
+\bibitem[{NYC Taxi and Limousine Commission}(2024)]{nyctlc}
 {NYC Taxi and Limousine Commission}.
-\newblock Yellow taxi trip data, 2024{\natexlab{a}}.
+\newblock Yellow taxi trip data, 2024.
 \newblock URL
   \url{https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page}.
 \newblock Accessed: 2024-01-15.
-
-\bibitem[{NYC Taxi and Limousine Commission}(2024{\natexlab{b}})]{nyctlc2024}
-{NYC Taxi and Limousine Commission}.
-\newblock Tlc trip record data -- parquet format, 2024{\natexlab{b}}.
-\newblock URL
-  \url{https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_2024-01.parquet}.
-\newblock Accessed: 2024-07-01.
 
 \bibitem[Papastergios and Gounaris(2025)]{papastergios2025stream}
 Georgios Papastergios and Apostolos Gounaris.
@@ -469,14 +396,6 @@ X.~Yang et~al.
   2025.
 \newblock \doi{10.1007/s00521-025-07868-8}.
 
-\bibitem[Yang et~al.(2019)Yang, Guo, Gao, and Weng]{grab_2019_coban}
-Ying Yang, Huidong Guo, Haoyu Gao, and Ping Weng.
-\newblock Data quality monitoring at scale: Lessons from grab.
-\newblock \emph{Grab Engineering Blog}, 2019.
-\newblock URL \url{https://engineering.grab.com/data-quality-monitoring}.
-\newblock Reference: missing insert booking records causes revenue
-  miscalculation.
-
 \bibitem[Yepmo et~al.(2024)Yepmo, Smits, Lesot, and Pivert]{yepmo2024rififi}
 Veronne Yepmo, Gregory Smits, Marie-Jeanne Lesot, and Olivier Pivert.
 \newblock Leveraging an isolation forest to anomaly detection and data
@@ -484,11 +403,11 @@ Veronne Yepmo, Gregory Smits, Marie-Jeanne Lesot, and Olivier Pivert.
 \newblock \emph{Data \& Knowledge Engineering}, 137:\penalty0 101946, 2024.
 \newblock \doi{10.1016/j.knosys.2024.111946}.
 
-\bibitem[Zhang et~al.(2023)Zhang, Liu, Chen, Wang, and Du]{meter_2023}
-Y.~Zhang, X.~Liu, J.~Chen, Q.~Wang, and H.~Du.
-\newblock Meter: Micetive concept adaptation framework for streaming data.
-\newblock pages 3121--3132, 2023.
-\newblock \doi{10.1145/3543873.3587621}.
-\newblock MLP hypernetwork for centroid displacement prediction.
+\bibitem[Zhu et~al.(2023)Zhu, Cai, Deng, Ooi, and Zhang]{meter_2023}
+Jiaqi Zhu, Shaofeng Cai, Fang Deng, Beng~Chin Ooi, and Wenqiao Zhang.
+\newblock Meter: A dynamic concept adaptation framework for online anomaly
+  detection.
+\newblock \emph{arXiv preprint arXiv:2312.16831}, 2023.
+\newblock Meta-learning MLP for streaming drift adaptation.
 
 \end{thebibliography}
