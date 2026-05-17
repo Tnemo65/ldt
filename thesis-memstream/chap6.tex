@@ -74,7 +74,7 @@ Basic anomaly detection lacks context awareness and online learning capability. 
 \textbf{Impact:}
 \begin{itemize}
     \item \textbf{F1=0.828 (Easy), F1=0.751 (Medium), F1=0.563 (Hard), weighted avg F1=0.71, FPR=2.99\%:} Meets all production targets (FPR $<$ 5\%, Recall $\geq$ 75\% on Easy-difficulty anomalies)
-    \item \textbf{Incremental validation:} Ratio features contribute +58.9\% F1 improvement, K-Means +1.1\%, 4D thresholds +1.1\%
+    \item \textbf{Incremental validation:} Ratio features contribute +58.9\% F1 improvement, 4D context thresholds +1.1\%, ablation study in Chapter 5 isolates the contribution of each component
     \item \textbf{79.7\% unique detection:} Multivariate anomalies not caught by business rules
     \item \textbf{METER fast adaptation:} Shift centroids without full retraining (6\% of drift)
 \end{itemize}

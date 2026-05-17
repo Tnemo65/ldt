@@ -232,7 +232,7 @@ services:
     container_name: ldt-redis
     hostname: redis
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli --tls --cert /certs/redis-cert.pem --key /certs/redis-key.pem --cacert /certs/ca-cert.pem -a ${REDIS_PASSWORD} -p 6380 ping"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} -p 6379 ping"]
       interval: 10s
       timeout: 5s
       retries: 5

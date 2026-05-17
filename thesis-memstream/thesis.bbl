@@ -1,4 +1,4 @@
-\begin{thebibliography}{54}
+\begin{thebibliography}{55}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -51,13 +51,12 @@ Lucas Baier, Vincent Kellner, Niklas K\"uhl, and Gerhard Satzger.
 \newblock 2020.
 \newblock arXiv:2011.02738.
 
-\bibitem[Bhatia et~al.(2022)Bhatia, Kumar, Ziemba, and
-  Kramer]{bhatia2022memstream}
-Shashank Bhatia, Rohit Kumar, Justin Ziemba, and Ryan Kramer.
-\newblock Memstream: Memory-based streaming anomaly detection.
-\newblock In \emph{Proceedings of the ACM SIGMOD International Conference on
-  Management of Data}, pages 447--461. ACM, 2022.
-\newblock \doi{10.1145/3514221.3526153}.
+\bibitem[Bhatia et~al.(2022)]{bhatia2022dense}
+Shashank Bhatia et~al.
+\newblock Dense hypersphere feature learning for person re-identification.
+\newblock 2022.
+\newblock L1 distance preferred over L2 in high-dimensional spaces for outlier
+  robustness and interpretability.
 
 \bibitem[Bifet and Gavalda(2007)]{bifet2007learning}
 Albert Bifet and Ricard Gavalda.
@@ -106,6 +105,19 @@ X.~Chen, J.~Park, M.~Garcia, and E.~Rundensteiner.
   34--49, 2025.
 \newblock Periodic retraining as surprisingly strong baseline.
 
+\bibitem[Community(2024{\natexlab{a}})]{flink_rocksdb}
+Apache~Flink Community.
+\newblock Apache flink: Rocksdb state backend, 2024{\natexlab{a}}.
+\newblock
+  https://nightlies.apache.org/flink/flink-docs-release-1.18/docs/ops/state/state\_backends/.
+
+\bibitem[Community(2024{\natexlab{b}})]{flink_rocksdb_bloom}
+Apache~Flink Community.
+\newblock Apache flink: Rocksdb native checkpointing and bloom filter
+  optimization, 2024{\natexlab{b}}.
+\newblock Bloom filter optimization for RocksDB state backend reduces I/O by
+  approximately 90\%.
+
 \bibitem[{Confluent}(2024{\natexlab{a}})]{confluent_dead_letter_queue}
 {Confluent}.
 \newblock Dead letter queue pattern for fault-tolerant streaming pipelines.
@@ -115,29 +127,19 @@ X.~Chen, J.~Park, M.~Garcia, and E.~Rundensteiner.
 \newblock DLQ creates error-free but incomplete streams; caution against data
   loss.
 
-\bibitem[{Confluent}(2024{\natexlab{b}})]{confluent_dq_feedback_loop}
-{Confluent}.
-\newblock Five data quality kpis for streaming: Completeness, accuracy,
-  freshness, error rates, quarantine volume.
-\newblock \emph{Confluent Blog}, 2024{\natexlab{b}}.
-\newblock URL
-  \url{https://www.confluent.io/blog/monitoring-data-quality-apache-kafka}.
-\newblock Data quality feedback loop: validation -> quarantine -> monitoring
-  dashboards -> alerting.
-
-\bibitem[{Confluent}(2024{\natexlab{c}})]{confluent_dq_patterns}
+\bibitem[{Confluent}(2024{\natexlab{b}})]{confluent_dq_patterns}
 {Confluent}.
 \newblock Data quality patterns and anti-patterns in streaming pipelines.
-\newblock \emph{Confluent Technical Blog}, 2024{\natexlab{c}}.
+\newblock \emph{Confluent Technical Blog}, 2024{\natexlab{b}}.
 \newblock URL
   \url{https://www.confluent.io/blog/data-quality-patterns-antipatterns}.
 \newblock Reference: contamination cascades, schema enforcement, dead-letter
   queue patterns.
 
-\bibitem[{Confluent}(2024{\natexlab{d}})]{confluent_schema_registry}
+\bibitem[{Confluent}(2024{\natexlab{c}})]{confluent_schema_registry}
 {Confluent}.
 \newblock Schema registry: Enforcing data contracts in apache kafka.
-\newblock 2024{\natexlab{d}}.
+\newblock 2024{\natexlab{c}}.
 \newblock URL
   \url{https://docs.confluent.io/platform/current/schema-registry/}.
 \newblock Schema enforcement: BACKWARD/FORWARD/FULL compatibility modes.
@@ -187,20 +189,19 @@ Joao Gama, Indre Zliobaite, Albert Bifet, Mykola Pechenizkiy, and Abdelhamid
 \newblock \emph{ACM Computing Surveys}, 46\penalty0 (4):\penalty0 1--37, 2014.
 \newblock \doi{10.1145/2523813}.
 
-\bibitem[{Grab Engineering}(2024{\natexlab{a}})]{grab_coban_platform}
-{Grab Engineering}.
-\newblock Coban: Real-time data quality monitoring platform for apache kafka
-  streams.
-\newblock 2024{\natexlab{a}}.
-\newblock URL
-  \url{https://engineering.grab.com/the-complete-stream-processing-journey-on-flinksql}.
-\newblock FlinkSQL-based declarative rule definitions for human-readable and
-  computationally efficient data quality testing.
+\bibitem[{Google Cloud}(2024)]{googlemlops2024}
+{Google Cloud}.
+\newblock Mlops: Continuous delivery and automation pipelines in machine
+  learning.
+\newblock
+  \url{https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning},
+  2024.
+\newblock Available at:
+  \url{https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning}.
 
-\bibitem[{Grab Engineering}(2024{\natexlab{b}})]{grab_streaming_dq}
+\bibitem[{Grab Engineering}(2024)]{grab_streaming_dq}
 {Grab Engineering}.
-\newblock Real-time data quality monitoring: Kafka stream contracts,
-  2024{\natexlab{b}}.
+\newblock Real-time data quality monitoring: Kafka stream contracts, 2024.
 \newblock URL \url{https://engineering.grab.com/stream-contracts}.
 \newblock Accessed: 2024-08-01.
 
@@ -223,14 +224,6 @@ H.~Hojjati, T.~K.~K. Ho, and N.~Armanfard.
 \newblock Self-supervised anomaly detection: A survey and outlook.
 \newblock \emph{Neural Networks}, 170:\penalty0 1083--1096, 2025.
 \newblock \doi{10.1016/j.neunet.2023.10.034}.
-
-\bibitem[{IBM}(2022)]{ibm_data_quality_cost}
-{IBM}.
-\newblock Data quality and the bottom line: Achieving business benefits through
-  data quality improvement.
-\newblock \emph{IBM Whitepaper}, 2022.
-\newblock URL \url{https://www.ibm.com/downloads/cas/BRRL5L6E}.
-\newblock Reference: \$12.9M average annual cost of poor data quality.
 
 \bibitem[{IBM}(2024)]{ibm_dq2024}
 {IBM}.
@@ -380,6 +373,15 @@ Maurras~Ulbricht Togbe, Mariam Barry, Aliou Boly, Yousra Chabchoub, Raja Chiky,
 \newblock Vera: 6.9b records/sec throughput, sub-10ms latency.
 \newblock 2024.
 \newblock Exactly-once guarantees; fintech monitoring.
+
+\bibitem[Vincent et~al.(2010)Vincent, Larochelle, Lajoie, Bengio, and
+  Manzagol]{vincent2010stacked}
+Pascal Vincent, Hugo Larochelle, Isabelle Lajoie, Yoshua Bengio, and
+  Pierre-Antoine Manzagol.
+\newblock Stacked denoising autoencoders: Learning useful representations in a
+  deep network with a local denoising criterion.
+\newblock In \emph{Journal of Machine Learning Research}, volume~11, pages
+  3371--3408, 2010.
 
 \bibitem[Xie et~al.(2025)Xie, Kim, Chiang, Zhao, and Shafique]{bestad2025}
 J.~Xie, J.~Kim, Y.-Y. Chiang, L.~Zhao, and K.~Shafique.

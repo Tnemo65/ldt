@@ -30,15 +30,13 @@ from pyflink.datastream.connectors.kafka import FlinkKafkaConsumer, FlinkKafkaPr
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.typeinfo import Types
 from pyflink.datastream import MapFunction, FilterFunction
-from pyflink.datastream.window import TumblingEventTimeWindows
-from pyflink.common.time import Time
-from pyflink.common.watermark_strategy import WatermarkStrategy, Duration
+from pyflink.datastream.window import TumblingCountWindows
+
 import os
 import json
 import logging
 import sys
 
-from src.operators.watermark_assigner import create_watermark_strategy
 from src.operators.key_generator import generate_trip_id
 from src.operators.deduplicator import DeduplicatorFunction
 from src.operators.consecutive_records_filter import ConsecutiveRecordsFilter, _extract_meter_key
@@ -655,7 +653,6 @@ def main():
         stream
         .map(SafeParseJsonFunction())
         .filter(lambda x: x is not None)
-        .assign_timestamps_and_watermarks(create_watermark_strategy())
     )
     stream = stream.map(AddTripIdFunction())
 
@@ -718,7 +715,7 @@ def main():
         layer2_stream
         .map(ExtractNeighborhoodFunction())
         .key_by(lambda x: x[0], key_type=Types.STRING())
-        .window(TumblingEventTimeWindows.of(Time.minutes(1)))
+        .window(TumblingCountWindows.of(100))
         .aggregate(
             MetaAggregateFunction(),
             window_function=MetaWindowProcessFunction(),
