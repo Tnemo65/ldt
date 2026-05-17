@@ -24,7 +24,7 @@ NC='\033[0m'
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 BACKUP_DIR="$DEPLOYMENT_DIR/backups/memstream_migration_${TIMESTAMP}"
 LOG_FILE="$BACKUP_DIR/migration_${TIMESTAMP}.log"
-MINIO_BUCKET="cadqstream-models"
+MINIO_BUCKET="ml-models"
 
 # ── Migration State ─────────────────────────────────────────────────────────────
 MIGRATION_FAILED=0

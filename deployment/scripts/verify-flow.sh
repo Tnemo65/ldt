@@ -145,7 +145,7 @@ else
 fi
 
 # 2c. Verify all 11 topics exist
-EXPECTED_TOPICS="taxi-nyc-raw dq-stream-processed dq-stream-anomalies dq-meta-stream iec-action-replay iec-action-dlq dq-stream-processed-clean dq-metrics dq-hard-rule-violations if-model-updates memstream-model-updates"
+EXPECTED_TOPICS="taxi-nyc-raw dq-stream-processed dq-stream-anomalies dq-meta-stream iec-action-replay iec-action-dlq dq-stream-processed-clean dq-metrics dq-hard-rule-violations memstream-model-updates"
 TOPIC_LIST=$(docker exec ldt-kafka kafka-topics --bootstrap-server localhost:9092 --list 2>/dev/null || true)
 MISSING_TOPICS=""
 for topic in $EXPECTED_TOPICS; do
@@ -322,13 +322,6 @@ if [ -n "$ML_MODELS" ]; then
     log_ok "ml-models bucket has artifacts"
 else
     log_warn "ml-models bucket empty (model may be embedded in container)"
-fi
-
-# 4d. Verify if-model-updates topic exists (compacted broadcast topic)
-if echo "$TOPIC_LIST" | grep -q "if-model-updates"; then
-    log_ok "if-model-updates (compacted) topic exists"
-else
-    log_warn "if-model-updates topic not found"
 fi
 
 # 4e. Verify memstream-model-updates topic exists
@@ -777,7 +770,7 @@ echo -e "${GREEN}${BOLD}  ALL 10 STEPS PASSED${NC}"
 echo -e "${GREEN}${BOLD}============================================================${NC}"
 echo ""
 echo "Evidence summary:"
-echo "  [2] Kafka:    produce→consume OK, 11 topics, schemas registered, exporter healthy"
+echo "  [2] Kafka:    produce→consume OK, 10 topics, schemas registered, exporter healthy"
 echo "  [3] Flink:    $RUNNING_JOBS job(s) running, checkpointing active, pipeline producing"
 echo "  [4] ML:       service healthy, predict endpoint responding"
 echo "  [5] Prometheus: all targets healthy, cadqstream metrics present"

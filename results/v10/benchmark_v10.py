@@ -636,7 +636,9 @@ class MemStream:
         if neighborhood_ids is None:
             neighborhood_ids = np.zeros(warmup_n, dtype=int)
 
-        ratecode_vals = (Xs[:, 25] == 1.0).astype(int)[:warmup_n]
+        weights = np.array([1, 2, 3, 4, 5], dtype=Ws.dtype)
+        ratecode_onehot = Xs[:, 25:30]
+        ratecode_vals = (ratecode_onehot * weights).sum(axis=1).astype(int)[:warmup_n]
         ctx_ids = np.array([get_context_id(int(h), int(d), int(r))
                            for h, d, r in zip(hour_vals, dow_vals, ratecode_vals)])
 
@@ -777,7 +779,9 @@ class CAMemStream(MemStream):
         if neighborhood_ids is None:
             neighborhood_ids = np.zeros(warmup_n, dtype=int)
 
-        ratecode_vals = (Xs[:, 25] == 1.0).astype(int)[:warmup_n]
+        weights = np.array([1, 2, 3, 4, 5], dtype=Ws.dtype)
+        ratecode_onehot = Xs[:, 25:30]
+        ratecode_vals = (ratecode_onehot * weights).sum(axis=1).astype(int)[:warmup_n]
         ctx_ids = np.array([get_context_id(int(h), int(d), int(r))
                            for h, d, r in zip(hour_vals, dow_vals, ratecode_vals)])
 

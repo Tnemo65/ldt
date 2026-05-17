@@ -50,8 +50,6 @@
 | 25  | Alert: `checkpoint_latency > Xs`                | Not in current alerts (plan adds new)                                                                                                                                | ⭐ **> 30s**              | `[15s, 30s, 60s, 120s]`                       | Checkpoint performance                           | LOW      | New alert from plan.                                                                                                                                                                                                               |                                          |
 | 26  | Kafka: `taxi-nyc-raw` partitions                | `01-create-topics.sh`: **4**                                                                                                                                         | ⭐ **8-16**               | `[4, 8, 16]`                                  | Consumer lag, throughput latency                 | LOW      | At 100K trips/hr ≈ 28 trips/sec, 4 partitions likely sufficient. 8-16 la overkill nhung an toan. 16 = maximum reasonable.                                                                                                          |                                          |
 | 27  | Kafka: `dq-stream-processed` partitions         | `01-create-topics.sh`: **4**                                                                                                                                         | ⭐ **8-16**               | `[4, 8, 16]`                                  | Consumer lag, throughput latency                 | LOW      | Same rationale as above.                                                                                                                                                                                                           |                                          |
-| 28  | Kafka: `if-model-updates` partitions            | `01-create-topics.sh`: **1** ❌                                                                                                                                       | ⭐ **4**                  | `[2, 4]`                                      | Model broadcast throughput                       | MEDIUM   | 1 partition = bottleneck for model updates. Increase to 4 minimum.                                                                                                                                                                 |                                          |
-
 ---
 
 ## ⚠️ Inconsistencies Found Between Code Versions
@@ -102,7 +100,6 @@
 | 8 | `#4` default_beta - FPR on clean set | 3 configs |
 | 9 | `#16` recent_scores buffer - retrain quality | 4 configs |
 | 10 | `#17` quick_retrain sample count | 4 configs |
-| 11 | `#28` Kafka partitions - throughput benchmark | 3 configs |
 
 ### Round 3: LOW Priority (after deployment)
 

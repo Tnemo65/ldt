@@ -79,26 +79,15 @@
 \contentsline {subsection}{\numberline {6.8.4}Experiment 13: Grafana Dashboard Usability}{43}{subsection.6.8.4}%
 \contentsline {section}{\numberline {6.9}Chapter Summary}{43}{section.6.9}%
 \contentsline {chapter}{\numberline {7}CONCLUSION \& FUTURE WORK}{44}{chapter.7}%
-\contentsline {section}{\numberline {7.1}Summary of Contributions}{44}{section.7.1}%
-\contentsline {subsection}{\numberline {7.1.1}Contribution 1: 4D Context-Aware Thresholding Framework [RQ5]}{44}{subsection.7.1.1}%
-\contentsline {subsection}{\numberline {7.1.2}Contribution 2: Rendezvous Pipeline Architecture [RQ4]}{44}{subsection.7.1.2}%
-\contentsline {subsection}{\numberline {7.1.3}Contribution 3: Intelligent Evolution Controller with 4 Adaptation Strategies [RQ3]}{45}{subsection.7.1.3}%
-\contentsline {subsection}{\numberline {7.1.4}Contribution 4: Online Autoencoder + Memory Module [RQ2]}{45}{subsection.7.1.4}%
-\contentsline {section}{\numberline {7.2}Hypothesis Validation}{45}{section.7.2}%
-\contentsline {subsection}{\numberline {7.2.1}H1: Multi-Layer Coverage}{46}{subsection.7.2.1}%
-\contentsline {subsection}{\numberline {7.2.2}H2: Online Autoencoder + Memory Module vs. Baselines}{46}{subsection.7.2.2}%
-\contentsline {subsection}{\numberline {7.2.3}H3a-d: IEC Adaptation Strategies}{46}{subsection.7.2.3}%
-\contentsline {subsection}{\numberline {7.2.4}H4: Rendezvous Performance}{46}{subsection.7.2.4}%
-\contentsline {subsection}{\numberline {7.2.5}H5: 4D Thresholds vs. Global}{46}{subsection.7.2.5}%
-\contentsline {section}{\numberline {7.3}Limitations}{46}{section.7.3}%
-\contentsline {subsection}{\numberline {7.3.1}Limitation 1: Single-Domain Validation}{47}{subsection.7.3.1}%
-\contentsline {subsection}{\numberline {7.3.2}Limitation 2: Supervised Ground Truth}{47}{subsection.7.3.2}%
-\contentsline {subsection}{\numberline {7.3.3}Limitation 3: No Anomaly Explanation}{47}{subsection.7.3.3}%
-\contentsline {subsection}{\numberline {7.3.4}Limitation 4: Single-Region Deployment}{47}{subsection.7.3.4}%
-\contentsline {section}{\numberline {7.4}Future Work}{47}{section.7.4}%
-\contentsline {subsection}{\numberline {7.4.1}Future Direction 1: Multi-Domain Validation}{47}{subsection.7.4.1}%
-\contentsline {subsection}{\numberline {7.4.2}Future Direction 2: Advanced Deep Learning Integration}{47}{subsection.7.4.2}%
-\contentsline {subsection}{\numberline {7.4.3}Future Direction 3: Memory Module Optimization}{47}{subsection.7.4.3}%
-\contentsline {subsection}{\numberline {7.4.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{48}{subsection.7.4.4}%
-\contentsline {section}{\numberline {7.5}Concluding Remarks}{48}{section.7.5}%
-\contentsline {chapter}{REFERENCES}{49}{section.7.5}%
+\contentsline {section}{\numberline {7.1}Conclusions}{44}{section.7.1}%
+\contentsline {section}{\numberline {7.2}Limitations}{45}{section.7.2}%
+\contentsline {subsection}{\numberline {7.2.1}Limitation 1: Single-Domain Validation}{45}{subsection.7.2.1}%
+\contentsline {subsection}{\numberline {7.2.2}Limitation 2: Supervised Ground Truth}{45}{subsection.7.2.2}%
+\contentsline {subsection}{\numberline {7.2.3}Limitation 3: No Anomaly Explanation}{45}{subsection.7.2.3}%
+\contentsline {subsection}{\numberline {7.2.4}Limitation 4: Single-Region Deployment}{45}{subsection.7.2.4}%
+\contentsline {section}{\numberline {7.3}Future Work}{46}{section.7.3}%
+\contentsline {subsection}{\numberline {7.3.1}Future Direction 1: Multi-Domain Validation}{46}{subsection.7.3.1}%
+\contentsline {subsection}{\numberline {7.3.2}Future Direction 2: Advanced Deep Learning Integration}{46}{subsection.7.3.2}%
+\contentsline {subsection}{\numberline {7.3.3}Future Direction 3: Memory Module Optimization}{46}{subsection.7.3.3}%
+\contentsline {subsection}{\numberline {7.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{46}{subsection.7.3.4}%
+\contentsline {chapter}{REFERENCES}{47}{section.7.3}%

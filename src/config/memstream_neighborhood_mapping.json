@@ -7,7 +7,6 @@
   "source": "memstream_src/operators/memstream_scoring_op.py lines 65-68",
   "notes": [
     "This is the MemStream schema with 10 neighborhoods in geographic order",
-    "Different from Isolation Forest 6-neighborhood schema in neighborhood_mapping.json",
     "Order is CRITICAL: manhattan=0, brooklyn=1, queens_lower=2, queens_upper=3, bronx=4, ...",
     "bronx=4 comes AFTER brooklyn=1 (not alphabetical order)"
   ],

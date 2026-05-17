@@ -1,27 +1,35 @@
 """
-CA-DQStream Complete Pipeline - All 4 Layers Integrated.
-Integration: Layer 1 -> Layer 2 (Canary) -> Layer 2b (ML) -> Layer 3 (Voting) -> Layer 4 (IEC)
+CA-DQStream Sequential Pipeline — Phase 3 Refactor.
 
-Pipeline Flow:
-Layer 1: Kafka Source (taxi-nyc-raw) -> Parse JSON -> Watermark -> Dedup -> Schema Validation
-Layer 2: CanaryRulesValidator (7 rules) -> MemStreamScoringOperator (ML anomaly scores)
-         Records flow sequentially — same record accumulates canary_flags then ml_score.
-Layer 3: VotingEnsembleFunction receives ONE record with both canary and ML contexts,
-         makes the final anomaly decision.
-Layer 4: IEC (ADWIN-U drift detection + METER strategy) on voting_stream.
-Outputs: MinIO (cadqstream-raw, cadqstream-violations, cadqstream-anomalies,
-         cadqstream-metrics, cadqstream-drift, cadqstream-checkpoints)
-         + Kafka topics + Prometheus metrics
+Pipeline Flow (Sequential, No Dual Branch, No Voting):
+    Kafka taxi-nyc-raw-v2
+      -> Layer 1 (Parse JSON / Watermark / Dedup / Schema Validation)
+      -> Layer 2 (CanaryRulesValidator: 7 rules -> canary_violations)
+      -> Layer 2 (MemStreamScoringOperator: AE + Memory, auto-update if score < beta)
+      -> Layer 3 (MetaAggregator: 1-min window per neighborhood -> 6 meta-metrics)
+      -> Layer 4 (IEC: ADWIN drift detection -> 2 strategies: do_nothing / quick_retrain)
+
+MinIO Buckets:
+    cadqstream-raw/taxi_trips_raw/         — Layer 1 valid records
+    cadqstream-violations/schema/          — Layer 1 schema failures
+    cadqstream-violations/canary/         — Layer 2 canary rule violations
+    cadqstream-anomalies/scores/           — MemStream anomaly scores
+    cadqstream-metrics/meta/               — MetaAggregator windowed metrics
+    cadqstream-drift/iec/                  — IEC decisions + alerts
+
+Kafka Event Types:
+    PROCESSED_RECORD, CANARY_VIOLATION, ANOMALY_RECORD,
+    META_RECORD, IEC_DECISION, DLQ_RECORD
 
 Usage:
-  python src/flink_job_complete.py
+    python src/flink_job_complete.py
 """
 
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode, RuntimeExecutionMode
 from pyflink.datastream.connectors.kafka import FlinkKafkaConsumer, FlinkKafkaProducer
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.typeinfo import Types
-from pyflink.datastream import MapFunction, FilterFunction, FlatMapFunction
+from pyflink.datastream import MapFunction, FilterFunction
 from pyflink.datastream.window import TumblingEventTimeWindows
 from pyflink.common.time import Time
 from pyflink.common.watermark_strategy import WatermarkStrategy, Duration
@@ -30,15 +38,20 @@ import json
 import logging
 import sys
 
-# Import all operators
 from src.operators.watermark_assigner import create_watermark_strategy
 from src.operators.key_generator import generate_trip_id
 from src.operators.deduplicator import DeduplicatorFunction
 from src.operators.consecutive_records_filter import ConsecutiveRecordsFilter, _extract_meter_key
 from src.operators.schema_validator import SchemaValidator
-from src.operators.canary_rules import CanaryRulesValidator, ViolationFilter, CleanRecordFilter
+from src.operators.canary_rules_operator import CanaryRulesValidator, ViolationFilter
 from src.operators.memstream_scoring_operator import MemStreamScoringOperator
-from src.operators.meta_aggregator import VotingEnsembleFunction, extract_neighborhood_key
+from src.operators.meta_aggregator import (
+    MetaAggregateFunction,
+    MetaWindowProcessFunction,
+    SequentialFinalDecisionFunction,
+    extract_neighborhood_key,
+)
+from src.operators.iec_operator import IECOperator
 from src.sinks.minio_sink import (
     create_raw_trips_sink,
     create_schema_violations_sink,
@@ -69,7 +82,6 @@ LOGGER = logging.getLogger('cadqstream-pipeline')
 
 # =============================================================================
 # METRIC MAP FUNCTIONS
-# Emits metrics via direct HTTP POST to cadqstream-metrics (non-blocking).
 # =============================================================================
 
 _MetricsEndpoint = 'http://cadqstream-metrics:9250/internal/metrics'
@@ -119,10 +131,10 @@ class CanaryViolationSinkFunction(MapFunction):
         violations = value.get('canary_violations', [])
         if violations:
             _emit_metric('violation_records_total', 1,
-                         {'layer': 'L1', 'type': 'canary'}, 'counter')
+                         {'layer': 'L2', 'type': 'canary'}, 'counter')
             for rule in violations:
                 _emit_metric('anomalies_canary_total', 1,
-                             {'layer': 'L1', 'rule': rule}, 'counter')
+                             {'layer': 'L2', 'rule': rule}, 'counter')
         return value
 
 
@@ -138,6 +150,13 @@ class MLAnomalySinkFunction(MapFunction):
         return value
 
 
+class L1ValidSinkFunction(MapFunction):
+    def map(self, value):
+        if value is not None:
+            _emit_metric('records_valid_total', 1, {'layer': 'L1'}, 'counter')
+        return value
+
+
 class L2ValidSinkFunction(MapFunction):
     def map(self, value):
         if isinstance(value, dict) and value is not None:
@@ -145,25 +164,19 @@ class L2ValidSinkFunction(MapFunction):
         return value
 
 
-class L3ValidSinkFunction(MapFunction):
-    """Emit cadqstream metrics for Layer 3 (VotingEnsemble + MetaAggregator output)."""
+class MetaSinkFunction(MapFunction):
+    """Emit cadqstream metrics for MetaAggregator windowed output."""
     def map(self, value):
         if isinstance(value, dict) and value is not None:
             _emit_metric('records_valid_total', 1, {'layer': 'L3'}, 'counter')
-            # Also emit voting ensemble decision metrics
             final_decision = value.get('final_decision', 'CLEAN')
-            decision_source = value.get('decision_source', 'unknown')
-            _emit_metric('voting_decisions_total', 1,
-                        {'layer': 'L3', 'decision': final_decision, 'source': decision_source}, 'counter')
+            _emit_metric('final_decisions_total', 1,
+                        {'layer': 'L3', 'decision': final_decision}, 'counter')
         return value
 
 
 class L4MetricsFunction(MapFunction):
-    """Emit cadqstream L4 metrics per micro-batch.
-
-    PyFlink calls MapFunction.map() per micro-batch (not per record).
-    Used on iec_stream to emit IEC strategy metrics per micro-batch.
-    """
+    """Emit cadqstream L4 metrics per micro-batch from iec_stream."""
     _client = None
     _endpoint = 'http://cadqstream-metrics:9250/internal/metrics'
     _errors = 0
@@ -198,175 +211,9 @@ class L4MetricsFunction(MapFunction):
         except Exception:
             L4MetricsFunction._errors += 1
             if L4MetricsFunction._errors <= 3:
-                import logging
                 logging.getLogger('cadqstream-l4').warning(
                     "L4 metric emit failed (errors=%d)", L4MetricsFunction._errors
                 )
-        return value
-
-
-class L4VotingMetricsFunction(FlatMapFunction):
-    """Emit cadqstream L4 voting metrics per micro-batch from voting_stream.
-
-    PyFlink calls FlatMapFunction.flat_map() per micro-batch.
-    """
-    _client = None
-    _endpoint = 'http://cadqstream-metrics:9250/internal/metrics'
-    _errors = 0
-
-    def open(self, runtime_context):
-        import urllib.request
-        L4VotingMetricsFunction._client = urllib.request
-
-    def flat_map(self, value):
-        if value is None:
-            return
-        if not isinstance(value, dict):
-            return
-        final_decision = value.get('final_decision', 'CLEAN')
-        decision_source = value.get('decision_source', 'unknown')
-        try:
-            payload = json.dumps({
-                'name': 'records_valid_total',
-                'value': 1,
-                'labels': {'layer': 'L4'},
-                'type': 'counter'
-            }).encode('utf-8')
-            L4VotingMetricsFunction._client.urlopen(
-                L4VotingMetricsFunction._endpoint, data=payload, timeout=1
-            )
-            payload2 = json.dumps({
-                'name': 'voting_decisions_total',
-                'value': 1,
-                'labels': {'layer': 'L4', 'decision': final_decision, 'source': decision_source},
-                'type': 'counter'
-            }).encode('utf-8')
-            L4VotingMetricsFunction._client.urlopen(
-                L4VotingMetricsFunction._endpoint, data=payload2, timeout=1
-            )
-        except Exception:
-            L4VotingMetricsFunction._errors += 1
-            if L4VotingMetricsFunction._errors <= 3:
-                import logging
-                logging.getLogger('cadqstream-l4').warning(
-                    "L4 voting metric emit failed (errors=%d)", L4VotingMetricsFunction._errors
-                )
-        yield value
-
-
-class PerRecordIECOperator(MapFunction):
-    """Per-record IEC operator for streaming pipelines without windowing.
-
-    Root Cause Fix #3: Replaces IECOperator in flink_job_complete.py.
-
-    Problem: IECOperator was designed for per-window format {nb: {metrics}}
-    but the pipeline feeds individual records. The window-format check in
-    IECController.update() fails silently → all decisions = do_nothing.
-
-    Solution: Computes an IEC decision per record using simple heuristics
-    (anomaly rate, violation rate, score-based thresholds) without any
-    accumulation or timer-based batching. This avoids PyFlink Beam timer
-    threading issues that caused NullPointerException in timer callbacks.
-
-    Root Cause Fix #4: Does NOT spread raw record fields into iec_decision.
-    All IEC keys (drifts_detected, iec_strategy, etc.) are clean.
-
-    Output fields:
-      neighborhood_id: str   — neighborhood name
-      anomaly_rate: float   — 1.0 if ANOMALY, else 0.0
-      violation_rate: float — 1.0 if has_violation, else 0.0
-      avg_anomaly_score: float — anomaly_score from record
-      delta_score: float   — |anomaly_rate - violation_rate| (0.0 or 1.0)
-      drifts_detected: list — empty (heuristic-based, no ADWIN)
-      drift_count: int      — 0
-      iec_strategy: str     — derived from anomaly_rate and delta_score
-      iec_confidence: float — confidence score
-      iec_timestamp: str    — ISO timestamp
-    """
-
-    def open(self, runtime_context):
-        import socket, os, uuid
-        self._operator_id = f"iec-{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:8]}"
-        self._processed = 0
-        self._errors = 0
-        print(f"[PerRecordIECOperator] open() called. operator_id={self._operator_id}")
-
-    def map(self, record):
-        """Compute and emit an IEC decision for each voting record.
-
-        ROOT CAUSE FIX #1: iec_timestamp uses the actual pickup_datetime from the
-        record, NOT datetime.utcnow(). This ensures event-time ordering in downstream
-        drift detection. The watermark assigner already extracted event timestamps from
-        tpep_pickup_datetime, so we reuse that field here.
-
-        Always emits the original record with IEC fields merged in.
-        Never returns None so the pipeline always has output.
-        """
-        self._processed += 1
-        if self._processed % 500 == 0:
-            print(f"[PerRecordIECOperator] processed={self._processed} errors={self._errors}")
-        if record is None:
-            self._errors += 1
-            print(f"[PerRecordIECOperator] WARNING: received None at count={self._processed}")
-            return {'iec_strategy': 'do_nothing', 'iec_confidence': 0.0, 'iec_error': 'null_input', 'drifts_detected': [], 'drift_count': 0}
-
-        if not isinstance(record, dict):
-            self._errors += 1
-            print(f"[PerRecordIECOperator] WARNING: not a dict type={type(record)} value={str(record)[:100]} count={self._processed}")
-            return {'iec_strategy': 'do_nothing', 'iec_confidence': 0.0, 'iec_error': f'not_dict:{type(record).__name__}', 'drifts_detected': [], 'drift_count': 0}
-
-        is_anomaly = 1.0 if record.get('final_decision') == 'ANOMALY' else 0.0
-        has_violation = 1.0 if record.get('has_violation', False) else 0.0
-        score = float(record.get('anomaly_score', 0.5)) if record.get('anomaly_score') is not None else 0.5
-        delta = abs(is_anomaly - has_violation)
-
-        neighborhood = record.get('neighborhood', record.get('neighborhood_id', 'unknown'))
-
-        severity = 'none'
-        confidence = 1.0
-        if is_anomaly > 0.5 and delta > 0.5:
-            severity = 'high'
-            confidence = 0.9
-        elif is_anomaly > 0.5 or delta > 0.5:
-            severity = 'medium'
-            confidence = 0.7
-        elif score > 1.2:
-            severity = 'low'
-            confidence = 0.6
-
-        if severity == 'none':
-            strategy = 'do_nothing'
-        elif severity == 'low':
-            strategy = 'adjust_threshold'
-        else:
-            strategy = 'memory_reset'
-
-        iec_timestamp = record.get('tpep_pickup_datetime', '')
-        if not iec_timestamp:
-            iec_timestamp = record.get('iec_timestamp', '')
-
-        return {
-            **record,
-            'neighborhood': neighborhood,
-            'neighborhood_id': neighborhood,
-            'iec_strategy': strategy,
-            'iec_confidence': confidence,
-            'iec_severity': severity,
-            'iec_anomaly_rate': is_anomaly,
-            'iec_violation_rate': has_violation,
-            'iec_score': score,
-            'iec_delta': delta,
-            'drifts_detected': [],
-            'drift_count': 0,
-            'drift_assessment': severity,
-            'iec_timestamp': iec_timestamp,
-        }
-
-
-class L1ValidSinkFunction(MapFunction):
-    def map(self, value):
-        if value is not None:
-            _emit_metric('records_valid_total', 1, {'layer': 'L1'}, 'counter')
         return value
 
 
@@ -377,15 +224,7 @@ class L1ValidSinkFunction(MapFunction):
 def make_unified_kafka_sink(bootstrap_servers):
     """Create a unified Kafka sink for all pipeline outputs.
 
-    ROOT CAUSE FIX #3: Consolidates 5 separate Kafka sinks into 1.
-    Each record is tagged with _event_type so consumers can filter.
-
-    Before: 6 Kafka sinks x 4 parallelism = 24 concurrent 2PC transactions
-    After:  1 Kafka sink x 4 parallelism = 4 concurrent transactions
-
-    With AT_LEAST_ONCE (acks=0), checkpoints complete instantly because
-    there is no 2-phase-commit overhead. MinIO keeps EXACTLY_ONCE for
-    audit compliance.
+    All event types are tagged with _event_type and routed through one producer.
     """
     props = {
         'bootstrap.servers': bootstrap_servers,
@@ -393,9 +232,7 @@ def make_unified_kafka_sink(bootstrap_servers):
         'batch.size': '65536',
         'buffer.memory': '134217728',
         'compression.type': 'lz4',
-        # ROOT CAUSE FIX #3: No 2PC overhead — checkpoints complete in <1s
         'acks': '0',
-        # Allow in-flight batches to be dropped on checkpoint flush
         'retries': '0',
     }
     return FlinkKafkaProducer(
@@ -406,20 +243,7 @@ def make_unified_kafka_sink(bootstrap_servers):
 
 
 class UnifiedKafkaSerializer(MapFunction):
-    """Tag and serialize every pipeline event into a single Kafka topic.
-
-    ROOT CAUSE FIX #3: Unified serialization ensures all outputs share
-    one producer transaction, eliminating the 24-way 2PC bottleneck.
-    """
-    _types = {
-        'dq-stream-processed':    'PROCESSED_RECORD',
-        'dq-stream-anomalies':   'ANOMALY_RECORD',
-        'dq-stream-processed-clean': 'CLEAN_RECORD',
-        'dq-meta-stream':        'META_RECORD',
-        'dq-metrics':            'METRICS_RECORD',
-        'dq-hard-rule-violations': 'SCHEMA_VIOLATION',
-    }
-
+    """Tag and serialize every pipeline event into a single Kafka topic."""
     def map(self, value):
         if value is None:
             return json.dumps({
@@ -451,7 +275,6 @@ def make_kafka_sink(topic, bootstrap_servers):
         'batch.size': '32768',
         'buffer.memory': '67108864',
         'compression.type': 'lz4',
-        # ROOT CAUSE FIX #3: No 2PC — fast checkpoint completion
         'acks': '0',
     }
     return FlinkKafkaProducer(
@@ -462,11 +285,7 @@ def make_kafka_sink(topic, bootstrap_servers):
 
 
 # =============================================================================
-# MINIO SINK FACTORIES
-# All data persisted to MinIO via CustomMinioUploader (native Python S3 API).
-# Buckets: cadqstream-raw, cadqstream-violations, cadqstream-anomalies,
-#          cadqstream-metrics, cadqstream-drift, cadqstream-checkpoints
-# Flush: 1000 records OR 10 seconds (whichever hits first).
+# MINIO SINK FACTORY FUNCTIONS
 # =============================================================================
 
 def make_raw_trips_sink():
@@ -490,9 +309,6 @@ def make_drift_events_sink():
 def make_alerts_sink():
     return create_alerts_sink()
 
-def make_pipeline_stats_sink():
-    return create_pipeline_stats_sink()
-
 
 # =============================================================================
 # HELPER MAP FUNCTIONS
@@ -504,13 +320,6 @@ class SafeParseJsonFunction(MapFunction):
     ROOT CAUSE FIX #2: When json.loads() fails, the raw string value is
     logged to the DLQ metrics endpoint AND a sentinel dict is returned so
     downstream operators never receive None.
-
-    The sentinel dict has _sentinel=True so it can be filtered to a DLQ
-    sink. Records that are not dicts after parsing are similarly DLQ-logged
-    and converted to sentinel dicts.
-
-    Previously: returned None silently, the record was dropped, and the issue
-    was invisible. Now: the raw data is captured so operators can diagnose.
     """
     _dlq_client = None
     _dlq_endpoint = 'http://cadqstream-metrics:9250/internal/metrics'
@@ -533,7 +342,6 @@ class SafeParseJsonFunction(MapFunction):
         except (json.JSONDecodeError, ValueError, TypeError) as e:
             SafeParseJsonFunction._parse_errors += 1
             if SafeParseJsonFunction._parse_errors <= 10:
-                import logging
                 logging.getLogger('cadqstream-l1').error(
                     "[SafeParseJson] FAIL #%d: %s raw=%s",
                     SafeParseJsonFunction._parse_errors,
@@ -550,7 +358,6 @@ class SafeParseJsonFunction(MapFunction):
             '_dlq_category': 'PARSE_ERROR',
             '_dlq_timestamp': '',
             '_dlq_operator': 'SafeParseJsonFunction',
-            '_dlq_dlq': True,
             'trip_id': f'dlq_parse_{reason[:30]}',
             'tpep_pickup_datetime': '',
         }
@@ -574,7 +381,6 @@ class SafeParseJsonFunction(MapFunction):
             pass
 
 
-# Legacy alias — kept so imports elsewhere still work
 ParseJsonFunction = SafeParseJsonFunction
 
 
@@ -589,7 +395,6 @@ class AddTripIdFunction(MapFunction):
                 'trip_id': 'dlq_null',
             }
         if not isinstance(record, dict):
-            import logging
             logging.getLogger('cadqstream-l1').error(
                 "[AddTripId] WARNING: expected dict got %s value=%s",
                 type(record).__name__, str(record)[:100]
@@ -606,6 +411,7 @@ class AddTripIdFunction(MapFunction):
 
 
 class ExtractNeighborhoodFunction(MapFunction):
+    """Extract neighborhood key and emit as (key, record) tuple for keyed windowing."""
     def map(self, record):
         if not isinstance(record, dict):
             return {
@@ -624,12 +430,7 @@ class ExtractNeighborhoodFunction(MapFunction):
 
 
 def _safe_to_json(record, serializer_fn, operator_name: str, fallback_reason: str):
-    """Common safe wrapper: never return None from serialization functions.
-
-    ROOT CAUSE FIX #2: Any serialization function that previously returned None
-    now returns a sentinel dict with _dlq=True. This prevents None from propagating
-    to MinIO/Kafka sinks which require string serialization.
-    """
+    """Common safe wrapper: never return None from serialization functions."""
     if not isinstance(record, dict):
         return json.dumps({
             '_dlq': True,
@@ -672,7 +473,12 @@ class ToSchemaViolationJson(MapFunction):
                 'kafka_partition': 0,
             }, default=str)
         ToSchemaViolationJson._counter += 1
-        return _safe_to_json(record, lambda r: record_to_schema_violation_json(r, ToSchemaViolationJson._counter), 'ToSchemaViolationJson', 'schema_violation')
+        return _safe_to_json(
+            record,
+            lambda r: record_to_schema_violation_json(r, ToSchemaViolationJson._counter),
+            'ToSchemaViolationJson',
+            'schema_violation'
+        )
 
 
 class ToCanaryViolationJson(MapFunction):
@@ -691,24 +497,12 @@ class ToDriftEventJson(MapFunction):
 
 
 class ToMetaMetricJson(MapFunction):
-    """Serialize a record to JSON for MinIO cadqstream-metrics/meta_metrics.
-
-    Handles records from both windowed aggregators (has window_start/window_end)
-    and iec_stream (has iec_timestamp instead).
-    """
     def map(self, record):
         return _safe_to_json(record, record_to_meta_metric_json, 'ToMetaMetricJson', 'meta_metric')
 
 
 class ToAlertJson(MapFunction):
-    """Serialize alert record to JSON for MinIO cadqstream-drift/alerts.
-
-    ROOT CAUSE FIX #2: Previously returned None for do_nothing, silently dropping
-    all non-drift alerts. Now returns a sentinel so the sink receives a valid
-    JSON string (the filter upstream decides whether to route).
-
-    Emits when: IEC detects drift OR executes non-do_nothing strategy.
-    """
+    """Serialize alert record to JSON for MinIO cadqstream-drift/alerts."""
     def map(self, record):
         if not isinstance(record, dict):
             return json.dumps({
@@ -766,21 +560,7 @@ class SerializeToJson(MapFunction):
 # =============================================================================
 
 def create_kafka_source(env, topic: str):
-    """Create a KafkaSource configured for unbounded streaming.
-
-    Task 1 - KafkaSource Refactoring (no batch-mode traps):
-      - Execution mode: STREAMING (enforced via env.set_runtime_mode)
-      - Starting offsets: EARLIEST (read all historical data)
-      - Auto.offset.reset: earliest
-      - Disable Kafka consumer offset commit on checkpoint
-        (state decoupling: Flink manages offsets via checkpoint, not Kafka)
-      - Commit offset: NONE (explicit -- no commit to Kafka brokers)
-      - Fetch sizes and poll intervals tuned for continuous drainage
-
-    Idempotence: With EARLIEST + no offset commit, restarting the pipeline
-    replays from the earliest unconsumed offset. Combined with DeduplicatorFunction
-    (7-day TTL), re-processed records are silently dropped.
-    """
+    """Create a KafkaSource configured for unbounded streaming."""
     bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
     consumer_group = os.getenv('KAFKA_CONSUMER_GROUP', 'cadqstream-complete-pipeline')
 
@@ -812,23 +592,20 @@ def create_kafka_source(env, topic: str):
 # =============================================================================
 
 def main():
-    """CA-DQStream Complete Pipeline — 4-layer streaming pipeline.
+    """CA-DQStream Sequential Pipeline — Phase 3.
 
-    Task 1 - Execution Mode Enforcement:
-      - STREAMING mode: explicitly set, prevents PyFlink default BATCH behavior
-      - No TumblingEventTimeWindows on VotingEnsemble (pure MapFunction, unbounded)
-      - WatermarkStrategy applied directly to KafkaSource for event-time bounding
-      - Offsets NOT committed to Kafka (state decoupling via checkpoint)
+    Sequential flow (no dual branch, no voting):
+      Layer 1 -> Layer 2 (Canary + MemStream) -> Layer 3 (MetaAggregator) -> Layer 4 (IEC)
 
-    Idempotence:
-      - kafka-init creates topics with --if-not-exists
-      - Flink deduplicator (7-day TTL) re-drops any re-processed records
-      - Flink-init skips submission if jobs already running
+    Key changes from Phase 2D:
+    - Removed VotingEnsembleFunction (no voting)
+    - Removed PerRecordIECOperator (replaced by IECOperator on windowed meta-metrics)
+    - Sequential decision: final_decision set directly from has_violation / is_anomaly
+    - MetaAggregator uses keyed TumblingEventTimeWindows per neighborhood
+    - IECOperator receives windowed format {nb: {metrics}}, not per-record
     """
     env = StreamExecutionEnvironment.get_execution_environment()
-
     env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
-
     env.set_parallelism(4)
 
     from pyflink.datastream import ExternalizedCheckpointCleanup
@@ -842,11 +619,8 @@ def main():
         ExternalizedCheckpointCleanup.RETAIN_ON_CANCELLATION
     )
     checkpoint_config.disable_unaligned_checkpoints()
-    # ROOT CAUSE FIX #3: Fail-fast checkpoint config is set via docker-compose.yml
-    # (restart-strategy: fixed-delay, tolerable-failed-checkpoints: 0)
-    # Python-level config is overridden by cluster-level config in this deployment.
 
-    # ── Layer 1: Baseline Validation ───────────────────────────────────
+    # ── Layer 1: Ingestion & Validation ─────────────────────────────────
     kafka_source = create_kafka_source(env, 'taxi-nyc-raw-v2')
     stream = env.add_source(kafka_source)
 
@@ -871,8 +645,6 @@ def main():
         .process(ConsecutiveRecordsFilter())
     )
 
-    # Separate valid records from DLQ records (ConsecutiveRecordsFilter returns
-    # sentinel dicts for malformed input, not None)
     class DlqFilter(FilterFunction):
         def filter(self, record):
             return isinstance(record, dict) and record.get('_dlq') is True
@@ -899,66 +671,46 @@ def main():
     valid_stream = valid_after_dedup.filter(ValidFilter())
     violation_stream = valid_after_dedup.filter(InvalidFilter())
 
-    # ── Layer 2: Sequential Processing ──────────────────────────────────
-    # canary_stream: appends canary_flags (has_violation, canary_violations list)
-    # ml_stream: receives the SAME record, appends ml_score (anomaly_score, is_anomaly)
-    # Both operators mutate the record in-place — VotingEnsemble sees ONE record
-    # with both canary and ML contexts for the final decision.
-    canary_stream = valid_stream.map(CanaryRulesValidator())
+    # ── Layer 2: Sequential Processing (Canary -> MemStream) ────────────
+    # Canary: appends has_violation, canary_violations
+    layer2_stream = valid_stream.map(CanaryRulesValidator())
 
-    ml_stream = canary_stream.map(MemStreamScoringOperator())
+    # MemStream: appends anomaly_score, is_anomaly, neighborhood, etc.
+    # Also polls MinIO for retrain signals every RETAIN_SIGNAL_POLL_INTERVAL records
+    layer2_stream = layer2_stream.map(MemStreamScoringOperator())
 
-    # ── Layer 3: Voting Ensemble (single input stream) ──────────────────
-    voting_stream = ml_stream.map(VotingEnsembleFunction())
+    # Add sequential final_decision (no voting — Canary OR ML anomaly)
+    layer2_stream = layer2_stream.map(SequentialFinalDecisionFunction())
 
-    # Layer 3 metrics: voting decisions (per-record)
-    voting_stream \
-        .filter(lambda x: x is not None) \
-        .map(L3ValidSinkFunction())
+    # Layer 2 metrics
+    layer2_stream.map(L2ValidSinkFunction())
 
-    # ── Layer 3b: Meta-Metrics (bypassing broken count_window) ────────────
-    # Windowing was broken due to PyFlink limitations with keyed count windows.
-    # Root Cause Fix #3: Use PerRecordIECOperator instead of IECOperator.
-    # Original IECOperator expects per-window format {nb: {metrics}} from
-    # TumblingEventTimeWindows, but this pipeline feeds individual voting records.
-    # The window format check fails silently → all strategies return do_nothing.
-    # PerRecordIECOperator accepts flat per-record format and aggregates internally.
-    from src.operators.meta_aggregator import (
-        extract_neighborhood_key
+    # ── Layer 3: MetaAggregator (1-min window per neighborhood) ───────────
+    # Key by neighborhood -> 1-min tumbling window -> aggregate -> process
+    meta_window_stream = (
+        layer2_stream
+        .map(ExtractNeighborhoodFunction())
+        .key_by(lambda x: x[0], key_type=Types.STRING())
+        .window(TumblingEventTimeWindows.of(Time.minutes(1)))
+        .aggregate(
+            MetaAggregateFunction(),
+            window_function=MetaWindowProcessFunction(),
+        )
     )
 
-    # ── Layer 4: IEC ───────────────────────────────────────────────────
-    # Root Cause Fix #3: Use per-record IEC operator.
-    # Root Cause Fix #4: PerRecordIECOperator does NOT spread raw record fields
-    # into iec_decision (no field collision with IEC keys like drifts_detected).
-    iec_stream = voting_stream.map(PerRecordIECOperator())
+    # Layer 3 metrics
+    meta_window_stream.map(MetaSinkFunction())
 
-    # ── Layer 4 Metrics: emit from iec_stream ──────────────────────────
-    # Use a separate L4 metrics function on voting_stream for L4_valid_total
-    # since iec_stream may produce fewer records (e.g., on errors).
-    # The flat_map below emits per micro-batch call, which is the best
-    # PyFlink can do for per-record emission in practice.
+    # ── Layer 4: IEC (windowed meta-metrics -> 2 strategies) ──────────────
+    # IECOperator expects {neighborhood: {metrics}} format — meta_window_stream
+    # produces flat records with neighborhood_id field, which IECOperator converts
+    iec_stream = meta_window_stream.map(IECOperator())
 
+    # Layer 4 metrics
+    iec_stream.map(L4MetricsFunction())
+
+    # ── Kafka Unified Sink ────────────────────────────────────────────────
     BOOTSTRAP = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
-
-    # CustomMinioUploader is a MapFunction, not SinkFunction — use .map() not .add_sink()
-
-    # ── Kafka Sinks ───────────────────────────────────────────────────
-    # ROOT CAUSE FIX #3: TRUE sink consolidation — ONE unified sink for ALL outputs.
-    #
-    # BEFORE: 6 separate add_sink() calls, each creating a separate sink writer node
-    # in the Flink DAG, even though they all wrote to the same topic. This multiplied
-    # the per-checkpoint state management overhead across 6 writer threads.
-    #
-    # AFTER: All outputs are tagged with _event_type, merged into a single stream,
-    # and routed through ONE FlinkKafkaProducer instance to ONE sink node.
-    # The single producer uses batch.size=65536 and linger.ms=5 for throughput,
-    # and acks=0 so checkpoint barriers complete instantly (no 2PC).
-    #
-    # All event type tags:
-    #   PROCESSED_RECORD, CLEAN_RECORD, CANARY_ANOMALY, ML_ANOMALY,
-    #   VOTING_DECISION, IEC_DECISION, DLQ_RECORD
-
     unified_sink = make_unified_kafka_sink(BOOTSTRAP)
     unified_serializer = UnifiedKafkaSerializer()
 
@@ -968,15 +720,21 @@ def main():
             .map(unified_serializer)
 
     merged_kafka = _tag_stream(valid_stream, 'PROCESSED_RECORD')
-    merged_kafka = merged_kafka.union(_tag_stream(canary_stream.filter(ViolationFilter()), 'CANARY_ANOMALY'))
-    merged_kafka = merged_kafka.union(_tag_stream(canary_stream.filter(CleanRecordFilter()), 'CLEAN_RECORD'))
-    merged_kafka = merged_kafka.union(_tag_stream(ml_stream.filter(lambda r: r is not None and r.get('is_anomaly', False)), 'ML_ANOMALY'))
-    merged_kafka = merged_kafka.union(_tag_stream(voting_stream, 'VOTING_DECISION'))
+    merged_kafka = merged_kafka.union(
+        _tag_stream(layer2_stream.filter(ViolationFilter()), 'CANARY_VIOLATION')
+    )
+    merged_kafka = merged_kafka.union(
+        _tag_stream(
+            layer2_stream.filter(lambda r: r is not None and r.get('is_anomaly', False)),
+            'ANOMALY_RECORD'
+        )
+    )
+    merged_kafka = merged_kafka.union(_tag_stream(meta_window_stream, 'META_RECORD'))
     merged_kafka = merged_kafka.union(_tag_stream(iec_stream, 'IEC_DECISION'))
 
     merged_kafka.add_sink(unified_sink)
 
-    # ── MinIO Sinks (CustomMinioUploader — native Python S3 API, no S3A/2PC) ──
+    # ── MinIO Sinks ───────────────────────────────────────────────────────
     # Layer 1: schema violations
     violation_stream \
         .map(L1ViolationSinkFunction()) \
@@ -990,34 +748,34 @@ def main():
         .map(make_raw_trips_sink())
 
     # Layer 2: canary violations
-    canary_stream.filter(ViolationFilter()) \
+    layer2_stream.filter(ViolationFilter()) \
+        .map(CanaryViolationSinkFunction()) \
         .map(ToCanaryViolationJson()) \
         .map(make_canary_violations_sink())
 
     # Layer 2: ML anomaly scores
-    ml_stream.filter(lambda r: r is not None and r.get('is_anomaly', False)) \
+    layer2_stream.filter(lambda r: r is not None and r.get('is_anomaly', False)) \
+        .map(MLAnomalySinkFunction()) \
         .map(ToAnomalyScoreJson()) \
         .map(make_anomaly_scores_sink())
 
-    # Layer 3: voting decisions -> MinIO cadqstream-metrics
-    voting_stream \
-        .map(L3ValidSinkFunction()) \
+    # Layer 3: windowed meta-metrics -> MinIO cadqstream-metrics
+    meta_window_stream \
         .map(ToMetaMetricJson()) \
         .map(make_meta_metrics_sink())
 
-    # Layer 4: IEC drift events
+    # Layer 4: IEC decisions -> MinIO cadqstream-drift
     iec_stream \
-        .map(L4MetricsFunction()) \
         .map(ToDriftEventJson()) \
         .map(make_drift_events_sink())
 
-    # Layer 4: IEC alerts (drift detected OR non-do_nothing strategy)
+    # Layer 4: IEC alerts (drift detected OR quick_retrain strategy)
     iec_stream \
         .map(ToAlertJson()) \
         .map(make_alerts_sink())
 
     LOGGER.info("Submitting job to Flink cluster...")
-    env.execute("CA-DQStream Complete Pipeline - 4 Layers")
+    env.execute("CA-DQStream Sequential Pipeline - Phase 3")
 
 
 if __name__ == "__main__":

@@ -13,20 +13,18 @@ from src.ml.memstream_core import (
     MemStreamCore,
     MemStreamConfig,
     MemStreamAE,
-    MemoryModule,
-    ContextBeta,
     SimpleADWIN,
     BARController,
     set_determinism,
 )
+from src.ml.memstream_context_beta import ContextBeta
 
 __all__ = [
     'MemStreamCore',
     'MemStreamConfig',
     'MemStreamAE',
-    'MemoryModule',
-    'ContextBeta',
     'SimpleADWIN',
     'BARController',
     'set_determinism',
+    'ContextBeta',
 ]

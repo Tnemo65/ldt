@@ -202,39 +202,7 @@ docker exec ldt-minio mc ls local/ 2>$null | ForEach-Object {
 }
 
 # =============================================================================
-# PHASE 5: TRAIN ML MODEL
-# =============================================================================
-Write-Banner "PHASE 5: Train ML Model"
-
-if (-not $SkipTraining) {
-    Write-Step "Training IsolationForest model (50K synthetic trips)..."
-    $trainResult = docker exec ldt-flink-jobmanager bash -c "
-        cd /opt/flink/e2e &&
-        python3 deployment/scripts/train_model.py --version v1 --n-samples 50000 --n-estimators 100 2>&1
-    " 2>$null
-
-    if ($trainResult -match "Training Complete" -or $LASTEXITCODE -eq 0) {
-        Write-Host "  [OK] Model trained and uploaded to MinIO." -ForegroundColor Green
-    } else {
-        Write-Host "  [WARN] Training output (first 5 lines):" -ForegroundColor Yellow
-        $trainResult -split "`n" | Select-Object -First 5 | ForEach-Object { Write-Host "    $_" }
-    }
-
-    Write-Step "Broadcasting model to Kafka (if-model-updates topic)..."
-    $loadResult = docker exec ldt-flink-jobmanager bash -c "
-        cd /opt/flink/e2e &&
-        python3 deployment/scripts/load_model_to_broadcast.py --version v1 --bootstrap kafka:9092 2>&1
-    " 2>$null
-
-    if ($loadResult -match "SUCCESS" -or $LASTEXITCODE -eq 0) {
-        Write-Host "  [OK] Model broadcast to Kafka." -ForegroundColor Green
-    } else {
-        Write-Host "  [WARN] Broadcast: $($loadResult | Select-Object -First 3)" -ForegroundColor Yellow
-    }
-} else {
-    Write-Host "  [SKIP] Model training skipped (-SkipTraining)."
-}
-
+# PHASE 5: SKIPPED (ML model training removed - use MemStream training instead)
 # =============================================================================
 # PHASE 6: SUBMIT FLINK JOB
 # =============================================================================

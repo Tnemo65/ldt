@@ -1,7 +1,7 @@
 # =============================================================================
 # CA-DQStream Production Deployment - docker-compose.yml
-# Architecture: 4-Layer streaming pipeline (Baseline -> Dual-Branch ->
-#               Rendezvous+Meta -> IEC) on Apache Flink 1.18.1
+# Architecture: 4-Layer Sequential Pipeline (Layer1 -> Canary -> MemStream ->
+#               MetaAggregator -> IEC) on Apache Flink 1.18.1
 # Run: docker compose -f deployment/docker-compose.yml up -d
 # =============================================================================
 
@@ -613,9 +613,9 @@ services:
           memory: 512M
 
   # =============================================================================
-  # LAYER 5b: Action Replay Worker — retries failed IEC actions
-  # Consumes from: iec-action-replay
-  # Executes via: ml-service:8000
+  # LAYER 5b: Action Replay Worker — Phase 3 Sequential Pipeline retrain handler
+  # Consumes from: iec-action-replay (quick_retrain signals)
+  # Calls: ml-service:8000/api/retrain on retrain signal
   # DLQ: iec-action-dlq after 10 retries
   # =============================================================================
 

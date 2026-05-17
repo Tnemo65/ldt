@@ -328,7 +328,7 @@ echo ""
 
 log_ok "Deployment complete. Check Grafana dashboards for pipeline monitoring."
 echo ""
-echo "  To check health:    bash deployment/scripts/check-health.sh"
+echo "  To check health:    bash deployment/scripts/healthcheck.sh"
 echo "  To stop stack:      bash deployment/scripts/stop.sh"
 echo "  To view logs:       docker compose -f deployment/docker-compose.yml logs -f [service]"
 echo "  To restart:         bash deployment/scripts/start.sh"

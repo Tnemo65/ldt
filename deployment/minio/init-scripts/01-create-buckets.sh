@@ -46,10 +46,7 @@ mc mb "${MC_ALIAS}/cadqstream-drift" --ignore-existing
 # DLQ bucket for action-replay-worker
 mc mb "${MC_ALIAS}/cadqstream-dlq" --ignore-existing
 
-# ── Legacy zone buckets (stats-writer, etc.) ──
-mc mb "${MC_ALIAS}/raw-zone" --ignore-existing
-mc mb "${MC_ALIAS}/quarantine-zone" --ignore-existing
-mc mb "${MC_ALIAS}/clean-zone" --ignore-existing
+# Legacy zone buckets removed — unused (cadqstream-dlq used by action-replay-worker via Kafka)
 
 # ── ML platform ──
 mc mb "${MC_ALIAS}/ml-models" --ignore-existing

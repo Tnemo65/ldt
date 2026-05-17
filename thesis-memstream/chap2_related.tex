@@ -1,20 +1,6 @@
 \chapter{RELATED WORK}
 
-% ================================================
-\section{Overview}
-% ================================================
-
-The streaming data quality monitoring landscape spans three interconnected research communities that have developed largely in isolation. First, the data engineering community has built operational frameworks for validating streaming pipelines (Great Expectations, Soda Core, Confluent, Grab Coban), focusing on schema enforcement, rule-based validation, and syntactic checks. Second, the machine learning community has developed algorithms for detecting anomalies and adapting to concept drift in data streams (MemStream, ADWIN, SCAR benchmark), focusing on statistical learning and online model adaptation. Third, the context-aware systems community has explored how spatial, temporal, and behavioral context influences anomaly detection (BeSTAD, ICAD, ReAD, DTD), focusing on multi-dimensional thresholding and adaptive quality standards.
-
-Each community addresses a distinct facet of the streaming DQ problem, yet no existing work synthesizes all three: learning what constitutes normal behavior, adapting to distribution shifts over time, and calibrating expectations to the specific context of each observation. CA-DQStream bridges these communities by integrating context-aware thresholding, memory-augmented anomaly detection, and multi-strategy drift adaptation into a unified system. This chapter reviews the relevant literature across seven thematic areas, identifies specific gaps that CA-DQStream addresses, and provides the empirical and theoretical foundations for the research questions examined in subsequent chapters.
-
-% ================================================
-\section{Batch-Oriented Data Quality Frameworks}
-% ================================================
-
-Traditional data quality frameworks have focused primarily on batch processing contexts, where data is collected and validated in predefined intervals. Great Expectations, AWS Deequ, and Soda Core represent the state-of-the-art in open-source batch-oriented data quality frameworks, providing comprehensive suites of validation rules, statistical checks, and monitoring capabilities for data pipelines \citep{dama2017dmbok}. Great Expectations enables practitioners to define expectations as Python code, validating column statistics, value ranges, and cross-column relationships within static datasets. AWS Deequ, developed at Amazon, provides Scala-based constraints that scale to large Spark DataFrames, with automated constraint suggestion from historical data. Soda Core, the open-source engine behind SodaSQL and Soda Cloud, uses YAML-defined checks with SQL-based assertions against data warehouses.
-
-These frameworks excel at detecting schema violations, constraint violations, and statistical anomalies within static or periodically refreshed datasets, and have achieved widespread adoption in enterprise data engineering teams. However, their architectural assumptions fundamentally conflict with streaming contexts: they require complete datasets before validation, cannot operate on individual records as they arrive, and provide no mechanisms for online adaptation to concept drift. The fundamental limitation is epistemological: batch DQ frameworks assume that data is a fixed corpus to be audited retrospectively, whereas streaming DQ requires treating data as an unbounded flow to be evaluated in real time.
+This chapter surveys the relevant literature across four interconnected areas that inform CA-DQStream's design. Section 2.1 reviews streaming data quality monitoring frameworks. Section 2.2 covers concept drift handling in ML systems. Section 2.3 addresses context-aware anomaly detection. Section 2.4 examines memory-based streaming anomaly detection. Section 2.5 summarizes the chapter.
 
 % ================================================
 \section{Streaming Data Quality Monitoring}
@@ -30,7 +16,19 @@ Recent work has extended data quality monitoring to streaming contexts, addressi
 
 \textbf{Rapidash} addresses complex multi-record violations using spatial indexing for streaming contexts, extending the scope of streaming DQ to multi-record consistency checks.
 
-The streaming DQ landscape reveals significant gaps. No existing framework combines ML-based multivariate anomaly detection with context-aware thresholding, fork-join pipeline architecture, and multi-strategy drift adaptation in a unified system. \autoref{tab:dq_framework_comparison_related} provides a qualitative comparison.
+The streaming DQ landscape reveals significant gaps. No existing framework combines ML-based multivariate anomaly detection with context-aware thresholding, fork-join pipeline architecture, and multi-strategy drift adaptation in a unified system. Production deployments of streaming platforms provide additional architectural insights and operational benchmarks.
+
+\textbf{Grab's Signals Marketplace} implements a data mesh architecture for a ride-hailing, food delivery, and financial services platform serving 800 cities across 8 Southeast Asian countries \citep{grab_streaming_dq}. The platform introduces data certification with SLA guarantees, where certified data assets carry formal schema contracts and completeness/freshness commitments. Deprecated tables increased 400\% year-over-year after data mesh adoption, and 75\% of Grab queries now hit certified assets, demonstrating the operational impact of formal DQ governance.
+
+\textbf{Grab's Trailblazer CDC Pipeline} demonstrates Change Data Capture via MySQL binlogs using Debezium on Kafka Connect, with Spark Structured Streaming persisting to a petabyte-scale data lake \citep{grab_streaming_dq}. The architecture (binlog $\rightarrow$ Debezium $\rightarrow$ Kafka $\rightarrow$ Spark $\rightarrow$ data lake) serves as a reference topology for streaming pipeline instrumentation. A DASH (Data Auditor as a Service) component performs hourly checks comparing ID counts between source databases and the streaming layer.
+
+\textbf{Grab's FlinkSQL Interactive Platform} demonstrates a three-layer architecture (Compute, Integration, Query) for deploying streaming pipelines at scale \citep{grab_streaming_dq}. Cold start reduced from 5 minutes to 1 minute through shared cluster strategies. Full pipeline deployment completes in under 10 minutes. The three-layer separation of concerns (infrastructure vs. integration logic vs. query interface) informs the modular design of CA-DQStream's processing pipeline.
+
+\textbf{Grab's AutoMQ Migration} demonstrates shared-storage Kafka architecture achieving 3$\times$ throughput increase and 3$\times$ cost efficiency improvement over traditional Kafka deployments \citep{grab_streaming_dq}. Partition reassignment time dropped from 6 hours to under 1 minute through metadata-only synchronization.
+
+\textbf{Vimeo} reports that batch validation introduced a one-day delay before insights reached analytics teams, limiting real-time decision-making and quick pivots after launches and campaigns \citep{confluent_2025}. This operational cost of batch-oriented DQ validation motivates the shift to streaming-first quality monitoring. The Confluent 2025 Data Streaming Report surveys global streaming adoption, finding that only approximately 1\% of companies have reached the highest streaming maturity level where data streams are treated as managed products with strategic quality guarantees \citep{confluent_2025_streaming_report}.
+
+\autoref{tab:dq_framework_comparison_related} provides a qualitative comparison of CA-DQStream against existing frameworks.
 
 \begin{longtable}{|m{2.8cm}|m{2cm}|m{1.6cm}|m{1.6cm}|m{1.6cm}|m{1.8cm}|}
 \hline
@@ -42,28 +40,10 @@ Stream DaQ & Streaming & \ding{55} & \checkmark & \ding{55} & \ding{55} \\ \hlin
 MemStream & Streaming & \checkmark & \checkmark & \ding{55} & \checkmark \\ \hline
 MStream & Streaming & \checkmark & \checkmark & \ding{55} & \checkmark \\ \hline
 IForestASD & Streaming & \checkmark & \checkmark & \ding{55} & \checkmark \\ \hline
-\textbf{CA-DQStream (Ours)} & \textbf{Streaming} & \textbf{\checkmark} & \textbf{\checkmark} & \textbf{\checkmark} & \textbf{\checkmark} \\ \hline
+CA-DQStream & Streaming & \checkmark & \checkmark & \checkmark & \checkmark \\ \hline
 \caption{Qualitative comparison of CA-DQStream against existing DQ frameworks.}
 \label{tab:dq_framework_comparison_related}
 \end{longtable}
-
-% ================================================
-\section{Industrial Streaming Platforms and Case Studies}
-% ================================================
-
-Beyond academic frameworks, production deployments of streaming platforms provide architectural insights and operational benchmarks for streaming DQ systems.
-
-\textbf{Grab's Signals Marketplace} implements a data mesh architecture for a ride-hailing, food delivery, and financial services platform serving 800 cities across 8 Southeast Asian countries \citep{grab_streaming_dq}. The platform introduces data certification with SLA guarantees, where certified data assets carry formal schema contracts and completeness/freshness commitments. Deprecated tables increased 400\% year-over-year after data mesh adoption, and 75\% of Grab queries now hit certified assets, demonstrating the operational impact of formal DQ governance. The platform's Genchi observability tool and Hubble metadata management system (built on DataHub) provide the monitoring infrastructure that complements automated validation.
-
-\textbf{Grab's Trailblazer CDC Pipeline} demonstrates Change Data Capture via MySQL binlogs using Debezium on Kafka Connect, with Spark Structured Streaming persisting to a petabyte-scale data lake \citep{grab_streaming_dq}. The architecture (binlog $\rightarrow$ Debezium $\rightarrow$ Kafka $\rightarrow$ Spark $\rightarrow$ data lake) serves as a reference topology for streaming pipeline instrumentation. A DASH (Data Auditor as a Service) component performs hourly checks comparing ID counts between source databases and the streaming layer, operationalizing the source-vs-stream discrepancy detection concept. This CDC architecture provides the ingestion topology that CA-DQStream's evaluation framework assumes.
-
-\textbf{Grab's FlinkSQL Interactive Platform} demonstrates a three-layer architecture (Compute, Integration, Query) for deploying streaming pipelines at scale \citep{grab_streaming_dq}. Cold start reduced from 5 minutes to 1 minute through shared cluster strategies. Full pipeline deployment completes in under 10 minutes. The three-layer separation of concerns (infrastructure vs. integration logic vs. query interface) informs the modular design of CA-DQStream's processing pipeline.
-
-\textbf{Grab's AutoMQ Migration} demonstrates shared-storage Kafka architecture achieving 3$\times$ throughput increase and 3$\times$ cost efficiency improvement over traditional Kafka deployments \citep{grab_streaming_dq}. Partition reassignment time dropped from 6 hours to under 1 minute through metadata-only synchronization. This demonstrates that storage-compute separation benefits streaming DQ systems where metadata-only partition reassignment enables faster fault recovery.
-
-\textbf{Grab's Zeppelin Integration} explores SQL queries on Kafka topics without full pipeline deployment, demonstrating the exploratory analysis layer needed before deploying production DQ monitors \citep{grab_streaming_dq}. Schema visibility at the Kafka stage (e.g., detecting country code format inconsistencies) validates the need for pre-deployment data profiling before quality thresholds are calibrated.
-
-\textbf{Vimeo} reports that batch validation introduced a one-day delay before insights reached analytics teams, limiting real-time decision-making and quick pivots after launches and campaigns \citep{confluent_2025}. This operational cost of batch-oriented DQ validation motivates the shift to streaming-first quality monitoring.
 
 % ================================================
 \section{Concept Drift Handling in ML Systems}
@@ -73,15 +53,11 @@ Concept drift handling is a well-studied problem in machine learning, with a ric
 
 \textbf{Baier et al.} proposed a switching scheme combining periodic retraining with triggered incremental updates, demonstrating that NYC taxi demand is particularly susceptible to incremental drift due to weather, events, and economic factors \citep{baier2020switching}. Their scheme compared ADWIN, STEPD, and HDDDM, finding that any drift detection strategy outperforms no strategy, though differences between specific strategies are significant only under certain drift characteristics.
 
-\textbf{The SCAR benchmark} provides the most comprehensive evaluation of streaming anomaly detection under concept drift, testing 9 streaming algorithms and 4 adapted static baselines across 76 synthesized and 74 real-world datasets \citep{scar2025benchmark}. Key findings include: (1) no single algorithm statistically dominates; (2) adapted static baselines (iForest, LOF, iNNE, IDK) with reconstruction strategies rank among top performers; (3) model update strategy matters more than algorithm choice; and (4) MemStream underperforms on high-dimensional data.
+\textbf{DTD (Dynamic Threshold Determination)} formally proves that fixed thresholds are suboptimal and demonstrates that DTD-enhanced HDDM-W achieves 58.31\% accuracy versus 48.64\% with fixed thresholds on the Airline dataset \citep{dtd_2026}. The three theorems establish: (1) perfect detection (zero false alarms, zero delay) may not be optimal; (2) no single fixed threshold is universally optimal; and (3) a dynamic threshold strategy strictly outperforms any fixed threshold.
 
-\textbf{DTD (Dynamic Threshold Determination)} formally proves that fixed thresholds are suboptimal and demonstrates that DTD-enhanced HDDM-W achieves 58.31\% accuracy versus 48.64\% with fixed thresholds on the Airline dataset \citep{dtd2026}. The three theorems establish: (1) perfect detection (zero false alarms, zero delay) may not be optimal; (2) no single fixed threshold is universally optimal; and (3) a dynamic threshold strategy strictly outperforms any fixed threshold.
+\textbf{Multi-strategy drift adaptation} represents an emerging frontier. Rather than applying a uniform response to all drift events, these approaches classify drift type and severity, then select appropriate strategies. METER (MEta-learning-based adapTER) uses an MLP hypernetwork trained on historical drift patterns to predict optimal K-Means centroid displacements from current meta-metrics \citep{meter_2023}, providing the algorithmic foundation for moderate drift adaptation where cluster boundaries shift but overall structure remains. The SCAR benchmark provides the most comprehensive evaluation of streaming anomaly detection under concept drift, testing 9 streaming algorithms and 4 adapted static baselines across 76 synthesized and 74 real-world datasets \citep{scar2025benchmark}. Key findings include: (1) no single algorithm statistically dominates; (2) adapted static baselines (iForest, LOF, iNNE, IDK) with reconstruction strategies rank among top performers; (3) model update strategy matters more than algorithm choice; and (4) MemStream underperforms on high-dimensional data. CA-DQStream's Intelligent Evolution Controller extends multi-strategy adaptation with four complementary strategies (Continuous Evolution, Switching, METER, Spatial Tracking) selected dynamically based on drift characteristics.
 
-\textbf{Multi-strategy drift adaptation} represents an emerging frontier. Rather than applying a uniform response to all drift events, these approaches classify drift type and severity, then select appropriate strategies. CA-DQStream's Intelligent Evolution Controller extends this with four complementary strategies (Continuous Evolution, Switching, METER, Spatial Tracking).
-
-% ================================================
-\subsection{ADWIN Variants for Scalable Drift Detection}
-% ================================================
+\section{ADWIN Variants for Scalable Drift Detection}
 
 Several ADWIN variants address specific practical challenges in production deployment.
 
@@ -97,7 +73,7 @@ Several ADWIN variants address specific practical challenges in production deplo
 \section{Context-Aware Anomaly Detection}
 % ================================================
 
-Context-aware anomaly detection conditions the notion of anomalousness on the context in which observations occur. Foundational work by Dey established the theoretical framework for context-awareness in computing systems \citep{dey2001understanding}, while subsequent work has explored context-aware approaches in sensor networks, financial fraud detection, and healthcare monitoring. In data quality, the key insight is that threshold values for detecting anomalies must be calibrated to the specific context of each observation, not applied uniformly across heterogeneous data streams. Systematic literature reviews have identified context as a critical but under-defined concept in DQ management \citep{contextdq2022}. DTD formally proves that no single fixed threshold can be universally optimal across all data segments \citep{dtd2026}.
+Context-aware anomaly detection conditions the notion of anomalousness on the context in which observations occur. Foundational work by Dey established the theoretical framework for context-awareness in computing systems \citep{dey2001understanding}, while subsequent work has explored context-aware approaches in sensor networks, financial fraud detection, and healthcare monitoring. In data quality, the key insight is that threshold values for detecting anomalies must be calibrated to the specific context of each observation, not applied uniformly across heterogeneous data streams. Systematic literature reviews have identified context as a critical but under-defined concept in DQ management \citep{contextdq2022}. DTD formally proves that no single fixed threshold can be universally optimal across all data segments \citep{dtd_2026}.
 
 \textbf{Multi-dimensional thresholding approaches} partition the feature space into regions and compute separate detection parameters for each region. These can be implemented through decision trees (leaf nodes as context-specific thresholds), mixture models (components as sub-populations), or explicit context matrices. \textbf{ReAD (Regional Anomaly Detection)} uses dynamic partitioning based on Delaunay triangulation, computing thresholds that adapt to local data density through a relative divergence metric \citep{read2020}. The key insight is that the same absolute value is interpreted differently depending on neighboring regions: high ridership in a city center is normal, but the same value in a suburban area is anomalous. This relative interpretation mirrors the context-aware principle that quality thresholds must be calibrated to local conditions.
 
@@ -109,9 +85,7 @@ Context-aware anomaly detection conditions the notion of anomalousness on the co
 
 The primary limitation across all existing approaches is reliance on manual threshold specification: practitioners must manually define thresholds for each context cell, leading to scalability challenges as context dimensions grow. No existing framework provides automated threshold computation from training data combined with intelligent fallback for sparse contexts and drift-aware recalibration.
 
-% ================================================
-\section{Anomaly Detection Methods and Benchmarks}
-% ================================================
+\subsection{Anomaly Detection Methods and Benchmarks}
 
 A comprehensive benchmark literature provides the methodological foundation for evaluating streaming anomaly detection systems.
 

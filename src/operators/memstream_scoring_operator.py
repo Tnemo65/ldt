@@ -1,5 +1,5 @@
 """
-MemStream Scoring Operator for Layer 2 Complex Branch (Phase 2C).
+MemStream Scoring Operator for Layer 2 Complex Branch (Phase 3: Sequential Pipeline).
 
 Replaces IsolationForest with real MemStream scoring:
 - 34D FeatureVectorizer
@@ -7,32 +7,32 @@ Replaces IsolationForest with real MemStream scoring:
 - ContextBeta (80 thresholds: 10 neighborhoods x 8 context cells)
 - ADWIN per neighborhood (10 instances)
 - Conditional memory updates (normal points only)
+- Auto-update memory when score < beta
+
+Phase 3 Changes:
+- Sequential pipeline (no dual branch, no voting)
+- IEC sends retrain signals to MinIO: cadqstream-drift/iec/retrain/{nb}/{ts}.json
+- MemStreamScoringOperator polls for retrain signals and handles them:
+    - Resets memory for affected neighborhood
+    - Clears warmup buffer and re-triggers warmup
+- Beta threshold polling from MinIO remains (read-only monitoring)
 
 Pipeline Flow:
-  taxi-nyc-raw -> Layer1 validation -> dq-stream-processed
-  dq-stream-processed -> CanaryRulesValidator -> dq-stream-processed-clean
-  dq-stream-processed-clean -> MemStreamScoringOperator -> anomaly scores
+  Kafka taxi-nyc-raw-v2
+    -> Layer1 (Parse/Dedup/Schema)
+    -> CanaryRulesValidator (7 rules)
+    -> MemStreamScoringOperator (AE + Memory + retrain signal polling)
+    -> MetaAggregator (1-min window per neighborhood)
+    -> IEC (ADWIN drift + 2 scenarios: do_nothing / quick_retrain)
 
 Usage:
-  memstream_stream = clean_stream.map(MemStreamScoringOperator(config))
+  memstream_stream = valid_stream.map(MemStreamScoringOperator(config))
 
 Architecture:
-- MapFunction (NOT BroadcastProcessFunction) with runtime_context.get_state()
-- Memory state persisted via Flink ValueState for checkpoint recovery
-- Beta thresholds polled from MinIO (IECDecisionMapper writes them)
-- HMAC verification on all model/beta loading
-
-Kafka Topics (from 01-create-topics.sh):
-  Input:         taxi-nyc-raw
-  Processed:     dq-stream-processed
-  Anomalies:     dq-stream-anomalies
-  Canary clean:  dq-stream-processed-clean
-  Violations:    dq-hard-rule-violations
-  IEC:           dq-meta-stream
-  IF model:      if-model-updates (1 partition → increase to 4)
-  MemStream:     memstream-model-updates:4:1  (NEW)
-
-Flink: env.set_parallelism(1) for initial migration.
+- MapFunction with Flink ValueState for memory checkpoint recovery
+- Memory state persisted via Flink ValueState
+- Retrain signals polled from MinIO with HMAC verification
+- Beta thresholds polled from MinIO with HMAC verification
 """
 
 from pyflink.datastream import MapFunction
@@ -107,6 +107,11 @@ CHECKPOINT_PREFIX = os.getenv('MEMSTREAM_CHECKPOINT_PREFIX', 'checkpoints/memstr
 BETA_CACHE_TTL_SECONDS = 1.0  # 1.1s max staleness acceptable
 BETA_MAX_STALENESS_SECONDS = 1.1  # Alert threshold for metrics
 
+# Retrain signal polling (Phase 3: Sequential Pipeline)
+RETAIN_SIGNAL_POLL_INTERVAL = 60   # Poll every N records (to avoid overhead)
+RETAIN_SIGNAL_BUCKET = 'cadqstream-drift'
+RETAIN_SIGNAL_PREFIX = 'iec/retrain/'
+
 # Default MemStream config (production, v10 benchmark)
 DEFAULT_CONFIG = {
     'in_dim': 34,
@@ -119,6 +124,7 @@ DEFAULT_CONFIG = {
     'warmup_batch_size': 256,
     'warmup_noise_std': 0.1,
     'default_beta': 0.5,
+    'warmup_buffer_limit': 16384,  # Ablation: {256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 50000}
     'seed': 42,
 }
 
@@ -330,11 +336,15 @@ class MemStreamScoringOperator(MapFunction):
         self._warmup_complete = False
         self._warmup_failed = False
         self._warmup_buffer: List[Dict] = []
-        self._warmup_buffer_limit = 4096
+        self._warmup_buffer_limit = self.config.get('warmup_buffer_limit', 16384)
         self._records_seen = 0
 
         # Flink state descriptor for memory checkpoint
         self._memory_state = None
+
+        # Retrain signal polling (Phase 3)
+        self._retrain_poll_counter = 0
+        self._last_retrain_signals: set = set()  # (neighborhood, timestamp) seen
 
     def _validate_config(self):
         """CRITICAL assertions on config (HARD-BLOCK)."""
@@ -679,7 +689,7 @@ class MemStreamScoringOperator(MapFunction):
     def map(self, value):
         """Score a record using MemStream with ContextBeta ratio method.
 
-        During warmup (<= 4096 records): buffer for training, pass through with
+        During warmup (<= 16384 records): buffer for training, pass through with
         default score and is_warmup=True. After warmup: real inference, pass
         through with actual score and is_warmup=False.
         """
@@ -755,6 +765,12 @@ class MemStreamScoringOperator(MapFunction):
 
         # ── Normal scoring path (warmup complete) ───────────────────────────
         try:
+            # ── Poll MinIO for retrain signals (Phase 3: Sequential Pipeline)
+            self._retrain_poll_counter += 1
+            if self._retrain_poll_counter >= RETAIN_SIGNAL_POLL_INTERVAL:
+                self._retrain_poll_counter = 0
+                self._poll_retrain_signals_from_minio()
+
             # ── Poll MinIO for updated beta (with cache) ────────────────────
             if self._ms_core is not None:
                 cache_key = f"{nb_idx}"
@@ -893,6 +909,124 @@ class MemStreamScoringOperator(MapFunction):
             # Non-blocking — don't slow down scoring
             pass
 
+    def _poll_retrain_signals_from_minio(self):
+        """
+        Poll MinIO for IEC retrain signals (Phase 3: Sequential Pipeline).
+
+        Searches for new retrain signals at: cadqstream-drift/iec/retrain/{nb}/*.json
+        Handles each new signal by resetting memory + re-triggering warmup.
+
+        Only processes signals not seen before (tracked via _last_retrain_signals).
+        HMAC verification required on each signal.
+        """
+        minio = self._get_minio_client()
+        if minio is None:
+            return
+
+        try:
+            for nb_name in NEIGHBORHOOD_NAMES:
+                prefix = f"{RETAIN_SIGNAL_PREFIX}{nb_name}/"
+                try:
+                    response = minio.list_objects_v2(
+                        Bucket=RETAIN_SIGNAL_BUCKET,
+                        Prefix=prefix,
+                    )
+                except Exception:
+                    continue
+
+                objects = response.get('Contents', [])
+                for obj in objects:
+                    key = obj['Key']
+                    # Skip already-seen signals
+                    ts = key.split('/')[-1].replace('.json', '')
+                    signal_id = f"{nb_name}:{ts}"
+                    if signal_id in self._last_retrain_signals:
+                        continue
+
+                    # Load and verify HMAC
+                    try:
+                        data = _load_from_minio(RETAIN_SIGNAL_BUCKET, key)
+                        signal = json.loads(data.decode('utf-8'))
+                    except Exception:
+                        continue
+
+                    hmac_hex = signal.get('hmac', '')
+                    if not self._verify_hmac(data, hmac_hex, 'retrain_signal'):
+                        LOGGER.warning(
+                            "[MemStreamScoring] Retrain signal HMAC invalid for %s",
+                            key
+                        )
+                        continue
+
+                    # Process retrain signal
+                    self._handle_retrain_signal(nb_name, signal)
+                    self._last_retrain_signals.add(signal_id)
+
+                    # Prune old signals to avoid unbounded set growth
+                    if len(self._last_retrain_signals) > 1000:
+                        old_signals = sorted(self._last_retrain_signals)[:500]
+                        self._last_retrain_signals -= set(old_signals)
+
+        except Exception as e:
+            LOGGER.warning(
+                "[MemStreamScoring] Retrain signal polling failed: %s",
+                e
+            )
+
+    def _handle_retrain_signal(self, neighborhood_name: str, signal: dict):
+        """
+        Handle a retrain signal from IEC.
+
+        When quick_retrain fires, this operator:
+        1. Resets MemStream memory for the affected neighborhood
+        2. Clears the warmup buffer
+        3. Sets _warmup_complete = False to re-trigger warmup
+
+        ADWIN thresholds are reset separately by the ml-service when
+        it receives the retrain signal via the action-replay-worker.
+
+        Args:
+            neighborhood_name: Name of the neighborhood (e.g., 'manhattan')
+            signal: Retrain signal dict from MinIO
+        """
+        nb_idx = NEIGHBORHOOD_NAMES.index(neighborhood_name) if neighborhood_name in NEIGHBORHOOD_NAMES else 9
+        triggers = signal.get('triggers', [])
+        severity = signal.get('severity', 'high')
+
+        LOGGER.warning(
+            "[MemStreamScoring] RETRAIN SIGNAL received for %s (severity=%s, triggers=%s)",
+            neighborhood_name, severity, triggers
+        )
+
+        # Reset MemStream memory for this neighborhood
+        if self._ms_core is not None:
+            result = self._ms_core.reset_neighborhood(nb_idx)
+            if result.get('status') == 'ok':
+                LOGGER.info(
+                    "[MemStreamScoring] Memory reset for neighborhood %s (idx=%d)",
+                    neighborhood_name, nb_idx
+                )
+            else:
+                LOGGER.error(
+                    "[MemStreamScoring] Memory reset failed for %s: %s",
+                    neighborhood_name, result.get('error', 'unknown')
+                )
+
+        # Reset beta for this neighborhood to default
+        self._current_betas[nb_idx] = self._default_beta
+        self._beta_cache.pop(f"{nb_idx}", None)
+
+        # Clear warmup buffer and re-trigger warmup
+        self._warmup_buffer.clear()
+        self._warmup_complete = False
+        self._warmup_failed = False
+        self._records_seen = 0
+
+        LOGGER.warning(
+            "[MemStreamScoring] Warmup cleared for %s — waiting for %d clean records",
+            neighborhood_name, self._warmup_buffer_limit
+        )
+
     def _error_result(
         self,
         value,
@@ -923,6 +1057,7 @@ class MemStreamScoringOperator(MapFunction):
             'checkpoint_counter': self._checkpoint_counter,
             'anomaly_rate': self._total_anomalies / max(self._total_scored, 1),
             'beta_staleness_violations': self._beta_staleness_violations,
+            'retrain_signals_processed': len(self._last_retrain_signals),
             'warmup_complete': self._warmup_complete,
             'warmup_failed': self._warmup_failed,
             'warmup_buffer_size': len(self._warmup_buffer),

@@ -57,35 +57,11 @@ log("  - deduplicator: OK")
 from src.operators.schema_validator import SchemaValidator
 log("  - schema_validator: OK")
 
-from src.operators.canary_rules import CanaryRulesValidator, ViolationFilter
+from src.operators.canary_rules_operator import CanaryRulesValidator, ViolationFilter
 log("  - canary_rules: OK")
-
-from src.operators.if_scoring_operator import IFScoringOperator, get_context_key
-log("  - if_scoring_operator: OK")
 
 from src.features.vectorizer import FeatureVectorizer
 log("  - vectorizer: OK")
-
-# Load ML models
-log("\n[3] Loading ML models...")
-import pickle
-model_path = f"{WORK}/models/iforest_model.pkl"
-scaler_path = f"{WORK}/models/scaler.pkl"
-thresholds_path = f"{WORK}/models/context_thresholds.json"
-
-model = pickle.load(open(model_path, "rb"))
-log(f"  - Model: {model_path} ({os.path.getsize(model_path):,} bytes, {model.n_estimators} trees)")
-
-scaler = pickle.load(open(scaler_path, "rb"))
-log(f"  - Scaler: {scaler_path} ({os.path.getsize(scaler_path):,} bytes)")
-
-with open(thresholds_path) as f:
-    thresholds = json.load(f)
-log(f"  - Thresholds: {thresholds_path} ({os.path.getsize(thresholds_path):,} bytes)")
-log(f"    Global threshold: {thresholds.get('global_threshold', 'N/A')}")
-
-vectorizer = FeatureVectorizer()
-log("  - Vectorizer: OK")
 
 # Create environment
 log("\n[4] Setting up StreamExecutionEnvironment...")
@@ -170,61 +146,19 @@ log("\n[7] Layer 2: Dual-Branch Processing...")
 canary_stream = valid_stream.map(CanaryRulesValidator(), output_type=Types.PICKLED_BYTE_ARRAY())
 log("  - Canary Branch (7 rules): OK")
 
-# Complex Branch (ML)
-class MLScoringFunction(MapFunction):
-    _cnt = 0
-    def map(self, record):
-        if record is None:
-            return None
-        MLScoringFunction._cnt += 1
-        try:
-            # Extract features
-            features = vectorizer.transform(record)
-            # Scale
-            scaled = scaler.transform([features])[0]
-            # Score
-            raw_score = model.score_samples(scaled.reshape(1, -1))[0]
-            score = -raw_score  # Anomaly score (higher = more anomalous)
-            # Get context-aware threshold
-            ctx_key = get_context_key(record)
-            thr = thresholds.get('thresholds', {}).get(ctx_key, thresholds.get('global_threshold', 0.5))
-            record['anomaly_score'] = float(score)
-            record['threshold'] = float(thr)
-            record['is_anomaly'] = bool(score > thr)
-            record['context_key'] = ctx_key
-            if MLScoringFunction._cnt % 50000 == 0:
-                log(f"  [ML] {MLScoringFunction._cnt} records, score={score:.4f}, thr={thr:.4f}, ctx={ctx_key}")
-        except Exception as e:
-            record['anomaly_score'] = 0.5
-            record['threshold'] = 0.5
-            record['is_anomaly'] = False
-            record['context_key'] = 'err'
-        return record
-
-ml_stream = valid_stream.map(MLScoringFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
-log("  - Complex Branch (IsolationForest + 21D features): OK")
-
 # Layer 3: Voting Ensemble
 log("\n[8] Layer 3: Voting Ensemble + MetaAggregator...")
 
 class VotingFunction(MapFunction):
-    """Canary overrides ML (voter = 0 means canary, 1 means ML)."""
     _cnt = 0
     def map(self, record):
         if record is None:
             return None
         VotingFunction._cnt += 1
-        # Canary verdict
         canary_violates = record.get('canary_violates', False)
-        # ML verdict
-        ml_anomaly = record.get('is_anomaly', False)
-        # Ensemble: Canary overrides ML
         if canary_violates:
             record['final_verdict'] = 'VIOLATION'
             record['voter'] = 'canary'
-        elif ml_anomaly:
-            record['final_verdict'] = 'ANOMALY'
-            record['voter'] = 'ml'
         else:
             record['final_verdict'] = 'CLEAN'
             record['voter'] = 'none'
@@ -233,7 +167,7 @@ class VotingFunction(MapFunction):
         return record
 
 voting_stream = valid_stream.map(VotingFunction(), output_type=Types.PICKLED_BYTE_ARRAY())
-log("  - Voting Ensemble (Canary overrides ML): OK")
+log("  - Voting Ensemble: OK")
 
 # Layer 4: Intelligent Evolution Controller (IEC)
 # NOTE: Full Layer 4 requires MetaAggregator with windowed meta-metrics output.
@@ -284,10 +218,6 @@ log("  - Schema violations: print()")
 
 canary_stream.filter(ViolationFilter()).print()
 log("  - Canary violations: print()")
-
-# ML anomalies
-ml_stream.filter(lambda x: x and x.get('is_anomaly')).print()
-log("  - ML anomalies: print()")
 
 # Voting
 voting_stream.filter(lambda x: x and x.get('final_verdict') != 'CLEAN').print()

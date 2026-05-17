@@ -132,6 +132,20 @@ class ContextBeta:
         # Per-cell counts for debugging
         self._cell_counts: Dict[Tuple[int, int], int] = {}
 
+    @property
+    def betas(self) -> np.ndarray:
+        """Alias for _thresholds (backward compat with set_beta_for_neighborhood)."""
+        return self._thresholds
+
+    @betas.setter
+    def betas(self, value: np.ndarray) -> None:
+        self._thresholds = value
+
+    @property
+    def n_cells(self) -> int:
+        """Number of context cells (for set_beta_for_neighborhood compat)."""
+        return NUM_CONTEXT_CELLS
+
     def record(self, neighborhood_id: int, cell_id: int, score: float) -> None:
         """
         Record a score for threshold computation.
@@ -384,6 +398,33 @@ class ContextBeta:
                 tuple(map(int, k.split('_'))): v
                 for k, v in state['cell_counts'].items()
             }
+
+    @classmethod
+    def from_state_dict(cls, state: dict) -> 'ContextBeta':
+        """Restore from checkpoint state dict (class method for MemStreamCore compatibility)."""
+        cb = cls(
+            default_beta=state.get('default_beta', 0.5),
+            percentile=state.get('percentile', 95.0),
+        )
+        cb._overall_beta = state.get('overall_beta', cb.default_beta)
+        cb._fitted = state.get('fitted', True)
+        cb._cell_counts = {}
+        if 'cell_counts' in state:
+            cb._cell_counts = {
+                tuple(map(int, k.split('_')): v
+                for k, v in state['cell_counts'].items()
+            }
+        if 'recent_scores' in state:
+            cb._recent_scores = deque(state['recent_scores'], maxlen=5000)
+        # Load thresholds — handle both full (thresholds_array) and legacy (betas) format
+        if 'thresholds_array' in state:
+            cb._thresholds = state['thresholds_array'].astype(np.float32)
+        elif 'thresholds' in state:
+            cb._thresholds = state['thresholds'].astype(np.float32)
+        elif 'betas' in state:
+            cb._thresholds = state['betas'].astype(np.float32)
+        cb.load_state_dict(state)
+        return cb
 
     def quick_retrain(self, recent_scores: List[float]) -> float:
         """

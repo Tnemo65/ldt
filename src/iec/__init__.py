@@ -1,19 +1,22 @@
 """
 IEC (Intelligent Evolution Controller) package for MemStream.
 
-Phase 2D Migration: IEC Operators + Security Hardening
+Phase 3 (Sequential Pipeline): Simplified to 2 strategies.
 
 Components:
 - circuit_breaker.py: Circuit breaker for IEC operations
-- drift_aggregator.py: Severity assessment + strategy prediction
+- drift_aggregator.py: Severity assessment + 2-strategy prediction
 - adwin_multi_instance.py: Multi-instance ADWIN for drift detection
 - verification_feedback.py: Tracks adaptation effectiveness
-- iec_controller.py: Main IEC controller with HMAC security fixes
+- iec_controller.py: Main IEC controller (do_nothing / quick_retrain)
+
+Strategies:
+- do_nothing: no drift or minor drift
+- quick_retrain: severe drift — retrain MemStream AE + reset ADWIN thresholds
 
 HMAC Security:
-- All beta writes to MinIO require HMAC signature
+- Retrain signals written to MinIO require HMAC signature
 - IEC_SIGNING_KEY environment variable is mandatory
-- HMAC verification failures trigger Prometheus alerts
 """
 
 from .circuit_breaker import CircuitBreaker, CircuitState
@@ -24,7 +27,7 @@ from .iec_controller import (
     IECConfig,
     IECController,
     create_iec_controller,
-    verify_beta_hmac,
+    verify_retrain_signal,
     IEC_SIGNING_KEY_ENV,
 )
 
@@ -44,6 +47,6 @@ __all__ = [
     'IECConfig',
     'IECController',
     'create_iec_controller',
-    'verify_beta_hmac',
+    'verify_retrain_signal',
     'IEC_SIGNING_KEY_ENV',
 ]

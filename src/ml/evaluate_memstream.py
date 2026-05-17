@@ -6,10 +6,6 @@ Evaluates MemStream on streaming data with rigorous statistical rigor:
   - AUC-ROC, AUC-PR computed via sklearn
   - Block bootstrap 95% CIs (1-hour block size preserves temporal autocorrelation)
   - Effective sample size accounting for autocorrelation
-  - Optional McNemar's test against historical IsolationForest baseline
-
-No IsolationForest scoring in this phase — IF is already out of production.
-This script focuses solely on validating the deployed MemStream model.
 
 Reference: Efron & Tibshirani (1993) for bootstrap methodology,
            McNemar (1947) for paired nominal test.
@@ -856,7 +852,7 @@ Examples:
     # Baseline comparison
     parser.add_argument(
         '--baseline', type=str,
-        help='Path to historical IsolationForest baseline results (JSON)'
+        help='Path to historical baseline results (JSON)'
     )
 
     # Bootstrap parameters

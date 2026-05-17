@@ -2,7 +2,6 @@
 Layer 2 Canary Branch - Static Rule Validation (Phase 2C).
 
 Deterministic fallback rules for when MemStream is unavailable or fails.
-This is NOT IsolationForest — pure business rule validation.
 
 Rules:
 1. Negative/zero fare → negative_fare
@@ -102,8 +101,6 @@ class CanaryRulesValidator(MapFunction):
 
     This is the "Canary" branch — fast deterministic rule checks before ML scoring.
     All records are passed through with violation flags for downstream Rendezvous.
-
-    NOT IsolationForest — pure business logic validation.
     """
 
     def __init__(self):

@@ -1,8 +1,6 @@
 """
 MemStream Core: Production Autoencoder + Memory Module for Flink.
 
-Phase 2A — CA-DQStream Migration (MemStream Replacing IsolationForest)
-
 Architectural Spec (verified from memstream_src/core/memstream_core.py lines 107-140):
 - in_dim=34, hidden_dim=68, out_dim=34 — symmetric AE
 - ReLU activation (NOT Tanh — verified benchmark_v10.py line 612)
@@ -51,6 +49,9 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
+
+# Full ContextBeta imported from memstream_context_beta below
+# (basic inline class removed — see memstream_context_beta.py)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -297,71 +298,10 @@ class MemoryModule:
 # ContextBeta
 # ---------------------------------------------------------------------------
 
-class ContextBeta:
-    """80 context-beta thresholds: 10 neighborhoods × 8 cells.
-
-    Each context cell has its own beta threshold fitted from warmup scores.
-    During scoring, score / beta gives normalized ratio:
-    - ratio < 1.0 → normal
-    - ratio >= 1.0 → anomaly
-    """
-
-    def __init__(self, n_neighborhoods: int = 10, n_cells: int = 8, percentile: float = 95.0):
-        self.n_neighborhoods = n_neighborhoods
-        self.n_cells = n_cells
-        self.percentile = percentile
-        self.betas: np.ndarray = np.ones(
-            (n_neighborhoods, n_cells), dtype=np.float32
-        ) * 0.5
-
-    def fit_from_scores(
-        self,
-        scores: List[float],
-        neighborhood_ids: List[int],
-        context_ids: List[int]
-    ) -> None:
-        """Fit beta thresholds from warmup scores (train set only).
-
-        Each (neighborhood, context) cell gets the percentile threshold of its scores.
-        Warns about underpopulated cells (< 50 samples).
-        """
-        for n in range(self.n_neighborhoods):
-            for c in range(self.n_cells):
-                cell_scores = [
-                    s for s, nm, ctx in zip(scores, neighborhood_ids, context_ids)
-                    if nm == n and ctx == c
-                ]
-                if len(cell_scores) >= 50:
-                    self.betas[n, c] = float(np.percentile(cell_scores, self.percentile))
-                else:
-                    LOGGER.warning(
-                        "[ContextBeta] UNDERPOPULATED CELL: nb=%d, cell=%d, n=%d",
-                        n, c, len(cell_scores)
-                    )
-
-    def get_beta(self, neighborhood_id: int, context_id: int) -> float:
-        """Get beta threshold for (neighborhood, context) cell."""
-        n = min(int(neighborhood_id), self.n_neighborhoods - 1)
-        c = min(int(context_id), self.n_cells - 1)
-        return float(self.betas[n, c])
-
-    def get_state_dict(self) -> dict:
-        return {
-            'betas': self.betas.copy(),
-            'n_neighborhoods': self.n_neighborhoods,
-            'n_cells': self.n_cells,
-            'percentile': self.percentile,
-        }
-
-    @classmethod
-    def from_state_dict(cls, state: dict) -> 'ContextBeta':
-        cb = cls(
-            n_neighborhoods=state['n_neighborhoods'],
-            n_cells=state['n_cells'],
-            percentile=state.get('percentile', 95.0)
-        )
-        cb.betas = state['betas']
-        return cb
+# Use full ContextBeta from memstream_context_beta.py
+# (basic inline class removed — full version has quick_retrain(),
+# record(), CELL_MIN_SAMPLES, get_beta_by_cell(), and more)
+from src.ml.memstream_context_beta import ContextBeta
 
 
 # ---------------------------------------------------------------------------
@@ -448,8 +388,6 @@ def extract_temporal_context(X: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.
 
 class MemStreamCore:
     """MemStream: Online Autoencoder + Memory Module with ContextBeta.
-
-    Phase 2A — Replaces IsolationForest in CA-DQStream Flink pipeline.
 
     Architecture (verified memstream_src/core/memstream_core.py lines 107-140):
     - in_dim=34, hidden_dim=68, out_dim=34 — symmetric denoising AE
@@ -958,8 +896,7 @@ class MemStreamCore:
 
         # Apply context-beta ratio if available
         if self._context_beta is not None:
-            ctx_id = get_context_id(int(hour), int(dow), ratecode)
-            beta = self._context_beta.get_beta(int(neighborhood_id), ctx_id)
+            beta = self._context_beta.get_beta(int(neighborhood_id), int(hour), int(dow), float(ratecode))
             return raw_score / max(beta, 1e-6)
 
         return raw_score
@@ -1054,8 +991,7 @@ class MemStreamCore:
 
         # Conditional update: only if score < beta (normal)
         if self._context_beta is not None:
-            ctx_id = get_context_id(int(hour), int(dow), float(ratecode))
-            beta = self._context_beta.get_beta(int(neighborhood_id), ctx_id)
+            beta = self._context_beta.get_beta(int(neighborhood_id), int(hour), int(dow), float(ratecode))
             if score >= beta:
                 self.count += 1
                 self._recent_scores.append(score)

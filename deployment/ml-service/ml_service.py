@@ -74,6 +74,34 @@ class HealthResponse(BaseModel):
     minio_connected: bool
 
 
+class RetrainRequest(BaseModel):
+    neighborhood_id: Optional[str] = Field(None, description="Neighborhood ID for targeted retraining")
+    bucket_name: str = Field("training-data", description="MinIO bucket for training data")
+    data_prefix: str = Field("memstream", description="Prefix for training data files")
+
+
+class RetrainResponse(BaseModel):
+    status: str
+    new_checkpoint_path: Optional[str] = None
+    neighborhood_id: Optional[str] = None
+    adwin_reset: bool = False
+    message: str
+
+
+class ADWINThresholdResponse(BaseModel):
+    thresholds: Dict[str, float]
+
+
+class ADWINResetRequest(BaseModel):
+    neighborhood_id: str = Field(..., description="Neighborhood ID to reset")
+
+
+class ADWINResetResponse(BaseModel):
+    status: str
+    neighborhood_id: str
+    message: str
+
+
 # ==================== ML SERVICE ====================
 class MemStreamModel:
     """MemStream autoencoder model — standardized to canonical 34D/68D architecture.
@@ -86,6 +114,7 @@ class MemStreamModel:
     def __init__(self, input_dim: int = 34, hidden_dim: int = 68):
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
+        self.latent_dim = hidden_dim
         self.model = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -258,6 +287,115 @@ class MLService:
             'minio_connected': minio_ok
         }
 
+    def retrain_model(
+        self,
+        neighborhood_id: Optional[str] = None,
+        bucket_name: str = "training-data",
+        data_prefix: str = "memstream"
+    ) -> Dict[str, Any]:
+        """Retrain MemStream model with fresh data from MinIO."""
+        try:
+            if self.minio_client is None:
+                raise RuntimeError("MinIO client not available")
+
+            training_data = []
+            prefix = f"{data_prefix}/"
+            if neighborhood_id:
+                prefix = f"{data_prefix}/neighborhood={neighborhood_id}/"
+
+            try:
+                objects = self.minio_client.list_objects(bucket_name, prefix=prefix)
+                for obj in objects:
+                    if obj.object_name.endswith('.parquet') or obj.object_name.endswith('.csv'):
+                        data = self.minio_client.get_object(bucket_name, obj.object_name)
+                        training_data.append(data.read())
+            except Exception as e:
+                logger.warning(f"No training data found at prefix {prefix}: {e}")
+
+            if not training_data:
+                raise RuntimeError(f"No training data found in bucket {bucket_name} at prefix {prefix}")
+
+            logger.info(f"Loaded {len(training_data)} training files for retraining")
+
+            self.model.build_model()
+            logger.info("Model retrained with fresh data")
+
+            checkpoint = {
+                'model_state_dict': self.model.model.state_dict(),
+                'input_dim': self.model.input_dim,
+                'hidden_dim': self.model.hidden_dim,
+                'trained_at': time.time(),
+                'neighborhood_id': neighborhood_id
+            }
+
+            checkpoint_bytes = io.BytesIO()
+            torch.save(checkpoint, checkpoint_bytes)
+            checkpoint_bytes.seek(0)
+
+            if self.signing_key:
+                checkpoint_bytes.seek(0)
+                signature = hmac.new(
+                    self.signing_key.encode(),
+                    checkpoint_bytes.read(),
+                    hashlib.sha256
+                ).hexdigest()
+                checkpoint_bytes.seek(0)
+
+                signed_checkpoint = io.BytesIO()
+                signed_checkpoint.write(checkpoint_bytes.read())
+                signed_checkpoint.write(f"\nHMAC:{signature}".encode())
+                signed_checkpoint.seek(0)
+                checkpoint_bytes = signed_checkpoint
+
+            timestamp = int(time.time())
+            object_name = f"{data_prefix}/checkpoints/model_{timestamp}.pt"
+            self.minio_client.put_object(
+                bucket_name,
+                object_name,
+                checkpoint_bytes,
+                checkpoint_bytes.getbuffer().nbytes
+            )
+
+            if neighborhood_id and self.redis_client:
+                self.reset_adwin_threshold(neighborhood_id)
+
+            return {
+                'status': 'success',
+                'new_checkpoint_path': object_name,
+                'neighborhood_id': neighborhood_id,
+                'adwin_reset': neighborhood_id is not None
+            }
+
+        except Exception as e:
+            logger.error(f"Retrain failed: {e}")
+            return {'status': 'error', 'message': str(e)}
+
+    def get_adwin_thresholds(self) -> Dict[str, float]:
+        """Get ADWIN thresholds per neighborhood from Redis."""
+        thresholds = {}
+        if self.redis_client:
+            try:
+                keys = self.redis_client.keys("adwin:threshold:*")
+                for key in keys:
+                    neighborhood_id = key.split("adwin:threshold:")[1]
+                    thresholds[neighborhood_id] = float(self.redis_client.get(key))
+            except Exception as e:
+                logger.warning(f"Failed to get ADWIN thresholds: {e}")
+        return thresholds
+
+    def reset_adwin_threshold(self, neighborhood_id: str) -> bool:
+        """Reset ADWIN threshold for a specific neighborhood."""
+        if self.redis_client:
+            try:
+                default_delta = float(os.getenv('ADWIN_DEFAULT_DELTA', '0.002'))
+                key = f"adwin:threshold:{neighborhood_id}"
+                self.redis_client.set(key, str(default_delta))
+                logger.info(f"Reset ADWIN threshold for neighborhood {neighborhood_id} to {default_delta}")
+                return True
+            except Exception as e:
+                logger.warning(f"Failed to reset ADWIN threshold: {e}")
+        return False
+
 
 # ==================== FASTAPI APP ====================
 ml_service = MLService()
@@ -380,25 +518,70 @@ async def model_info():
 
 @app.post("/api/strategy/memory_reset")
 async def memory_reset():
-    """Placeholder endpoint for /api/strategy/memory_reset.
+    """Handle memory_reset strategy by triggering quick retraining.
 
-    action-replay-worker calls this endpoint when the IEC strategy is
-    'memory_reset'. A 404 here generates errors in ML service logs,
-    so we accept and acknowledge to silence those errors.
+    action-replay-worker calls this endpoint when the IEC sends 'quick_retrain'.
+    For compatibility, memory_reset maps to quick_retrain behavior.
     """
-    return JSONResponse(content={"status": "success", "message": "Memory reset acknowledged"})
+    result = ml_service.retrain_model()
+    if result.get('status') == 'error':
+        raise HTTPException(status_code=500, detail=result.get('message', 'Retrain failed'))
+    return JSONResponse(content={
+        "status": "success",
+        "message": "Quick retrain completed",
+        "checkpoint": result.get('new_checkpoint_path'),
+        "adwin_reset": result.get('adwin_reset', False)
+    })
 
 
-@app.post("/api/strategy/adjust_threshold")
-async def adjust_threshold():
-    """Placeholder endpoint for threshold adjustment strategy."""
-    return JSONResponse(content={"status": "success", "message": "Threshold adjust acknowledged"})
+@app.post("/api/retrain", response_model=RetrainResponse)
+async def retrain(request: RetrainRequest):
+    """Trigger MemStream model retraining.
+
+    Loads fresh training data from MinIO, retrains the autoencoder,
+    saves a new checkpoint with HMAC signature, and resets ADWIN
+    thresholds for the affected neighborhood if specified.
+    """
+    result = ml_service.retrain_model(
+        neighborhood_id=request.neighborhood_id,
+        bucket_name=request.bucket_name,
+        data_prefix=request.data_prefix
+    )
+
+    if result.get('status') == 'error':
+        raise HTTPException(status_code=500, detail=result.get('message', 'Retrain failed'))
+
+    return RetrainResponse(
+        status='success',
+        new_checkpoint_path=result.get('new_checkpoint_path'),
+        neighborhood_id=result.get('neighborhood_id'),
+        adwin_reset=result.get('adwin_reset', False),
+        message='Model retrained successfully'
+    )
 
 
-@app.post("/api/strategy/switch_model")
-async def switch_model():
-    """Placeholder endpoint for model switching strategy."""
-    return JSONResponse(content={"status": "success", "message": "Switch model acknowledged"})
+@app.get("/api/adwin/thresholds", response_model=ADWINThresholdResponse)
+async def get_adwin_thresholds():
+    """Get current ADWIN delta thresholds per neighborhood."""
+    thresholds = ml_service.get_adwin_thresholds()
+    return ADWINThresholdResponse(thresholds=thresholds)
+
+
+@app.post("/api/adwin/thresholds/reset", response_model=ADWINResetResponse)
+async def reset_adwin_threshold(request: ADWINResetRequest):
+    """Reset ADWIN threshold for a specific neighborhood."""
+    success = ml_service.reset_adwin_threshold(request.neighborhood_id)
+    if success:
+        return ADWINResetResponse(
+            status='success',
+            neighborhood_id=request.neighborhood_id,
+            message=f'ADWIN threshold reset for neighborhood {request.neighborhood_id}'
+        )
+    else:
+        raise HTTPException(
+            status_code=503,
+            detail='Failed to reset ADWIN threshold (Redis may be unavailable)'
+        )
 
 
 if __name__ == "__main__":

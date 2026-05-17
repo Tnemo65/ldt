@@ -4,9 +4,17 @@ DriftAggregator: Severity assessment + strategy prediction for IEC.
 This module aggregates drift events from MultiInstanceADWIN and determines
 the appropriate evolution strategy based on drift severity.
 
-Phase 2D migration: copied from memstream_src/core/drift_aggregator.py
+Phase 3 (Sequential Pipeline): Simplified to 2 strategies:
+    - DO_NOTHING: no drift or minor drift — continue normal operation
+    - QUICK_RETRAIN: severe drift detected — retrain MemStream AE + reset ADWIN thresholds
 
-Reference: original_flow.md Section 5.6 (METER Hypernetwork)
+Strategy Mapping:
+    none (0 drifts)       -> do_nothing
+    low (1-2 drifts)     -> do_nothing
+    moderate (3-5 drifts) -> do_nothing
+    high (6+ drifts)     -> quick_retrain
+
+No METER hypernetwork, no adjust_threshold, no memory_reset.
 """
 
 import time
@@ -33,12 +41,7 @@ class SeverityLevel:
 
     @classmethod
     def compare(cls, a: str, b: str) -> int:
-        """
-        Compare two severity levels.
-
-        Returns:
-            -1 if a < b, 0 if a == b, 1 if a > b
-        """
+        """Compare two severity levels. Returns -1 if a < b, 0 if equal, 1 if a > b."""
         try:
             idx_a = cls.LEVEL_ORDER.index(a)
             idx_b = cls.LEVEL_ORDER.index(b)
@@ -48,24 +51,24 @@ class SeverityLevel:
 
 
 # =============================================================================
-# Evolution Strategies
+# Evolution Strategies (Phase 3: Sequential Pipeline)
 # =============================================================================
 
 class EvolutionStrategy:
-    """Evolution strategy constants for online MemStream adaptation.
+    """
+    Evolution strategy constants for MemStream sequential pipeline.
 
-    MemStream is an online learning system — no offline retraining or model switching.
-    Only two strategies are applicable:
-    - DO_NOTHING: no drift detected, continue normal operation
-    - ADJUST_THRESHOLD: drift detected, adjust beta (ContextBeta threshold)
-    - MEMORY_RESET: severe drift detected, reset memory and let online learning rebuild
+    Only two strategies:
+    - DO_NOTHING: no drift or minor drift, continue normal operation
+    - QUICK_RETRAIN: severe drift, retrain MemStream AE + reset ADWIN thresholds per grid
+
+    Removed from previous version: ADJUST_THRESHOLD, MEMORY_RESET, METER.
     """
 
-    DO_NOTHING = 'do_nothing'          # No drift — continue normal operation
-    ADJUST_THRESHOLD = 'adjust_threshold'  # Drift detected — adjust beta threshold
-    MEMORY_RESET = 'memory_reset'     # Severe drift — reset memory, rebuild online
+    DO_NOTHING = 'do_nothing'
+    QUICK_RETRAIN = 'quick_retrain'
 
-    ALL_STRATEGIES = [DO_NOTHING, ADJUST_THRESHOLD, MEMORY_RESET]
+    ALL_STRATEGIES = [DO_NOTHING, QUICK_RETRAIN]
 
 
 # =============================================================================
@@ -96,11 +99,11 @@ class DriftAggregator:
         - Based on count of recent drift events (within rolling window)
         - Severity thresholds determine strategy mapping
 
-    Strategy Mapping:
+    Strategy Mapping (Phase 3):
         none (0 drifts)       -> do_nothing
-        low (1-2 drifts)      -> adjust_threshold
-        moderate (3-5 drifts) -> adjust_threshold (online learning adapts)
-        high (6+ drifts)     -> memory_reset (severe drift, reset + rebuild)
+        low (1-2 drifts)      -> do_nothing
+        moderate (3-5 drifts) -> do_nothing
+        high (6+ drifts)      -> quick_retrain
 
     Example:
         >>> aggregator = DriftAggregator()
@@ -135,13 +138,7 @@ class DriftAggregator:
         self._drift_counts_total: int = 0
 
     def add_drift(self, neighborhood: str, metric: str) -> None:
-        """
-        Add a drift event.
-
-        Args:
-            neighborhood: Neighborhood where drift was detected
-            metric: Metric that triggered drift detection
-        """
+        """Add a drift event."""
         self._recent_drifts.append({
             'neighborhood': neighborhood,
             'metric': metric,
@@ -181,20 +178,7 @@ class DriftAggregator:
             return SeverityLevel.HIGH
 
     def assess_drift_severity_detailed(self) -> Dict:
-        """
-        Get detailed severity assessment with counts.
-
-        Returns:
-            Dict with severity details:
-            {
-                'severity': str,
-                'n_recent': int,
-                'n_total': int,
-                'affected_neighborhoods': int,
-                'affected_metrics': int,
-                'drift_rate': float,
-            }
-        """
+        """Get detailed severity assessment with counts."""
         severity = self.assess_drift_severity()
         n_recent = len(self._recent_drifts)
 
@@ -211,55 +195,38 @@ class DriftAggregator:
         }
 
     def get_affected_neighborhoods(self) -> List[str]:
-        """
-        Get list of neighborhoods with recent drifts.
-
-        Returns:
-            List of neighborhood names
-        """
+        """Get list of neighborhoods with recent drifts."""
         return list(set(d['neighborhood'] for d in self._recent_drifts))
 
     def get_affected_metrics(self) -> List[str]:
-        """
-        Get list of metrics with recent drifts.
-
-        Returns:
-            List of metric names
-        """
+        """Get list of metrics with recent drifts."""
         return list(set(d['metric'] for d in self._recent_drifts))
 
     def predict_strategy(self, severity: Optional[str] = None) -> str:
         """
-        Map severity to evolution strategy.
+        Map severity to evolution strategy (Phase 3: 2 strategies only).
 
         Args:
             severity: Severity level (if None, computed from recent drifts)
 
         Returns:
-            Strategy name: 'do_nothing', 'adjust_threshold', or 'memory_reset'
+            Strategy name: 'do_nothing' or 'quick_retrain'
         """
         if severity is None:
             severity = self.assess_drift_severity()
 
+        # Phase 3 mapping: only high severity triggers quick_retrain
         strategy_map = {
             SeverityLevel.NONE: EvolutionStrategy.DO_NOTHING,
-            SeverityLevel.LOW: EvolutionStrategy.ADJUST_THRESHOLD,
-            SeverityLevel.MODERATE: EvolutionStrategy.ADJUST_THRESHOLD,
-            SeverityLevel.HIGH: EvolutionStrategy.MEMORY_RESET,
+            SeverityLevel.LOW: EvolutionStrategy.DO_NOTHING,
+            SeverityLevel.MODERATE: EvolutionStrategy.DO_NOTHING,
+            SeverityLevel.HIGH: EvolutionStrategy.QUICK_RETRAIN,
         }
 
         return strategy_map.get(severity, EvolutionStrategy.DO_NOTHING)
 
     def predict_strategy_with_confidence(self, severity: Optional[str] = None) -> Tuple[str, float]:
-        """
-        Predict strategy with confidence score.
-
-        Args:
-            severity: Severity level (if None, computed from recent drifts)
-
-        Returns:
-            Tuple of (strategy, confidence)
-        """
+        """Predict strategy with confidence score."""
         if severity is None:
             severity = self.assess_drift_severity()
 
@@ -276,22 +243,7 @@ class DriftAggregator:
         return strategy, confidence
 
     def get_stats(self) -> Dict:
-        """
-        Get aggregator statistics.
-
-        Returns:
-            Dict with statistics:
-            {
-                'n_recent': int,
-                'n_total': int,
-                'severity': str,
-                'strategy': str,
-                'affected_neighborhoods': list,
-                'affected_metrics': list,
-                'per_neighborhood': dict,
-                'per_metric': dict,
-            }
-        """
+        """Get aggregator statistics."""
         severity = self.assess_drift_severity()
         strategy = self.predict_strategy(severity)
 

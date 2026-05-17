@@ -1,25 +1,25 @@
 """
-Layer 3 MetaAggregator - Voting Ensemble with Meta-Metrics.
-Task 3.11-3.15: Combine Canary + Complex decisions, compute drift signals
+Layer 3 MetaAggregator - Sequential Pipeline Phase 3.
 
-Two-Stage Operation:
-1. Voting Ensemble: Combine Canary (rules) + Complex (ML) per record
-2. Meta-Metrics: Aggregate over 1-minute windows per neighborhood
+Sequential pipeline (no dual branch, no voting):
+1. SequentialFinalDecisionFunction: set final_decision per record
+2. MetaAggregateFunction: aggregate over 1-minute windows per neighborhood
+3. MetaWindowProcessFunction: add window metadata + compute delta_score
 
-Voting Logic:
-- If Canary has violations → ANOMALY (overrides ML)
-- If ML score > threshold → ANOMALY
-- Otherwise → CLEAN
+Final Decision Logic (Phase 3):
+    - has_violation=True (Canary) -> final_decision='ANOMALY', source='canary_rule'
+    - is_anomaly=True (MemStream) -> final_decision='ANOMALY', source='memstream_ml'
+    - else -> final_decision='CLEAN', source='pass'
 
 Meta-Metrics (6 signals per neighborhood per minute):
-1. volume - Record count
-2. null_rate - % records with null fields
-3. violation_rate - % Canary violations
-4. anomaly_rate - % ML anomalies
-5. avg_anomaly_score - Mean ML score
-6. delta_score - Change from previous window
+1. volume — record count
+2. null_rate — % records with null fields
+3. violation_rate — % Canary violations
+4. anomaly_rate — % MemStream anomalies
+5. avg_anomaly_score — mean MemStream score
+6. delta_score — |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + eps)
 
-Spec: Task 3.11-3.15 (Voting + windowed aggregation)
+These metrics feed ADWIN drift detection and IEC strategy selection.
 """
 
 from pyflink.datastream import MapFunction, AggregateFunction, ProcessWindowFunction
@@ -34,45 +34,25 @@ import urllib.request
 LOGGER = logging.getLogger('cadqstream-meta-agg')
 
 
-class VotingEnsembleFunction(MapFunction):
-    """Combine Canary (rule-based) + Complex (ML-based) decisions.
+class SequentialFinalDecisionFunction(MapFunction):
+    """Set final_decision in the sequential pipeline.
 
-    Voting Logic:
-    - Priority 1: Canary violations (hard business rules)
-    - Priority 2: ML anomaly score > threshold
-    - Otherwise: CLEAN
+    No voting — final decision is determined by:
+    1. Canary violations (has_violation=True) -> ANOMALY (canary_rule)
+    2. MemStream anomalies (is_anomaly=True) -> ANOMALY (memstream_ml)
+    3. Otherwise -> CLEAN (pass)
 
-    L4 METRICS: Emits cadqstream_records_valid_total{layer="L4"} and
-    cadqstream_voting_decisions_total per record here (not in a sink function),
-    because PyFlink sink functions are batched per partition rather than per-record.
+    Decision is stored in-place on the record for downstream MetaAggregator.
     """
-    _l4_client = None
-    _l4_endpoint = 'http://cadqstream-metrics:9250/internal/metrics'
-    _l4_emit_errors = 0
-    _l4_batch_count = 0
-
-    def __init__(self, canary_weight=1.0, complex_weight=1.0):
-        """Initialize voting ensemble."""
-        self.canary_weight = canary_weight
-        self.complex_weight = complex_weight
-        self.records_processed = 0
-        self.anomalies_detected = 0
-        self._batch_record_count = 0  # Count records in current micro-batch
-
-    def open(self, runtime_context):
-        """Initialize HTTP client for L4 metrics."""
-        VotingEnsembleFunction._l4_client = urllib.request
-        print(f"[VotingEnsemble] open() called. records_processed={self.records_processed}")
 
     def map(self, value):
-        """Apply voting ensemble to merged record.
+        """Compute final decision for a record.
 
         Args:
-            value: Merged record from Rendezvous (has both Canary + Complex fields)
+            value: Record with has_violation and is_anomaly fields
 
         Returns:
-            Record with final_decision, confidence, and decision_source.
-            Sentinel dict for None input (DLQ routing, never returns None).
+            Record with final_decision, decision_source, confidence fields added
         """
         if value is None:
             return {
@@ -82,11 +62,11 @@ class VotingEnsembleFunction(MapFunction):
                 'has_violation': False,
                 'is_anomaly': False,
                 'anomaly_score': 0.0,
-                'voting_timestamp': '',
+                'seq_timestamp': '',
                 '_dlq': True,
                 '_dlq_reason': 'null_input',
                 '_dlq_category': 'VALIDATION_ERROR',
-                '_dlq_operator': 'VotingEnsembleFunction',
+                '_dlq_operator': 'SequentialFinalDecisionFunction',
                 'trip_id': 'dlq_null',
                 'tpep_pickup_datetime': '',
             }
@@ -99,64 +79,37 @@ class VotingEnsembleFunction(MapFunction):
                 'has_violation': False,
                 'is_anomaly': False,
                 'anomaly_score': 0.0,
-                'voting_timestamp': '',
+                'seq_timestamp': '',
                 '_dlq': True,
                 '_dlq_reason': f'not_dict:{type(value).__name__}',
                 '_dlq_category': 'VALIDATION_ERROR',
-                '_dlq_operator': 'VotingEnsembleFunction',
+                '_dlq_operator': 'SequentialFinalDecisionFunction',
                 'trip_id': f'dlq_{type(value).__name__[:20]}',
                 'tpep_pickup_datetime': '',
             }
 
-        self.records_processed += 1
-
-        # Extract Canary decision
         has_violation = value.get('has_violation', False)
-        violations = value.get('canary_violations', [])
-
-        # Extract Complex decision
-        is_ml_anomaly = value.get('is_anomaly', False)
+        is_anomaly = value.get('is_anomaly', False)
         anomaly_score = value.get('anomaly_score', 0.0)
-        threshold = value.get('threshold', 0.5)
 
-        # Voting logic
         if has_violation:
-            # Priority 1: Canary violations override ML
             final_decision = 'ANOMALY'
             decision_source = 'canary_rule'
-            confidence = 1.0  # High confidence (hard rule)
-            self.anomalies_detected += 1
-
-        elif is_ml_anomaly:
-            # Priority 2: ML anomaly detection
+            confidence = 1.0
+        elif is_anomaly:
             final_decision = 'ANOMALY'
-            decision_source = 'complex_ml'
-            # Confidence based on how far score exceeds threshold
-            confidence = min((anomaly_score / threshold) if threshold > 0 else 0.5, 1.0)
-            self.anomalies_detected += 1
-
+            decision_source = 'memstream_ml'
+            threshold = value.get('threshold', 1.0)
+            confidence = min(anomaly_score / threshold if threshold > 0 else 0.5, 1.0)
         else:
-            # Clean record
             final_decision = 'CLEAN'
-            decision_source = 'both_agree'
-            # Confidence based on how far below threshold
-            confidence = 1.0 - (anomaly_score / threshold) if threshold > 0 else 0.5
+            decision_source = 'pass'
+            confidence = 1.0
 
-        # voting_timestamp: ROOT CAUSE FIX #1 — use event time from record, NOT datetime.utcnow().
-        # Decay factors and time-windowed algorithms depend on correct temporal ordering.
-        record_timestamp = value.get('tpep_pickup_datetime', '')
-        if not record_timestamp:
-            record_timestamp = value.get('voting_timestamp', '')
         value['final_decision'] = final_decision
         value['decision_source'] = decision_source
         value['confidence'] = float(confidence)
-        value['voting_timestamp'] = record_timestamp
-
-        # Log stats periodically
-        if self.records_processed % 100000 == 0:
-            anomaly_rate = self.anomalies_detected / self.records_processed * 100
-            LOGGER.info("[VotingEnsemble] Processed: %s, Anomalies: %s (%.2f%%)",
-                        f"{self.records_processed:,}", f"{self.anomalies_detected:,}", anomaly_rate)
+        value['seq_timestamp'] = value.get('tpep_pickup_datetime', '')
 
         return value
 
@@ -165,18 +118,17 @@ class MetaAggregateFunction(AggregateFunction):
     """Compute 6 meta-metrics per neighborhood per 1-minute window.
 
     Meta-Metrics:
-    1. volume - Record count
-    2. null_rate - % null fields
-    3. violation_rate - % Canary violations
-    4. anomaly_rate - % final anomalies
-    5. avg_anomaly_score - Mean ML score
-    6. delta_score - Change from previous window (computed in ProcessWindowFunction)
+    1. volume — record count
+    2. null_rate — % null fields
+    3. violation_rate — % Canary violations
+    4. anomaly_rate — % final anomalies
+    5. avg_anomaly_score — mean MemStream score
+    6. delta_score — computed in MetaWindowProcessFunction
 
-    These metrics feed into drift detection (ADWIN-U) and IEC strategy selection.
+    These metrics feed into ADWIN drift detection and IEC strategy selection.
     """
 
     def create_accumulator(self):
-        """Create empty accumulator."""
         return {
             'volume': 0,
             'null_count': 0,
@@ -187,16 +139,7 @@ class MetaAggregateFunction(AggregateFunction):
         }
 
     def add(self, value, accumulator):
-        """Add record to accumulator.
-
-        Args:
-            value: Record with voting decision (may be tuple from keyed stream)
-            accumulator: Current accumulator state
-
-        Returns:
-            Updated accumulator
-        """
-        # value is a tuple (neighborhood, record) from ExtractNeighborhoodFunction
+        # value may be a tuple (neighborhood, record) from ExtractNeighborhoodFunction
         if isinstance(value, tuple):
             record = value[1]
         else:
@@ -207,19 +150,18 @@ class MetaAggregateFunction(AggregateFunction):
 
         accumulator['volume'] += 1
 
-        # Count nulls (simplified check)
-        if isinstance(record, dict) and any(record.get(field) is None for field in ['fare_amount', 'trip_distance', 'passenger_count']):
+        if isinstance(record, dict) and any(
+            record.get(field) is None
+            for field in ['fare_amount', 'trip_distance', 'passenger_count']
+        ):
             accumulator['null_count'] += 1
 
-        # Count Canary violations
         if isinstance(record, dict) and record.get('has_violation', False):
             accumulator['violation_count'] += 1
 
-        # Count final anomalies
         if isinstance(record, dict) and record.get('final_decision') == 'ANOMALY':
             accumulator['anomaly_count'] += 1
 
-        # Accumulate ML scores
         if isinstance(record, dict):
             anomaly_score = record.get('anomaly_score')
             if anomaly_score is not None:
@@ -229,14 +171,6 @@ class MetaAggregateFunction(AggregateFunction):
         return accumulator
 
     def get_result(self, accumulator):
-        """Compute final meta-metrics.
-
-        Args:
-            accumulator: Final accumulator state
-
-        Returns:
-            Dict with 6 meta-metrics
-        """
         volume = accumulator['volume']
 
         if volume == 0:
@@ -269,15 +203,6 @@ class MetaAggregateFunction(AggregateFunction):
         }
 
     def merge(self, acc1, acc2):
-        """Merge two accumulators (for parallelism).
-
-        Args:
-            acc1: First accumulator
-            acc2: Second accumulator
-
-        Returns:
-            Merged accumulator
-        """
         return {
             'volume': acc1['volume'] + acc2['volume'],
             'null_count': acc1['null_count'] + acc2['null_count'],
@@ -291,28 +216,15 @@ class MetaAggregateFunction(AggregateFunction):
 class MetaWindowProcessFunction(ProcessWindowFunction):
     """Add window metadata and compute delta_score.
 
-    Delta_score per thesis equation (5.18): normalized divergence between
-    violation_rate and anomaly_rate, NOT temporal change.
-    delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + epsilon)
+    delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + eps)
+    Measures divergence between Canary (rule-based) and MemStream (ML-based) detection.
     """
 
     def __init__(self):
-        """Initialize process function."""
-        # No state needed - delta_score is computed from current window only
         pass
 
     def process(self, key, context, elements):
-        """Process window results.
-
-        Args:
-            key: Window key (e.g., neighborhood_id)
-            context: Window context
-            elements: Aggregated results (single element from AggregateFunction)
-
-        Yields:
-            Meta-metrics with window metadata and delta_score
-        """
-        # Get aggregated metrics
+        """Process window results."""
         metrics = next(iter(elements))
 
         if metrics is None:
@@ -331,23 +243,17 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
             }
             return
 
-        # Compute delta_score per thesis equation (5.18)
-        # delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + epsilon)
-        # This measures the divergence between Canary (rule-based) and Complex (ML-based) detection
         violation_rate = metrics.get('violation_rate', 0.0)
         anomaly_rate = metrics.get('anomaly_rate', 0.0)
-        epsilon = 1e-6  # Prevent division by zero
+        epsilon = 1e-6
 
         delta_score = abs(violation_rate - anomaly_rate) / (violation_rate + anomaly_rate + epsilon)
-
-        # Add delta_score
         metrics['delta_score'] = delta_score
 
-        # Add window metadata
         window = context.window()
         metrics['window_start'] = datetime.fromtimestamp(window.start / 1000).isoformat()
         metrics['window_end'] = datetime.fromtimestamp(window.end / 1000).isoformat()
-        metrics['neighborhood_id'] = key  # Spatial grouping key
+        metrics['neighborhood_id'] = key
 
         yield metrics
 
@@ -355,15 +261,11 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
 def extract_neighborhood_key(record: dict) -> str:
     """Extract neighborhood key for spatial grouping.
 
-    Args:
-        record: Trip record
-
     Returns:
         Neighborhood key (e.g., 'manhattan', 'brooklyn', etc.)
     """
     zone_id = record.get('PULocationID', 0)
 
-    # Simplified neighborhood mapping
     if zone_id <= 50:
         return 'manhattan'
     elif zone_id <= 100:

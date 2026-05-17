@@ -85,9 +85,6 @@
     "medium_evening_rush_weekend_brooklyn": 0.6291519185411133,
     "short_evening_rush_weekend_manhattan": 0.5934696378064739
   },
-  "model_type": "sklearn_IsolationForest",
-  "n_trees": 200,
-  "max_samples": 256,
   "training_sample": 500000,
   "n_contexts": 80
 }

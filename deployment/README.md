@@ -21,7 +21,7 @@ Production-grade end-to-end streaming platform deployment for the Context-Aware 
 # │  │  ┌──────────────────────┐    ┌──────────────────────────────────┐    │ │
 # │  │  │  Canary Branch       │    │  Complex Branch (ML Scoring)      │    │ │
 # │  │  │  (Rule-based)       │    │  (Anomaly Detection)              │    │ │
-# │  │  │  7 business rules   │    │  Isolation Forest / ML models     │    │ │
+# │  │  │  7 business rules   │    │  MemStream autoencoder             │    │ │
 # │  │  │  → violations       │    │  → anomaly_scores                 │    │ │
 # │  │  └──────────────────────┘    └──────────────────────────────────┘    │ │
 # │  └──────────────────────────────────────────────────────────────────────┘ │
@@ -135,7 +135,7 @@ Raw Stream → Parse JSON → Watermark (30s idleness) → TripID (MurmurHash3)
 Valid Stream → Canary Rules (7 rules: negative_fare, zero_distance, invalid_passengers, etc.)
             → canary_violations (MinIO)
 
-Valid Stream → ML Scoring (Isolation Forest + context features)
+Valid Stream → ML Scoring (MemStream autoencoder + context features)
             → anomaly_scores (MinIO)
 ```
 

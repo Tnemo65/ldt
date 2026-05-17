@@ -64,20 +64,18 @@ These contributions are not independent components but a tightly integrated syst
 \section{Thesis Content}
 % ================================================
 
-This thesis is organized into seven chapters:
+This thesis is organized into six chapters:
 
 \begin{enumerate}
-    \item \textbf{Chapter 1: Background} reviews foundational concepts including streaming data processing (Apache Kafka, Apache Flink), data quality dimensions (DAMA-DMBOK framework), anomaly detection methods (Isolation Forest, MemStream), and the MLOps maturity model. This chapter establishes the technical infrastructure and conceptual vocabulary on which subsequent chapters build.
+    \item \textbf{Chapter 1: Introduction} presents the motivation for streaming data quality monitoring, identifies three research challenges (context collapse, sequential pipeline inefficiency, single-strategy drift adaptation), states the thesis objective, and highlights the four primary contributions.
 
-    \item \textbf{Chapter 2: Related Work} surveys four interconnected research areas: streaming data quality monitoring frameworks (Great Expectations, Soda Core, Confluent, Grab Coban, Stream DaQ), industrial streaming platform case studies (Grab Signals Marketplace, Trailblazer CDC, AutoMQ, FlinkSQL Platform), concept drift handling and ADWIN variants (ADWIN-U, Parallel ADWIN, ADWIN++, Adaptive-Delta), and context-aware anomaly detection (ReAD, BeSTAD, ICAD, DTD). This chapter identifies the specific gaps that CA-DQStream addresses.
+    \item \textbf{Chapter 2: Background} reviews foundational concepts including streaming data processing (Apache Kafka, Apache Flink), data quality dimensions (DAMA-DMBOK), anomaly detection methods (Isolation Forest, MemStream), concept drift (ADWIN), and context-aware systems. This chapter establishes the technical infrastructure and conceptual vocabulary on which subsequent chapters build.
 
-    \item \textbf{Chapter 3: Problem Definition and Research Questions} formalizes the research problem through empirical analysis of the NYC Yellow Taxi dataset, derives three research gaps from the interaction between empirical findings and existing literature, and states five open research questions (RQ1--RQ5) that guide the rest of the thesis. Each RQ addresses a specific knowledge gap rather than validating a predetermined solution.
+    \item \textbf{Chapter 3: Related Work} surveys four interconnected research areas: streaming data quality monitoring frameworks (Great Expectations, Soda Core, Confluent, Grab Coban, Stream DaQ), concept drift handling and ADWIN variants (ADWIN-U, Parallel ADWIN, ADWIN++), context-aware anomaly detection (ReAD, BeSTAD, ICAD, DTD), and memory-based streaming methods (MemStream, MStream). This chapter identifies the specific gaps that CA-DQStream addresses.
 
-    \item \textbf{Chapter 4: CA-DQStream Architecture} presents the complete system design including the multi-dimensional context-aware thresholding framework, the fork-join pipeline architecture, the multi-strategy self-adaptation controller, and the hybrid K-Means plus Online Autoencoder with Memory Module. The chapter details the feature engineering pipeline, the four-layer processing pipeline on Apache Flink, and the fault tolerance mechanisms (checkpointing, dead-letter queues, exactly-once semantics).
+    \item \textbf{Chapter 4: CA-DQStream: Context-Aware Data Quality Streaming System} presents the complete system design including the approach direction, exploratory data analysis on the NYC Taxi dataset, the four-layer processing pipeline (Baseline Validation, Memory-Based Streaming Anomaly Detection, Meta-Aggregation, Intelligent Evolution Controller), feature engineering with 21-dimensional feature vectors, and fault tolerance mechanisms.
 
-    \item \textbf{Chapter 5: Experiments and Evaluation} validates the four contributions through comprehensive experiments organized by Research Question (RQ1--RQ5) to demonstrate traceability between proposed innovations and empirical validation. Comparative baselines include MemStream, Isolation Forest, K-Means IF, RIFIFI, xStream, RRCF, MStream, HBOS, COPOD, ECOD, and Stream DaQ.
+    \item \textbf{Chapter 5: Experiments and Evaluation} validates the four contributions through comprehensive experiments organized by Research Question (RQ1--RQ5) on the NYC Yellow Taxi dataset (72M records across 26 months: 14 months real TLC data + 12 months simulated data), demonstrating traceability between proposed innovations and empirical validation.
 
-    \item \textbf{Chapter 6: Broader Impact} discusses the implications of CA-DQStream for related domains (financial fraud detection, healthcare monitoring, IoT quality management), ethical considerations (data privacy, algorithmic transparency, false positive costs), and scalability to other streaming DQ scenarios beyond taxi data.
-
-    \item \textbf{Chapter 7: Conclusion and Future Work} summarizes the contributions, acknowledges limitations (ground truth availability, single-domain evaluation, computational overhead of context-aware thresholding), and outlines promising directions for future research.
+    \item \textbf{Chapter 6: Conclusion and Future Work} summarizes contributions, acknowledges limitations (single-domain evaluation, synthetic ground truth), and outlines promising directions for future research.
 \end{enumerate}

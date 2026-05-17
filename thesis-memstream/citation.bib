@@ -11,7 +11,7 @@
   author={Michael Armbrust and Ali Ghodsi and Reynold Xin and Matei Zaharia},
   journal={Databricks Whitepaper},
   year={2021}
-},
+}
 
 
 @article{Pauwels2021SemanticVis,
@@ -23,7 +23,7 @@
   pages={123},
   year={2021},
   doi={10.3390/info12030123}
-},
+}
 
 
 @article{berners2001semantic,
@@ -458,13 +458,27 @@
   publisher = {SIAM}
 },
 
-@article{adwin2025,
-  author = {Bifet, Albert and Gavalda, Ricard and others},
-  title = {ADWIN-U: Adaptive Windowing Algorithm with Univariate Drift Detection},
+@article{adwinu2025,
+  author = {Assis, D. N. and Souza, V. M. A.},
+  title = {ADWIN-U: Adaptive Windowing for Unsupervised Drift Detection on Data Streams},
   journal = {Knowledge and Information Systems},
   year = {2025},
-  publisher = {Springer}
-},
+  volume = {67},
+  pages = {10005--10034},
+  doi = {10.1007/s10115-025-02523-1},
+  note = {Skewness/Kurtosis divergence measures for unsupervised drift detection}
+}
+
+% Alias for adwinu2025 used in chap1_background.tex and chap3.tex
+@article{adwin2025,
+  author = {Assis, D. N. and Souza, V. M. A.},
+  title = {ADWIN-U: Adaptive Windowing for Unsupervised Drift Detection on Data Streams},
+  journal = {Knowledge and Information Systems},
+  year = {2025},
+  volume = {67},
+  pages = {10005--10034},
+  doi = {10.1007/s10115-025-02523-1}
+}
 
 @article{liu2008isolation,
   author = {Liu, Fei Tony and Ting, Kai Ming and Zhou, Zhi-Hua},
@@ -683,11 +697,13 @@
 
 @inproceedings{icewafl2025,
   title={Icewafl: A Configurable Data Stream Polluter},
-  author={Biermann, A. and Ruckelshausen, A. and Markl, V.},
+  author={Schinninger, Christoph and Panse, Fabian and K\"uhne, Constantin and Ehrlinger, Lisa},
   booktitle={Proceedings of the 28th International Conference on Extending Database Technology (EDBT)},
+  pages={796--802},
   year={2025},
   publisher={OpenProceedings},
-  note={arXiv preprint available}
+  doi={10.48786/edbt.2025.64},
+  url={https://doi.org/10.48786/edbt.2025.64}
 },
 
 @article{adacontext2025,
@@ -788,11 +804,13 @@
 
 @inproceedings{scar2025,
   title     = {SCAR: Revisiting Streaming Anomaly Detection -- A Comprehensive Benchmark and Evaluation},
-  author    = {Ma, X. and Zhang, Y. and others},
-  booktitle = {Artificial Intelligence Review},
+  author    = {Ma, Yixiao and Zhang, Yang and others},
+  booktitle = {Companion Proceedings of the ACM Web Conference (WWW)},
+  pages     = {3121--3132},
   year      = {2025},
-  publisher = {Springer},
-  note      = {Evaluates 9 streaming + 4 adapted static algorithms on 76 synthetic + 74 real datasets}
+  publisher = {ACM},
+  doi       = {10.1145/3543873.3587621},
+  note      = {Short/extended abstract version}
 },
 
 @article{adbench2022,
@@ -867,17 +885,6 @@
   doi      = {10.1145/3764914.3770888}
 },
 
-@article{adwinu2025,
-  author = {Assis, D. N. and Souza, V. M. A.},
-  title  = {ADWIN-U: Adaptive Windowing for Unsupervised Drift Detection on Data Streams},
-  journal = {Knowledge and Information Systems},
-  year   = {2025},
-  volume = {67},
-  pages  = {10005--10034},
-  doi    = {10.1007/s10115-025-02523-1},
-  note   = {Skewness/Kurtosis divergence measures for unsupervised drift detection}
-},
-
 @article{iforest_extended,
   author = {Leveni, P. and others},
   title  = {Online Isolation Forest Performance Analysis},
@@ -940,14 +947,17 @@
 },
 
 @article{scar2025benchmark,
-  author = {Ma, Y. and others},
-  title = {Revisiting Streaming Anomaly Detection: Benchmark and Evaluation},
-  journal = {Artificial Intelligence Review},
-  volume = {58},
-  number = {8},
-  year = {2025},
+  title     = {Revisiting Streaming Anomaly Detection: Benchmark and Evaluation},
+  author    = {Ma, Yixiao and Zhang, Yang and others},
+  journal   = {Artificial Intelligence Review},
+  year      = {2025},
+  volume    = {58},
+  number    = {8},
+  pages     = {1--45},
   publisher = {Springer},
-  doi = {10.1007/s10462-024-10995-w}
+  doi       = {10.1007/s10462-024-10995-w},
+  url       = {https://link.springer.com/article/10.1007/s10462-024-10995-w},
+  note      = {Evaluates 9 streaming + 4 adapted static algorithms on 76 synthetic + 74 real datasets; GitHub: github.com/yixiaoma666/SCAR}
 },
 
 % ======= Flink Performance =======
@@ -989,6 +999,14 @@
   note = {Reference: contamination cascades, schema enforcement, dead-letter queue patterns}
 },
 
+@article{grab_coban_platform,
+  author = {{Grab Engineering}},
+  title = {Coban: Real-time Data Quality Monitoring Platform for Apache Kafka Streams},
+  year = {2024},
+  url = {https://engineering.grab.com/the-complete-stream-processing-journey-on-flinksql},
+  note = {FlinkSQL-based declarative rule definitions for human-readable and computationally efficient data quality testing}
+}
+
 @article{grab_2019_coban,
   author = {Yang, Ying and Guo, Huidong and Gao, Haoyu and Weng, Ping},
   title = {Data Quality Monitoring at Scale: Lessons from Grab},
@@ -999,23 +1017,18 @@
 },
 
 @article{meter_2023,
-  author = {Zhang, Y. and Liu, X. and Chen, J. and Wang, Q. and Du, H.},
-  title = {METER: MicETive ConcEpt Adaptation fRamework for Streaming Data},
-  booktitle = {Proceedings of the ACM Web Conference (WWW)},
-  pages = {3121--3132},
+  author = {Zhu, Jiaqi and Cai, Shaofeng and Deng, Fang and Ooi, Beng Chin and Zhang, Wenqiao},
+  title = {METER: A Dynamic Concept Adaptation Framework for Online Anomaly Detection},
+  journal = {arXiv preprint arXiv:2312.16831},
   year = {2023},
-  publisher = {ACM},
-  doi = {10.1145/3543873.3587621},
-  note = {MLP hypernetwork for centroid displacement prediction}
+  note = {Meta-learning MLP for streaming drift adaptation}
 },
 
 @article{dtd_2026,
-  author = {Krishnan, S. and Patel, R. and Brown, M. and Zhang, H.},
-  title = {DTD: Dynamic Threshold Discovery -- No Fixed Threshold is Universally Optimal},
-  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence (AAAI)},
+  author = {Lu, Peng and Lu, Jie and Liu, Anjin and Yu, Enghong and Zhang, Guang},
+  title = {Autonomous Concept Drift Threshold Determination},
   year = {2026},
-  publisher = {AAAI},
-  note = {Formal proof: no single fixed threshold universally optimal; 3-way comparison}
+  note = {arXiv preprint; formal proof that no fixed threshold is universally optimal; 3-way comparison framework}
 },
 
 @article{scar_2025,
@@ -1036,6 +1049,17 @@
   year = {2024},
   url = {https://docs.confluent.io/platform/current/schema-registry/},
   note = {Schema enforcement: BACKWARD/FORWARD/FULL compatibility modes}
+}
+
+@article{compound_schema_registry2024,
+  author = {Fu, Silvery D. and Chen, Xuewei},
+  title = {Compound Schema Registry (Extended Abstract)},
+  year = {2024},
+  eprint = {2406.11227},
+  archiveprefix = {arXiv},
+  primaryclass = {cs.DB},
+  url = {https://arxiv.org/abs/2406.11227},
+  note = {UC Berkeley; proposes Generalized Schema Evolution (GSE) using LLMs for semantic schema mapping}
 },
 
 @article{confluent_dead_letter_queue,

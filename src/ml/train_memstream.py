@@ -181,10 +181,10 @@ def extract_features(df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, np.ndarr
     X = np.nan_to_num(X, nan=0.0, posinf=100.0, neginf=0.0)
 
     # Ratecode extraction from one-hot (decode to scalar)
-    ratecode_vals = np.array([
-        sum((i + 1) * X[i, 25 + i] for i in range(5))
-        for i in range(n)
-    ], dtype=np.int32)
+    # Weighted sum: 1*rc1 + 2*rc2 + 3*rc3 + 4*rc4 + 5*rc5
+    weights = np.array([1, 2, 3, 4, 5], dtype=np.float32)
+    ratecode_onehot = X[:, 25:30].astype(np.float32)
+    ratecode_vals = (ratecode_onehot * weights).sum(axis=1).astype(np.int32)
 
     return X, hour.astype(np.int32), dow.astype(np.int32), ratecode_vals
 
@@ -884,9 +884,7 @@ class MemStreamTrainer:
             'memory_count': self.ms.memory.count,
             'mean': self.ms.mean.cpu(),
             'std': self.ms.std.cpu(),
-            'context_beta': self.ms._context_beta.betas if self.ms._context_beta else None,
-            'context_beta_n_neighborhoods': self.ms._context_beta.n_neighborhoods if self.ms._context_beta else 10,
-            'context_beta_n_cells': self.ms._context_beta.n_cells if self.ms._context_beta else 8,
+            'context_beta': self.ms._context_beta.get_state_dict() if self.ms._context_beta else None,
             'max_thres': self.ms.max_thres.item(),
             '_recent_scores': self._recent_scores,
             'cfg': self.cfg.__dict__,
@@ -966,11 +964,11 @@ class MemStreamTrainer:
 
             LOGGER.info("HMAC verification passed")
 
-        # Load state
+        # Load state (weights_only=False required — checkpoint contains Python dicts/lists from ContextBeta)
         state = torch.load(
             checkpoint_path,
             map_location=self.device,
-            weights_only=True,
+            weights_only=False,
             pickle_module=pickle
         )
 
@@ -990,13 +988,7 @@ class MemStreamTrainer:
 
         # Restore ContextBeta
         if state.get('context_beta') is not None:
-            n_nb = state.get('context_beta_n_neighborhoods', 10)
-            n_cells = state.get('context_beta_n_cells', 8)
-            self.ms._context_beta = ContextBeta(
-                n_neighborhoods=n_nb,
-                n_cells=n_cells
-            )
-            self.ms._context_beta.betas = state['context_beta']
+            self.ms._context_beta = ContextBeta.from_state_dict(state['context_beta'])
 
         # Restore recent scores
         self._recent_scores = state.get('_recent_scores', [])
