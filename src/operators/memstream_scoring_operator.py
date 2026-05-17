@@ -617,6 +617,9 @@ class MemStreamScoringOperator(MapFunction):
         ratecodes = []
 
         for rec in self._warmup_buffer:
+            # Handle keyed stream tuples
+            if isinstance(rec, tuple) and len(rec) == 2:
+                rec = rec[1]
             try:
                 f = self._vectorizer.transform(rec)
                 if f is None:
@@ -689,6 +692,11 @@ class MemStreamScoringOperator(MapFunction):
                 'tpep_pickup_datetime': '',
             }
 
+        # Handle keyed stream tuples: Flink keyBy emits (key, record) pairs.
+        neighborhood_key = None
+        if isinstance(value, tuple) and len(value) == 2:
+            neighborhood_key, value = value
+
         nb_name, nb_idx = get_neighborhood(value) if isinstance(value, dict) else ('unknown', 9)
         dt_str = value.get('tpep_pickup_datetime', '') if isinstance(value, dict) else ''
         hour, dow = 12, 0
@@ -712,8 +720,10 @@ class MemStreamScoringOperator(MapFunction):
                         f"Switching to degraded mode (score=0.5 for all records)."
                     )
             self._warmup_buffer.append(value)
-            return {
-                **value,
+            # Return dict: merge warmup fields into the record.
+            # neighborhood_key is already stripped at the top of map().
+            result = dict(value) if isinstance(value, dict) else {}
+            result.update({
                 'anomaly_score': 0.0,
                 'threshold': 1.0,
                 'is_anomaly': False,
@@ -727,7 +737,8 @@ class MemStreamScoringOperator(MapFunction):
                 'beta_staleness_violations': self._beta_staleness_violations,
                 'pickup_hour': hour,
                 'pickup_dow': dow,
-            }
+            })
+            return result
 
         # Warmup is complete — attempt warmup if buffer is full
         if not self._warmup_complete and not self._warmup_failed:
@@ -740,8 +751,8 @@ class MemStreamScoringOperator(MapFunction):
                 pass
             else:
                 # Warmup still not ready or failed; score in degraded mode
-                return {
-                    **value,
+                base = dict(value) if isinstance(value, dict) else {}
+                base.update({
                     'anomaly_score': 0.5,
                     'threshold': 1.0,
                     'is_anomaly': False,
@@ -756,7 +767,8 @@ class MemStreamScoringOperator(MapFunction):
                     'pickup_hour': hour,
                     'pickup_dow': dow,
                     'scoring_error': 'warmup_incomplete',
-                }
+                })
+                return base
 
         # ── Normal scoring path (warmup complete) ───────────────────────────
         try:
@@ -831,8 +843,8 @@ class MemStreamScoringOperator(MapFunction):
             if self._checkpoint_counter >= MEMORY_CHECKPOINT_INTERVAL:
                 self._save_checkpoint()
 
-            return {
-                **value,
+            base = dict(value) if isinstance(value, dict) else {}
+            base.update({
                 'anomaly_score': float(score),
                 'threshold': 1.0,
                 'is_anomaly': bool(is_anomaly),
@@ -846,7 +858,8 @@ class MemStreamScoringOperator(MapFunction):
                 'beta_staleness_seconds': self._beta_staleness_violations,
                 'pickup_hour': hour,
                 'pickup_dow': dow,
-            }
+            })
+            return base
 
         except Exception as e:
             LOGGER.error("[MemStreamScoring] Error scoring record: %s", e)
@@ -1029,8 +1042,8 @@ class MemStreamScoringOperator(MapFunction):
         neighborhood_idx: int,
         error_msg: str
     ):
-        return {
-            **value,
+        base = dict(value) if isinstance(value, dict) else {}
+        base.update({
             'anomaly_score': 0.5,
             'threshold': 1.0,
             'is_anomaly': False,
@@ -1042,7 +1055,8 @@ class MemStreamScoringOperator(MapFunction):
             'ml_model': 'memstream_v10',
             'scoring_latency_ms': -1.0,
             'scoring_error': error_msg,
-        }
+        })
+        return base
 
     def get_stats(self) -> dict:
         return {

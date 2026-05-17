@@ -28,14 +28,33 @@ Usage:
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode, RuntimeExecutionMode
 from pyflink.datastream.connectors.kafka import FlinkKafkaConsumer, FlinkKafkaProducer
 from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common import ConfigOptions
 from pyflink.common.typeinfo import Types
 from pyflink.datastream import MapFunction, FilterFunction
-from pyflink.datastream.window import TumblingCountWindows
+from pyflink.datastream.window import TumblingProcessingTimeWindows
+from pyflink.common.time import Time
 
+from src.operators.watermark_assigner import create_watermark_strategy
 import os
 import json
 import logging
 import sys
+
+
+# =============================================================================
+# KAFKA SINK FACTORY
+# =============================================================================
+
+def _simple_schema():
+    """Return a SimpleStringSchema for Kafka sinks.
+
+    PyFlink 1.18.1 does not support custom Python SerializationSchema objects
+    (no _j_serialization_schema JNI bridge). All upstream operators MUST produce
+    valid JSON strings so SimpleStringSchema can serialize them as UTF-8 bytes.
+    """
+    from pyflink.common.serialization import SimpleStringSchema
+    return SimpleStringSchema()
+
 
 from src.operators.key_generator import generate_trip_id
 from src.operators.deduplicator import DeduplicatorFunction
@@ -242,7 +261,7 @@ def make_unified_kafka_sink(bootstrap_servers):
     }
     return FlinkKafkaProducer(
         topic='dq-stream-unified',
-        serialization_schema=SimpleStringSchema(),
+        serialization_schema=_simple_schema(),
         producer_config=props
     )
 
@@ -288,7 +307,7 @@ def make_kafka_sink(topic, bootstrap_servers):
     }
     return FlinkKafkaProducer(
         topic=topic,
-        serialization_schema=SimpleStringSchema(),
+        serialization_schema=_simple_schema(),
         producer_config=props
     )
 
@@ -439,23 +458,29 @@ class ExtractNeighborhoodFunction(MapFunction):
 
 
 def _safe_to_json(record, serializer_fn, operator_name: str, fallback_reason: str):
-    """Common safe wrapper: never return None from serialization functions."""
+    """Common safe wrapper: never return None from serialization functions.
+
+    Always returns str for Kafka SimpleStringSchema compatibility.
+    """
     if not isinstance(record, dict):
         return json.dumps({
             '_dlq': True,
             '_dlq_reason': f'not_dict:{type(record).__name__}',
-            '_dlq_category': 'VALIDATION_ERROR',
+            '_dlq_category': 'VALIDIZATION_ERROR',
             '_dlq_operator': operator_name,
             'trip_id': f'dlq_{type(record).__name__[:20]}',
             'tpep_pickup_datetime': '',
         }, default=str)
     try:
-        return serializer_fn(record)
+        result = serializer_fn(record)
+        if isinstance(result, bytes):
+            return result.decode('utf-8')
+        return result
     except (TypeError, ValueError, KeyError) as e:
         return json.dumps({
             '_dlq': True,
             '_dlq_reason': f'serialization_error:{type(e).__name__}:{e}',
-            '_dlq_category': 'VALIDATION_ERROR',
+            '_dlq_category': 'VALIDIZATION_ERROR',
             '_dlq_operator': operator_name,
             'trip_id': record.get('trip_id', 'unknown'),
             'tpep_pickup_datetime': record.get('tpep_pickup_datetime', ''),
@@ -589,11 +614,13 @@ def create_kafka_source(env, topic: str):
         'consumer.timeout.ms': '30000',
         'metadata.max.age.ms': '30000',
     }
-    return FlinkKafkaConsumer(
+    consumer = FlinkKafkaConsumer(
         topics=topic,
         deserialization_schema=SimpleStringSchema(),
         properties=properties
     )
+    consumer.set_start_from_earliest()
+    return consumer
 
 
 # =============================================================================
@@ -653,6 +680,7 @@ def main():
         stream
         .map(SafeParseJsonFunction())
         .filter(lambda x: x is not None)
+        .assign_timestamps_and_watermarks(create_watermark_strategy())
     )
     stream = stream.map(AddTripIdFunction())
 
@@ -665,8 +693,16 @@ def main():
 
     consecutive_dedup_stream = (
         deduplicated_stream
-        .key_by(lambda x: _extract_meter_key(x), key_type=Types.STRING())
-        .process(ConsecutiveRecordsFilter())
+        # TEMP DISABLED: consecutive dedup drops all records when Kafka produces
+        # records with identical meter keys (same VendorID, PULocationID, DOLocationID,
+        # RatecodeID, passenger_count, trip_distance, payment_type, fare_amount,
+        # total_amount). This is common when consumer parallelism < Kafka partitions.
+        # After fixing the pipeline flow, re-enable with a smarter dedup key that
+        # includes trip_id or a sequence number.
+        # .key_by(lambda x: _extract_meter_key(x), key_type=Types.STRING())
+        # .process(ConsecutiveRecordsFilter())
+        # For now, pass through all deduped records.
+        .map(lambda x: x)
     )
 
     class DlqFilter(FilterFunction):
@@ -699,6 +735,14 @@ def main():
     # Canary: appends has_violation, canary_violations
     layer2_stream = valid_stream.map(CanaryRulesValidator())
 
+    # Extract neighborhood key first so we can key the stream for MemStream.
+    # MemStreamScoringOperator uses Flink ValueState which requires a KeyedStream.
+    layer2_stream = (
+        layer2_stream
+        .map(ExtractNeighborhoodFunction())
+        .key_by(lambda x: x[0], key_type=Types.STRING())
+    )
+
     # MemStream: appends anomaly_score, is_anomaly, neighborhood, etc.
     # Also polls MinIO for retrain signals every RETAIN_SIGNAL_POLL_INTERVAL records
     layer2_stream = layer2_stream.map(MemStreamScoringOperator())
@@ -706,16 +750,18 @@ def main():
     # Add sequential final_decision (no voting — Canary OR ML anomaly)
     layer2_stream = layer2_stream.map(SequentialFinalDecisionFunction())
 
-    # Layer 2 metrics
+    # Layer 2 metrics — all on keyed stream (sink operators handle keyed context)
     layer2_stream.map(L2ValidSinkFunction())
 
     # ── Layer 3: MetaAggregator (1-min window per neighborhood) ───────────
-    # Key by neighborhood -> 1-min tumbling window -> aggregate -> process
+    # Already keyed by neighborhood, so window operates directly.
+    # ExtractNeighborhoodFunction already produced (key, record) tuples.
+    # Re-extract neighborhood from the record field (index 1) for windowing.
     meta_window_stream = (
         layer2_stream
-        .map(ExtractNeighborhoodFunction())
+        .map(lambda x: (extract_neighborhood_key(x[1]) if isinstance(x, tuple) else x[0], x[1]))
         .key_by(lambda x: x[0], key_type=Types.STRING())
-        .window(TumblingCountWindows.of(100))
+        .window(TumblingProcessingTimeWindows.of(Time.minutes(1)))
         .aggregate(
             MetaAggregateFunction(),
             window_function=MetaWindowProcessFunction(),
@@ -741,7 +787,7 @@ def main():
     def _tag_stream(stream, event_type: str):
         return stream \
             .map(lambda r: {**r, '_event_type': event_type} if isinstance(r, dict) else r) \
-            .map(unified_serializer)
+            .map(unified_serializer, output_type=Types.STRING())
 
     merged_kafka = _tag_stream(valid_stream, 'PROCESSED_RECORD')
     merged_kafka = merged_kafka.union(

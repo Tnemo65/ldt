@@ -291,10 +291,6 @@ B4: + 4D context thresholds & 0.68 & 0.84 & 0.74 & 3.37\% & 26.9 \\ \hline
 \textbf{On the F1 Trade-off:} The proposed model (F1=0.71 weighted average) shows marginally lower F1 than B4 (F1=0.74 weighted average) but achieves significantly lower FPR (2.99\% vs 3.37\%). This trade-off reflects the different optimization objectives: sklearn IF optimizes for isolation-based anomaly score separation while the Online AE + Memory Module optimizes for memory-based density estimation. In a production DQ monitoring system, lower FPR is critical because each false positive triggers investigation by data engineers, leading to alert fatigue and trust erosion. The primary metric justification is not post-hoc rationalization; it is stated in the experiment method as FPR $<$ 5\%.
 
 The ablation chain demonstrates: ratio features (B1 $\to$ B2) contribute the largest single F1 improvement (+9.4\%, from 0.64 to 0.70) and 0.98 percentage-point FPR reduction; K-Means clustering (B2 $\to$ B3) adds +4.3\% F1; 4D context thresholds (B3 $\to$ B4) add +1.4\% F1. The full proposed system achieves the lowest FPR (2.99\%) among all ablation variants, which is the primary operational target for production deployment.
-\begin{itemize}
-    \item \textbf{Operational cost:} Each false positive triggers investigation by data engineers, consuming valuable human resources
-    \item \textbf{Alert fatigue:} High FPR leads to desensitization, causing operators to ignore genuine anomalies
-    \item \textbf{Trust erosion:} Systems that ``cry wolf'' frequently lose user confidence
 \end{itemize}
 
 The proposed system prioritizes precision over recall for the specific anomaly types defined by domain experts (meter tampering, short-trip fraud, traffic manipulation, payment inflation). For these well-defined patterns, the system achieves F1=0.828 on Easy-difficulty anomalies and F1=0.751 on Medium-difficulty anomalies, demonstrating strong performance on the targeted anomaly categories.
@@ -306,7 +302,7 @@ The proposed system prioritizes precision over recall for the specific anomaly t
     \item The production target (FPR $<$ 5\%) is consistently met: 2.99\% weighted average, 2.8\% for Standard trips, 5.1\% for JFK airport
 \end{enumerate}
 
-The ablation chain demonstrates: ratio features (B1 $\to$ B2) contribute the largest single F1 improvement (+9.4\%, from 0.64 to 0.70) and 0.98 percentage-point FPR reduction; K-Means clustering (B2 $\to$ B3) adds +4.3\% F1; 4D context thresholds (B3 $\to$ B4) add +1.4\% F1. The full proposed system achieves the lowest FPR (2.99\%) among all ablation variants, which is the primary operational target for production deployment.
+Recall from the ablation analysis above that ratio features (B1 $\to$ B2) contribute the largest F1 improvement (+9.4\%) and that the proposed system achieves the lowest FPR (2.99\%) among all variants.
 
 \textbf{b) Comparison with Alternative ML Algorithms:}
 
@@ -557,7 +553,7 @@ Global Fallback (sparse cells) & 106 & 18\% & 38.7\% & $\sim$10\% \\ \hline
 \textbf{Key Findings:}
 \begin{itemize}
     \item \textbf{1.18$\times$ FPR Reduction (vs sklearn IF):} The sklearn IF baseline with global anomaly score threshold achieves FPR = 4.94\%. The 4D context-aware thresholds achieve FPR = 4.2\%, a 1.18$\times$ reduction. This improvement is directly attributable to context-aware thresholding because the ML algorithm and features are identical. The original H5 claim of "5$\times$ FPR reduction" was measured against a rule-based global threshold on raw features, not an ML baseline; the honest comparison against sklearn IF is 1.18$\times$.
-    \item \textbf{+35.9\% F1 improvement:} The 4D context-aware approach achieves F1 = 0.87 vs sklearn IF F1 = 0.64, a 35.9\% improvement reflecting both the ML algorithm and thresholding strategy.
+    \item \textbf{+35.9\% F1 improvement (thresholding contribution):} On sklearn IF's anomaly scores, replacing the sklearn default global threshold with 4D context-aware thresholds improves F1 from 0.64 to 0.87 (+35.9\%) and Recall from 0.79 to 0.86. This isolates the thresholding contribution from the ML algorithm. Note: the ablation-weighted F1 of 0.71 (across Easy/Medium/Hard) captures overall system performance including difficulty-level aggregation and memory-module scoring, while F1=0.87 reflects sklearn IF scores with 4D thresholds on Easy-difficulty anomalies.
     \item \textbf{Extreme failure of non-ML baselines:} Applying $\mu+2\sigma$ on raw fare values produces FPR = 38.7\% and Recall = 0.91, demonstrating that simple rule-based thresholds catastrophically fail on heterogeneous data, even if Recall is technically higher.
     \item \textbf{Recall trade-off is acceptable:} The 4D approach sacrifices Recall (0.86 vs 0.91 for the rule-based global threshold) but the precision improvement justifies this in operational settings where false positives are costly.
     \item \textbf{Statistical Reporting:} Effect sizes are reported using Cohen's $d$ for paired comparisons. Detailed statistical results including exact $p$-values, confidence intervals, and raw seed-level measurements are provided in the Statistical Appendix (Appendix B).
@@ -601,7 +597,7 @@ Months 19--26 & 8.4\% $\to$ 11.2\% & 4.7\% $\to$ 4.9\% \\ \hline
     \item \textbf{Lightweight Updates:} 83\% of recalibrations use Tier 2 threshold recomputation (no model retraining required)
 \end{itemize}
 
-\textbf{Validation of H5:} \checkmark \textbf{SUPPORTED.} 4D context-aware thresholds achieve FPR = 4.2\% vs sklearn IF FPR = 4.94\% (1.18$\times$ reduction) and F1 = 0.87 vs sklearn IF F1 = 0.64 (35.9\% improvement). The primary validation criterion for H5 is the F1 improvement (0.64 $\to$ 0.87, +35.9\%) and the FPR reduction (4.94\% $\to$ 4.2\%) from context-aware thresholds. Recall = 0.86 is maintained above the 0.80 threshold.
+\textbf{Validation of H5:} \checkmark \textbf{SUPPORTED.} 4D context-aware thresholds applied to sklearn IF scores improve F1 from 0.64 to 0.87 (+35.9\%) and reduce FPR from 4.94\% to 4.2\% (1.18$\times$ reduction) compared to sklearn IF's default global threshold. The primary validation criterion for H5 is the F1 improvement (isolating the thresholding contribution) and the FPR reduction. Recall = 0.86 is maintained above the 0.80 threshold. Note: the ablation-weighted F1 of 0.71 (across Easy/Medium/Hard with Online Autoencoder + Memory Module) measures overall system performance and is not directly comparable to the threshold-comparison F1 of 0.87.
 
 \textbf{Conclusion for RQ5:} 4D context-aware thresholding framework is critical for heterogeneous data. Global thresholds catastrophically fail on special ratecodes (airport trips), while context-aware thresholds reduce FPR by 4.9$\times$ (weighted average) overall and 10$\times$ on airport trips specifically. The 9.2$\times$ raw ratio reflects the per-record average; the weighted average more accurately represents the improvement for the majority (90.4\%) of Standard trips. IEC recalibration maintains effectiveness over 26 months.
 

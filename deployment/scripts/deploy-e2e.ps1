@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = "Continue"
 $DEPLOYMENT_DIR = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $GRAFANA_PASSWORD = if ($env:GRAFANA_PASSWORD) { $env:GRAFANA_PASSWORD } else { "grafana_local_admin" }
-$COMPOSE_FILE = Join-Path $DEPLOYMENT_DIR "deployment\docker-compose.yml"
+$COMPOSE_FILE = Join-Path $DEPLOYMENT_DIR "deployment\docker-compose-minimal.yml"
 
 # Helpers
 function Write-Pass($msg) { Write-Host "  [PASS] $msg" -ForegroundColor Green }
@@ -108,7 +108,7 @@ if (-not $SkipDeploy) {
         Write-Step "2b: Build images"
         $builds = @{
             "ldt-flink:1.18.1-py" = @{ Path = "$DEPLOYMENT_DIR"; Dockerfile = "deployment\flink\Dockerfile"; Name = "Flink" }
-            "ldt-cadqstream-metrics:latest" = @{ Path = "$DEPLOYMENT_DIR\cadqstream-metrics"; Dockerfile = "Dockerfile"; Name = "cadqstream-metrics" }
+            "ldt-cadqstream-metrics:latest" = @{ Path = "$DEPLOYMENT_DIR\deployment\cadqstream-metrics"; Dockerfile = "Dockerfile"; Name = "cadqstream-metrics" }
             "ldt-ml-service:latest" = @{ Path = "$DEPLOYMENT_DIR\deployment\ml-service"; Dockerfile = "Dockerfile"; Name = "ML Service" }
             "ldt-action-replay-worker:latest" = @{ Path = "$DEPLOYMENT_DIR\deployment\action-replay-worker"; Dockerfile = "Dockerfile"; Name = "Action Replay" }
             "ldt-stats-writer:latest" = @{ Path = "$DEPLOYMENT_DIR\deployment\stats-writer"; Dockerfile = "Dockerfile"; Name = "Stats Writer" }

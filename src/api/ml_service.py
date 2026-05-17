@@ -887,68 +887,7 @@ async def verify_bearer_token(
     return "internal"
 
 
-# REC-7: Metrics endpoint authentication
-METRICS_AUTH_FAILURES = Counter(
-    "ml_service_metrics_auth_failures_total",
-    "Failed authentication attempts on /metrics endpoint",
-)
-
-
-async def verify_metrics_token(
-    authorization: Optional[str] = Header(None),
-) -> str:
-    """Verify bearer token for Prometheus metrics endpoint.
-
-    REC-7: Requires Authorization: Bearer <token> header.
-    Uses METRICS_API_KEY env var (falls back to INTERNAL_API_KEY).
-
-    Args:
-        authorization: Authorization header value
-
-    Returns:
-        "metrics" on success
-
-    Raises:
-        HTTPException: If authentication fails
-    """
-    # Support dedicated metrics key or fallback to internal API key
-    metrics_key = os.getenv("METRICS_API_KEY") or os.getenv("INTERNAL_API_KEY")
-
-    if not metrics_key:
-        LOGGER.error("METRICS_API_KEY environment variable is not set")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Server configuration error: METRICS_API_KEY not set",
-        )
-
-    if not authorization:
-        METRICS_AUTH_FAILURES.inc()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Parse Bearer token
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        METRICS_AUTH_FAILURES.inc()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization header format. Use: Bearer <token>",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    token = parts[1]
-    if not hmac.compare_digest(token, metrics_key):
-        METRICS_AUTH_FAILURES.inc()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    return "metrics"
+# REC-7: Metrics endpoint auth removed — Prometheus scrapes require no token.
 
 
 # =============================================================================
@@ -1469,12 +1408,8 @@ async def quick_retrain_model(
 
 
 @app.get("/metrics")
-async def metrics(_auth: str = Depends(verify_metrics_token)):
-    """Prometheus metrics endpoint (REC-7: requires Bearer token).
-
-    Requires Authorization: Bearer <token> header.
-    Set METRICS_API_KEY env var (or falls back to INTERNAL_API_KEY).
-    """
+async def metrics():
+    """Prometheus metrics endpoint — no auth required for internal Prometheus scrapes."""
     return Response(
         content=generate_latest(),
         media_type=CONTENT_TYPE_LATEST,

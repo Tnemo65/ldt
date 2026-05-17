@@ -1,0 +1,663 @@
+# =============================================================================
+# CA-DQStream — Minimal Deployment (Core Flow + Monitoring)
+# Architecture: Kafka → Flink (MemStream) → MinIO + Redis
+#
+# REMOVED (dev-only, not needed for core flow):
+#   - schema-registry    (runtime uses SimpleStringSchema, not Avro)
+#   - kafka-ui           (dev-only Kafka UI)
+#   - node-exporter      (host monitoring — enable if needed)
+#
+# KEEP (required for core flow):
+#   - zookeeper, kafka, kafka-init    — message broker + topic setup
+#   - redis                           — IEC adaptive threshold caching
+#   - minio, minio-init              — object storage + bucket setup
+#   - flink-jobmanager, flink-taskmanager, flink-init — stream processing
+#   - ml-service                     — ML inference + model management
+#   - action-replay-worker           — IEC retrain signal handler
+#
+# KEEP (monitoring — required for DQ/AD/drift dashboards):
+#   - prometheus       — metrics collection
+#   - grafana          — dashboards for data quality, anomaly detection, concept drift
+#   - cadqstream-metrics — HTTP scraper exposing app-level metrics
+#   - kafka-exporter   — Kafka consumer lag and throughput metrics
+#   - stats-writer     — pipeline stats writer to MinIO
+#
+# Run: docker compose -f deployment/docker-compose-minimal.yml up -d
+# =============================================================================
+
+networks:
+  cadqstream-net:
+    name: cadqstream-net
+    driver: bridge
+
+volumes:
+  zookeeper-data:
+    name: ldt-zookeeper-data
+  kafka-data:
+    name: ldt-kafka-data
+  redis-data:
+    name: ldt-redis-data
+  minio-data:
+    name: ldt-minio-data
+  flink-jobmanager-log:
+    name: ldt-flink-jobmanager-log
+  flink-taskmanager-log:
+    name: ldt-flink-taskmanager-log
+  flink-checkpoints:
+    name: ldt-flink-checkpoints
+
+services:
+  # ==========================================================================
+  # Kafka Infrastructure
+  # ==========================================================================
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: ldt-zookeeper
+    hostname: zookeeper
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 | grep -q Mode"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_INIT_LIMIT: 5
+      ZOOKEEPER_SYNC_LIMIT: 2
+    ports:
+      - "2181:2181"
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: ldt-kafka
+    hostname: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_SEGMENT_BYTES: 1073741824
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_NUM_PARTITIONS: 4
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 1000
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    mem_limit: 4g
+    shm_size: 256m
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: ldt-kafka-init
+    hostname: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: "no"
+    entrypoint: ["/bin/bash", "/scripts/init.sh"]
+    volumes:
+      - ./kafka/init-scripts:/scripts:ro
+    environment:
+      KAFKA_HOST: kafka
+      KAFKA_PORT: "9092"
+
+  # ==========================================================================
+  # Redis — IEC adaptive threshold caching
+  # ==========================================================================
+
+  redis:
+    image: redis:7-alpine
+    container_name: ldt-redis
+    hostname: redis
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} -p 6379 ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    command:
+      - redis-server
+      - --requirepass
+      - "${REDIS_PASSWORD}"
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ==========================================================================
+  # MinIO Storage
+  # ==========================================================================
+
+  minio:
+    image: minio/minio:latest
+    container_name: ldt-minio
+    hostname: minio
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    volumes:
+      - minio-data:/data
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: ldt-minio-init
+    hostname: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: "no"
+    entrypoint: ["/bin/bash", "/scripts/01-create-buckets.sh"]
+    volumes:
+      - ./minio/init-scripts:/scripts:ro
+    environment:
+      MC_HOST: http://minio:9000
+      MC_USER: ${MC_MINIO_USER}
+      MC_PASS: ${MC_MINIO_PASSWORD}
+      MC_ALIAS: local
+
+  # ==========================================================================
+  # Flink Streaming
+  # ==========================================================================
+
+  flink-jobmanager:
+    build:
+      context: ..
+      dockerfile: deployment/flink/Dockerfile
+    image: ldt-flink:1.18.1-py
+    container_name: ldt-flink-jobmanager
+    hostname: flink-jobmanager
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/overview || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      JOB_MANAGER_RPC_PORT: 6123
+      JOB_MANAGER_REST_PORT: 8081
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 16
+      FLINK_PROPERTIES: |
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: file:///opt/flink/checkpoints/flink/checkpoints
+        state.savepoints.dir: file:///opt/flink/checkpoints/flink/savepoints
+        state.checkpoints.num-retained: 3
+        execution.checkpointing.interval: 60000
+        execution.checkpointing.max-concurrent-checkpoints: 1
+        execution.checkpointing.min-pause: 60000
+        execution.checkpointing.timeout: 300000
+        execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
+        execution.checkpointing.tolerable-failed-checkpoints: 0
+        execution.checkpointing.unaligned.enabled: false
+        state.backend.rocksdb.memory.managed: true
+        state.backend.rocksdb.block.cache-size: 512mb
+        state.backend.rocksdb.writebuffer.size: 64mb
+        state.backend.rocksdb.writebuffer.count: 2
+        state.backend.rocksdb.predefined-options: SPINNING_DISK_OPTIMIZED_HIGH_MEM
+        restart-strategy: fixed-delay
+        restart-strategy.fixed-delay.delay: 5000
+        metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+        metrics.reporter.prom.port: 9248
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        parallelism.default: 4
+        taskmanager.memory.process.size: 2048m
+        taskmanager.memory.managed.fraction: 0.4
+        python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
+        python.client.executor.args: --python /opt/venv/bin/python3
+        taskmanager.memory.task.off-heap.enabled: true
+        taskmanager.memory.task.off-heap.size: 1024m
+        kafka.bootstrap.servers: kafka:9092
+        rest.address: flink-jobmanager
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_PATH_STYLE_ACCESS: "true"
+      FLINK_ENV: production
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+    ports:
+      - "8081:8081"
+    volumes:
+      - flink-jobmanager-log:/opt/flink/log
+      - flink-checkpoints:/opt/flink/checkpoints
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    command: jobmanager
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4096M
+
+  flink-taskmanager:
+    build:
+      context: ..
+      dockerfile: deployment/flink/Dockerfile
+    image: ldt-flink:1.18.1-py
+    container_name: ldt-flink-taskmanager
+    hostname: flink-taskmanager
+    depends_on:
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      flink-jobmanager:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://flink-jobmanager:8081/overview || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    environment:
+      JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      JOB_MANAGER_RPC_PORT: 6123
+      TASK_MANAGER_NUMBER_OF_TASK_SLOTS: 16
+      FLINK_PROPERTIES: |
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: file:///opt/flink/checkpoints/flink/checkpoints
+        state.savepoints.dir: file:///opt/flink/checkpoints/flink/savepoints
+        state.checkpoints.num-retained: 3
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.endpoint: http://minio:9000
+        s3.path.style.access: true
+        fs.s3a.clazzloader.check.leaked.classloader: false
+        fs.s3a.multipart.threshold: 5242880
+        fs.s3a.multipart.size: 5242880
+        fs.s3a.connection.maximum: 8
+        fs.s3a.connection.ttl: 30000
+        taskmanager.memory.jvm-metaspace.size: 1024m
+        taskmanager.memory.task.off-heap.size: 1024m
+        state.backend.rocksdb.memory.managed: true
+        state.backend.rocksdb.block.cache-size: 512mb
+        state.backend.rocksdb.writebuffer.size: 64mb
+        state.backend.rocksdb.writebuffer.count: 2
+        taskmanager.memory.process.size: 10240m
+        taskmanager.memory.managed.fraction: 0.5
+        taskmanager.memory.jvm-options: "-XX:+UseG1GC -XX:MaxGCPauseMills=500 -XX:+ParallelRefProcEnabled"
+        metrics.reporter.prom.class: org.apache.flink.metrics.prometheus.PrometheusReporter
+        metrics.reporter.prom.port: 9249
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        parallelism.default: 4
+        python.udf.runner.script: /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
+        python.client.executor.args: --python /opt/venv/bin/python3
+        taskmanager.memory.task.off-heap.enabled: true
+        taskmanager.memory.task.off-heap.size: 1024m
+        kafka.bootstrap.servers: kafka:9092
+        rest.address: flink-jobmanager
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+      S3_ENDPOINT: http://minio:9000
+      S3_PATH_STYLE_ACCESS: "true"
+      FLINK_ENV: production
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      PYTHON_WORKER_HEAP_MAX_MB: "1536"
+      PYTHON_EXECUTION_MEMORY: "3072m"
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+    volumes:
+      - flink-taskmanager-log:/opt/flink/log
+      - flink-checkpoints:/opt/flink/checkpoints
+    networks:
+      - cadqstream-net
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "2"
+          memory: 10240M
+    restart: unless-stopped
+    command: taskmanager
+    shm_size: 256m
+
+  flink-init:
+    build:
+      context: ..
+      dockerfile: deployment/flink/Dockerfile
+    image: ldt-flink:1.18.1-py
+    container_name: ldt-flink-init
+    hostname: flink-init
+    depends_on:
+      flink-jobmanager:
+        condition: service_healthy
+      flink-taskmanager:
+        condition: service_healthy
+      kafka-init:
+        condition: service_started
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    entrypoint: ["/bin/bash", "/scripts/flink-init.sh"]
+    volumes:
+      - ./flink/flink-init.sh:/scripts/flink-init.sh:ro
+    environment:
+      FLINK_REST: http://flink-jobmanager:8081
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      FLINK_ENV: production
+      PYTHONPATH: /opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+
+  # ==========================================================================
+  # ML Service — FastAPI for IEC strategy execution
+  # ==========================================================================
+
+  ml-service:
+    build:
+      context: ..
+      dockerfile: deployment/ml-service/Dockerfile
+    container_name: ldt-ml-service
+    hostname: ml-service
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "8000:8000"
+    environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_DEFAULT_REGION: us-east-1
+      MINIO_ENDPOINT: minio:9000
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      METRICS_API_KEY: ${METRICS_API_KEY}
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_USE_TLS: "false"
+      MEMSTREAM_MODEL_SIGNING_KEY: ${MEMSTREAM_MODEL_SIGNING_KEY}
+      IEC_SIGNING_KEY: ${IEC_SIGNING_KEY}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ==========================================================================
+  # Action Replay Worker — IEC retrain signal handler
+  # ==========================================================================
+
+  action-replay-worker:
+    build:
+      context: ./action-replay-worker
+      dockerfile: Dockerfile
+    container_name: ldt-action-replay-worker
+    hostname: action-replay-worker
+    depends_on:
+      kafka:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ML_SERVICE_URL: http://ml-service:8000
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  # ==========================================================================
+  # Monitoring — Prometheus, Grafana, Kafka Exporter
+  # ==========================================================================
+
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.6.0
+    container_name: ldt-kafka-exporter
+    hostname: kafka-exporter
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9308/metrics || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    command:
+      - --kafka.server=kafka:9092
+      - --web.listen-address=:9308
+      - --topic.filter=.*
+      - --group.filter=.*
+    ports:
+      - "9308:9308"
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  cadqstream-metrics:
+    build:
+      context: ./cadqstream-metrics
+      dockerfile: Dockerfile
+    container_name: ldt-cadqstream-metrics
+    hostname: cadqstream-metrics
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9250/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    ports:
+      - "9250:9250"
+    environment:
+      FLINK_JM_URL: http://flink-jobmanager:8081
+      FLASK_ENV: production
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 128M
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: ldt-prometheus
+    hostname: prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9090/-/healthy || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus/alert-rules:/etc/prometheus/alert-rules
+      - ./prometheus/rules:/etc/prometheus/rules
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--storage.tsdb.wal-compression'
+      - '--web.enable-lifecycle'
+      - '--query.max-samples=50000000'
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 2G
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: ldt-grafana
+    hostname: grafana
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_SECURITY_ADMIN_EMAIL: admin@cadqstream.local
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      GF_USERS_AUTO_ASSIGN_ORG: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_LOG_LEVEL: info
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/alerting:/etc/grafana/provisioning/alerting
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+
+  stats-writer:
+    build:
+      context: ./stats-writer
+      dockerfile: Dockerfile
+    container_name: ldt-stats-writer
+    hostname: stats-writer
+    depends_on:
+      cadqstream-metrics:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: unless-stopped
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      METRICS_URL: http://cadqstream-metrics:9250/metrics
+      INTERVAL_SECONDS: "60"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 128M

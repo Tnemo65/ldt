@@ -31,71 +31,64 @@
 \contentsline {section}{\numberline {4.3}Proposed Method}{20}{section.4.3}
 \contentsline {subsection}{\numberline {4.3.1}Overview}{20}{subsection.4.3.1}
 \contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{20}{subsection.4.3.2}
-\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{22}{subsection.4.3.3}
+\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{21}{subsection.4.3.3}
 \contentsline {subsubsection}{Schema Validation}{22}{subsubsection*.9}
 \contentsline {subsubsection}{Flink KeyedState Deduplication}{23}{subsubsection*.10}
 \contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{24}{subsubsection*.11}
 \contentsline {subsubsection}{Physical Violation Filter (Warmup Phase)}{25}{subsubsection*.12}
 \contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{26}{subsection.4.3.4}
 \contentsline {subsubsection}{Denoising Autoencoder Architecture}{26}{subsubsection*.13}
-\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{27}{subsubsection*.14}
-\contentsline {subsubsection}{Online Memory Update Policy}{28}{subsubsection*.16}
-\contentsline {subsubsection}{Canary Stage: Rule-Based Pre-Filtering}{29}{subsubsection*.17}
-\contentsline {subsubsection}{4D Context-Aware Thresholding}{29}{subsubsection*.18}
-\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{30}{subsubsection*.20}
-\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{31}{subsection.4.3.5}
-\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{34}{subsection.4.3.6}
-\contentsline {subsubsection}{ADWIN Core Algorithm}{34}{subsubsection*.21}
-\contentsline {subsubsection}{IEC Scenario Classification}{34}{subsubsection*.22}
-\contentsline {subsubsection}{Four Adaptation Strategies}{35}{subsubsection*.23}
-\contentsline {subsubsection}{3-Tier Self-Adaptation Protocol}{37}{subsubsection*.25}
-\contentsline {subsubsection}{Zero-Downtime Model Swap}{37}{subsubsection*.26}
-\contentsline {subsubsection}{DTD 3-Way Comparison Framework}{38}{subsubsection*.27}
-\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{38}{subsection.4.3.7}
-\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{39}{subsubsection*.28}
-\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{39}{subsubsection*.29}
-\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{39}{subsubsection*.30}
-\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{40}{subsubsection*.31}
-\contentsline {subsubsection}{Idempotent Operations}{40}{subsubsection*.32}
-\contentsline {subsubsection}{State Size Management}{40}{subsubsection*.33}
-\contentsline {subsubsection}{Model Distribution and GC Overhead}{41}{subsubsection*.34}
-\contentsline {section}{\numberline {4.4}Chapter Summary}{41}{section.4.4}
-\contentsline {chapter}{\numberline {5}EXPERIMENTS}{42}{chapter.5}
-\contentsline {section}{\numberline {5.1}Implementation Setup}{42}{section.5.1}
-\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{43}{subsection.5.1.1}
-\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{43}{subsection.5.1.2}
-\contentsline {section}{\numberline {5.2}Results}{45}{section.5.2}
-\contentsline {subsection}{\numberline {5.2.1}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{45}{subsection.5.2.1}
-\contentsline {subsection}{\numberline {5.2.2}Experiment 1: Four-Stage Layer Coverage Analysis}{45}{subsection.5.2.2}
-\contentsline {subsection}{\numberline {5.2.3}Experiment 2: Ablation Study}{46}{subsection.5.2.3}
-\contentsline {subsection}{\numberline {5.2.4}RQ2: Does Online Autoencoder + Memory Module Outperform Baselines? [Exp 3, 4]}{46}{subsection.5.2.4}
-\contentsline {subsection}{\numberline {5.2.5}Experiment 3: Online Autoencoder Anomaly Detection}{47}{subsection.5.2.5}
-\contentsline {subsection}{\numberline {5.2.6}Experiment 4: Comparison with Existing DQ Tools}{48}{subsection.5.2.6}
-\contentsline {subsection}{\numberline {5.2.7}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{52}{subsection.5.2.7}
-\contentsline {subsection}{\numberline {5.2.8}Experiment 6: ADWIN Drift Detection Effectiveness}{52}{subsection.5.2.8}
-\contentsline {subsection}{\numberline {5.2.9}RQ4: Does Sequential Pipeline with Early Exit Optimization Improve Performance? [Exp 7, 8]}{53}{subsection.5.2.9}
-\contentsline {subsection}{\numberline {5.2.10}Experiment 7: Sequential Pipeline with vs without Early Exit}{53}{subsection.5.2.10}
-\contentsline {subsection}{\numberline {5.2.11}Experiment 8: End-to-End Throughput Benchmark}{54}{subsection.5.2.11}
-\contentsline {subsection}{\numberline {5.2.12}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{55}{subsection.5.2.12}
-\contentsline {subsection}{\numberline {5.2.13}Experiment 9: Context-Aware vs Global Thresholds}{56}{subsection.5.2.13}
-\contentsline {subsection}{\numberline {5.2.14}Experiment 10: Temporal Validation}{58}{subsection.5.2.14}
-\contentsline {subsection}{\numberline {5.2.15}Additional Validation Experiments [Exp 5, 11, 12, 13]}{58}{subsection.5.2.15}
-\contentsline {subsection}{\numberline {5.2.16}Experiment 5: Business Rules Effectiveness}{58}{subsection.5.2.16}
-\contentsline {subsection}{\numberline {5.2.17}Experiment 11: Fixed-Rule Baseline Comparison}{59}{subsection.5.2.17}
-\contentsline {subsection}{\numberline {5.2.18}Experiment 12: MinIO Write Performance}{59}{subsection.5.2.18}
-\contentsline {subsection}{\numberline {5.2.19}Experiment 13: Grafana Dashboard Usability}{59}{subsection.5.2.19}
-\contentsline {section}{\numberline {5.3}Chapter Summary}{59}{section.5.3}
-\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{61}{chapter.6}
-\contentsline {section}{\numberline {6.1}Conclusions}{61}{section.6.1}
-\contentsline {section}{\numberline {6.2}Limitations}{61}{section.6.2}
-\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{62}{subsection.6.2.1}
-\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{62}{subsection.6.2.2}
-\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{62}{subsection.6.2.3}
-\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{62}{subsection.6.2.4}
-\contentsline {section}{\numberline {6.3}Future Work}{62}{section.6.3}
-\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{62}{subsection.6.3.1}
-\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{62}{subsection.6.3.2}
-\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{62}{subsection.6.3.3}
-\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{63}{subsection.6.3.4}
-\contentsline {chapter}{Appendix B: Statistical Appendix}{64}{chapter*.44}
-\contentsline {chapter}{REFERENCES}{68}{table.6.6}
+\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{26}{subsubsection*.14}
+\contentsline {subsubsection}{Online Memory Update Policy}{27}{subsubsection*.16}
+\contentsline {subsubsection}{4D Context-Aware Thresholding}{28}{subsubsection*.17}
+\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{29}{subsubsection*.19}
+\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{30}{subsection.4.3.5}
+\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{32}{subsection.4.3.6}
+\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{34}{subsection.4.3.7}
+\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{34}{subsubsection*.21}
+\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{34}{subsubsection*.22}
+\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{35}{subsubsection*.23}
+\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{35}{subsubsection*.24}
+\contentsline {subsubsection}{Idempotent Operations}{35}{subsubsection*.25}
+\contentsline {subsubsection}{State Size Management}{35}{subsubsection*.26}
+\contentsline {subsubsection}{Model Distribution and GC Overhead}{36}{subsubsection*.27}
+\contentsline {section}{\numberline {4.4}Chapter Summary}{36}{section.4.4}
+\contentsline {chapter}{\numberline {5}EXPERIMENTS}{37}{chapter.5}
+\contentsline {section}{\numberline {5.1}Implementation Setup}{37}{section.5.1}
+\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{38}{subsection.5.1.1}
+\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{38}{subsection.5.1.2}
+\contentsline {section}{\numberline {5.2}Results}{40}{section.5.2}
+\contentsline {subsection}{\numberline {5.2.1}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{40}{subsection.5.2.1}
+\contentsline {subsection}{\numberline {5.2.2}Experiment 1: Four-Stage Layer Coverage Analysis}{40}{subsection.5.2.2}
+\contentsline {subsection}{\numberline {5.2.3}Experiment 2: Ablation Study}{41}{subsection.5.2.3}
+\contentsline {subsection}{\numberline {5.2.4}RQ2: Does Online Autoencoder + Memory Module Outperform Baselines? [Exp 3, 4]}{41}{subsection.5.2.4}
+\contentsline {subsection}{\numberline {5.2.5}Experiment 3: Online Autoencoder Anomaly Detection}{42}{subsection.5.2.5}
+\contentsline {subsection}{\numberline {5.2.6}Experiment 4: Comparison with Existing DQ Tools}{43}{subsection.5.2.6}
+\contentsline {subsection}{\numberline {5.2.7}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{47}{subsection.5.2.7}
+\contentsline {subsection}{\numberline {5.2.8}Experiment 6: ADWIN Drift Detection Effectiveness}{47}{subsection.5.2.8}
+\contentsline {subsection}{\numberline {5.2.9}RQ4: Does Sequential Pipeline with Early Exit Optimization Improve Performance? [Exp 7, 8]}{48}{subsection.5.2.9}
+\contentsline {subsection}{\numberline {5.2.10}Experiment 7: Sequential Pipeline with vs without Early Exit}{48}{subsection.5.2.10}
+\contentsline {subsection}{\numberline {5.2.11}Experiment 8: End-to-End Throughput Benchmark}{49}{subsection.5.2.11}
+\contentsline {subsection}{\numberline {5.2.12}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{50}{subsection.5.2.12}
+\contentsline {subsection}{\numberline {5.2.13}Experiment 9: Context-Aware vs Global Thresholds}{51}{subsection.5.2.13}
+\contentsline {subsection}{\numberline {5.2.14}Experiment 10: Temporal Validation}{53}{subsection.5.2.14}
+\contentsline {subsection}{\numberline {5.2.15}Additional Validation Experiments [Exp 5, 11, 12, 13]}{53}{subsection.5.2.15}
+\contentsline {subsection}{\numberline {5.2.16}Experiment 5: Business Rules Effectiveness}{53}{subsection.5.2.16}
+\contentsline {subsection}{\numberline {5.2.17}Experiment 11: Fixed-Rule Baseline Comparison}{54}{subsection.5.2.17}
+\contentsline {subsection}{\numberline {5.2.18}Experiment 12: MinIO Write Performance}{54}{subsection.5.2.18}
+\contentsline {subsection}{\numberline {5.2.19}Experiment 13: Grafana Dashboard Usability}{54}{subsection.5.2.19}
+\contentsline {section}{\numberline {5.3}Chapter Summary}{54}{section.5.3}
+\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{56}{chapter.6}
+\contentsline {section}{\numberline {6.1}Conclusions}{56}{section.6.1}
+\contentsline {section}{\numberline {6.2}Limitations}{56}{section.6.2}
+\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{57}{subsection.6.2.1}
+\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{57}{subsection.6.2.2}
+\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{57}{subsection.6.2.3}
+\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{57}{subsection.6.2.4}
+\contentsline {section}{\numberline {6.3}Future Work}{57}{section.6.3}
+\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{57}{subsection.6.3.1}
+\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{57}{subsection.6.3.2}
+\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{57}{subsection.6.3.3}
+\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{58}{subsection.6.3.4}
+\contentsline {chapter}{Appendix B: Statistical Appendix}{59}{chapter*.37}
+\contentsline {chapter}{REFERENCES}{63}{table.6.6}

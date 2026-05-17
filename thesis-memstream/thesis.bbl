@@ -1,4 +1,4 @@
-\begin{thebibliography}{55}
+\begin{thebibliography}{53}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -96,14 +96,6 @@ J.~Chen, H.~Chen, and H.~Lu.
   model for vehicle trajectory anomaly detection in road network interactions.
 \newblock \emph{Sustainability}, 18\penalty0 (2):\penalty0 597, 2026.
 \newblock \doi{10.3390/su18020597}.
-
-\bibitem[Chen et~al.(2025)Chen, Park, Garcia, and Rundensteiner]{scar_2025}
-X.~Chen, J.~Park, M.~Garcia, and E.~Rundensteiner.
-\newblock Scar: Streaming concept adaptation with reconstruction -- benchmark
-  and baselines.
-\newblock \emph{ACM SIGKDD Explorations Newsletter}, 27\penalty0 (1):\penalty0
-  34--49, 2025.
-\newblock Periodic retraining as surprisingly strong baseline.
 
 \bibitem[Community(2024{\natexlab{a}})]{flink_rocksdb}
 Apache~Flink Community.
@@ -307,14 +299,6 @@ Georgios Papastergios and Apostolos Gounaris.
 \newblock Stream daq: Stream-first data quality monitoring.
 \newblock 2025.
 \newblock arXiv:2506.06147.
-
-\bibitem[Pedregosa et~al.(2011)Pedregosa, Varoquaux, Gramfort, Michel, Thirion,
-  Grisel, Blondel, Prettenhofer, Weiss, Dubourg, Vanderplas, Passos,
-  Cournapeau, Brucher, Perrot, and Duchesnay]{sklearn_api}
-F.~Pedregosa, G.~Varoquaux, A.~Gramfort, V.~Michel, B.~Thirion, O.~Grisel,
-  M.~Blondel, P.~Prettenhofer, R.~Weiss, V.~Dubourg, J.~Vanderplas, A.~Passos,
-  D.~Cournapeau, M.~Brucher, M.~Perrot, and E.~Duchesnay.
-\newblock Scikit-learn: Machine learning in {P}ython, 2011.
 
 \bibitem[{Precisely}(2024)]{precisely2024}
 {Precisely}.

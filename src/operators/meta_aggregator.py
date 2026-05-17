@@ -23,7 +23,7 @@ These metrics feed ADWIN drift detection and IEC strategy selection.
 """
 
 from pyflink.datastream import MapFunction, AggregateFunction, ProcessWindowFunction
-from pyflink.datastream.window import TumblingEventTimeWindows
+from pyflink.datastream.window import TumblingProcessingTimeWindows
 from pyflink.common.time import Time
 from pyflink.common.typeinfo import Types
 from datetime import datetime
@@ -225,12 +225,12 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
     def __init__(self):
         pass
 
-    def process(self, key, context, elements):
-        """Process window results."""
+    def process(self, key, context, elements, out):
+        """Process window results using out.collect() instead of yield."""
         metrics = next(iter(elements))
 
         if metrics is None:
-            yield {
+            out.collect({
                 'volume': 0,
                 'null_rate': 0.0,
                 'violation_rate': 0.0,
@@ -242,7 +242,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
                 'neighborhood_id': key,
                 '_dlq': True,
                 '_dlq_reason': 'null_metrics',
-            }
+            })
             return
 
         violation_rate = metrics.get('violation_rate', 0.0)
@@ -257,7 +257,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
         metrics['window_end'] = datetime.fromtimestamp(window.end / 1000).isoformat()
         metrics['neighborhood_id'] = key
 
-        yield metrics
+        out.collect(metrics)
 
 
 def extract_neighborhood_key(record: dict) -> str:

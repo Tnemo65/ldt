@@ -168,28 +168,28 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Raw Data EDA}{19}{subsection.4.2.1}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{19}{subsection.4.2.2}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.3}Injected Data}{19}{subsection.4.2.3}}
+\citation{nyctlc}
 \@writefile{toc}{\contentsline {section}{\numberline {4.3}Proposed Method}{20}{section.4.3}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.3.1}Overview}{20}{subsection.4.3.1}}
 \@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces CA-DQStream System Architecture. The framework consists of five layers: (1) Data Source Layer with NYC TLC Parquet files ingested via Kafka Producer; (2) Kafka Layer with six topics for raw data, violations, anomaly scores, meta-stream, and model updates; (3) Processing Layer with Flink implementing sequential processing stages: Schema Validation, then Business Rules (Canary), then Online Autoencoder + Memory Module, converging at MetaAggregator, feeding the Intelligent Evolution Controller (ADWIN) for self-monitoring; (4) Data Storage Layer with MinIO (S3-compatible) for all pipeline outputs in Parquet format; (5) Monitoring Layer with Prometheus and Grafana for real-time observability.\relax }}{20}{figure.caption.8}}
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
 \newlabel{fig:system_architecture}{{4.1}{20}{CA-DQStream System Architecture. The framework consists of five layers: (1) Data Source Layer with NYC TLC Parquet files ingested via Kafka Producer; (2) Kafka Layer with six topics for raw data, violations, anomaly scores, meta-stream, and model updates; (3) Processing Layer with Flink implementing sequential processing stages: Schema Validation, then Business Rules (Canary), then Online Autoencoder + Memory Module, converging at MetaAggregator, feeding the Intelligent Evolution Controller (ADWIN) for self-monitoring; (4) Data Storage Layer with MinIO (S3-compatible) for all pipeline outputs in Parquet format; (5) Monitoring Layer with Prometheus and Grafana for real-time observability.\relax }{figure.caption.8}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{20}{subsection.4.3.2}}
-\citation{nyctlc}
-\citation{sklearn_api}
 \gdef \LT@iii {\LT@entry 
     {1}{35.56227pt}\LT@entry 
     {1}{111.98463pt}\LT@entry 
     {1}{111.98463pt}\LT@entry 
     {1}{154.66377pt}}
-\@writefile{lot}{\contentsline {table}{\numberline {4.1}{\ignorespaces 21-dimensional feature vector used by sklearn IF baselines (B1--B4) in ablation study. The Online AE + Memory Module uses the full 34D feature set (see Feature Dimension Reconciliation above).\relax }}{21}{table.4.1}}
-\newlabel{tab:feature_vector}{{4.1}{21}{21-dimensional feature vector used by sklearn IF baselines (B1--B4) in ablation study. The Online AE + Memory Module uses the full 34D feature set (see Feature Dimension Reconciliation above).\relax }{table.4.1}{}}
 \citation{dama2017dmbok}
 \citation{confluent_dq_patterns}
+\@writefile{lot}{\contentsline {table}{\numberline {4.1}{\ignorespaces 21-dimensional feature vector used by sklearn IF baselines (B1--B4) in ablation study. The Online AE + Memory Module uses the full 34D feature set (see Feature Dimension Reconciliation above).\relax }}{21}{table.4.1}}
+\newlabel{tab:feature_vector}{{4.1}{21}{21-dimensional feature vector used by sklearn IF baselines (B1--B4) in ablation study. The Online AE + Memory Module uses the full 34D feature set (see Feature Dimension Reconciliation above).\relax }{table.4.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{21}{subsection.4.3.3}}
 \citation{confluent_schema_registry}
 \citation{confluent_schema_registry}
 \citation{confluent_dq_patterns}
 \citation{grab_streaming_dq}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{22}{subsection.4.3.3}}
+\citation{confluent_dead_letter_queue}
 \@writefile{toc}{\contentsline {subsubsection}{Schema Validation}{22}{subsubsection*.9}}
 \newlabel{eq:cel_passenger}{{4.1}{22}{Schema Validation}{equation.4.3.1}{}}
 \newlabel{eq:cel_ratecode}{{4.2}{22}{Schema Validation}{equation.4.3.2}{}}
@@ -198,7 +198,6 @@
 \newlabel{eq:cel_distance}{{4.5}{22}{Schema Validation}{equation.4.3.5}{}}
 \newlabel{eq:cel_temporal}{{4.6}{22}{Schema Validation}{equation.4.3.6}{}}
 \newlabel{eq:cel_nullcheck}{{4.7}{22}{Schema Validation}{equation.4.3.7}{}}
-\citation{confluent_dead_letter_queue}
 \citation{flink_rocksdb}
 \citation{flink_rocksdb_bloom}
 \@writefile{toc}{\contentsline {subsubsection}{Flink KeyedState Deduplication}{23}{subsubsection*.10}}
@@ -209,190 +208,156 @@
 \newlabel{eq:value_size}{{4.12}{23}{Flink KeyedState Deduplication}{equation.4.3.12}{}}
 \newlabel{eq:rocksdb_overhead}{{4.13}{23}{Flink KeyedState Deduplication}{equation.4.3.13}{}}
 \newlabel{eq:state_size_calc}{{4.14}{23}{Flink KeyedState Deduplication}{equation.4.3.14}{}}
-\newlabel{eq:bloom_fpr}{{4.15}{24}{Flink KeyedState Deduplication}{equation.4.3.15}{}}
-\newlabel{eq:bloom_bits}{{4.16}{24}{Flink KeyedState Deduplication}{equation.4.3.16}{}}
+\newlabel{eq:bloom_fpr}{{4.15}{23}{Flink KeyedState Deduplication}{equation.4.3.15}{}}
+\newlabel{eq:bloom_bits}{{4.16}{23}{Flink KeyedState Deduplication}{equation.4.3.16}{}}
+\citation{grab_streaming_dq}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {4.1}{\ignorespaces Flatten KeyedState Deduplication with Bloom Filter\relax }}{24}{algorithm.4.1}}
 \newlabel{alg:dedup}{{4.1}{24}{Flatten KeyedState Deduplication with Bloom Filter\relax }{algorithm.4.1}{}}
 \newlabel{eq:dedup_rate}{{4.17}{24}{Flink KeyedState Deduplication}{equation.4.3.17}{}}
 \@writefile{toc}{\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{24}{subsubsection*.11}}
+\newlabel{eq:canary_r1}{{4.18}{24}{Canary Pattern: Lightweight Validation}{equation.4.3.18}{}}
+\newlabel{eq:canary_r2}{{4.19}{24}{Canary Pattern: Lightweight Validation}{equation.4.3.19}{}}
+\newlabel{eq:canary_r3}{{4.20}{24}{Canary Pattern: Lightweight Validation}{equation.4.3.20}{}}
+\newlabel{eq:canary_r4}{{4.21}{24}{Canary Pattern: Lightweight Validation}{equation.4.3.21}{}}
+\newlabel{eq:canary_r5}{{4.22}{24}{Canary Pattern: Lightweight Validation}{equation.4.3.22}{}}
+\newlabel{eq:canary_r6}{{4.23}{24}{Canary Pattern: Lightweight Validation}{equation.4.3.23}{}}
 \citation{grab_streaming_dq}
-\citation{grab_streaming_dq}
-\newlabel{eq:canary_r1}{{4.18}{25}{Canary Pattern: Lightweight Validation}{equation.4.3.18}{}}
-\newlabel{eq:canary_r2}{{4.19}{25}{Canary Pattern: Lightweight Validation}{equation.4.3.19}{}}
-\newlabel{eq:canary_r3}{{4.20}{25}{Canary Pattern: Lightweight Validation}{equation.4.3.20}{}}
-\newlabel{eq:canary_r4}{{4.21}{25}{Canary Pattern: Lightweight Validation}{equation.4.3.21}{}}
-\newlabel{eq:canary_r5}{{4.22}{25}{Canary Pattern: Lightweight Validation}{equation.4.3.22}{}}
-\newlabel{eq:canary_r6}{{4.23}{25}{Canary Pattern: Lightweight Validation}{equation.4.3.23}{}}
 \@writefile{toc}{\contentsline {subsubsection}{Physical Violation Filter (Warmup Phase)}{25}{subsubsection*.12}}
 \newlabel{eq:iqr_def}{{4.24}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.24}{}}
 \newlabel{eq:iqr_lower}{{4.25}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.25}{}}
 \newlabel{eq:iqr_upper}{{4.26}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.26}{}}
+\newlabel{eq:warmup_input}{{4.27}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.27}{}}
+\newlabel{eq:warmup_physical}{{4.28}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.28}{}}
+\newlabel{eq:warmup_iqr}{{4.29}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.29}{}}
+\newlabel{eq:warmup_final}{{4.30}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.30}{}}
+\newlabel{eq:warmup_total}{{4.31}{25}{Physical Violation Filter (Warmup Phase)}{equation.4.3.31}{}}
 \citation{vincent2010stacked}
-\newlabel{eq:warmup_input}{{4.27}{26}{Physical Violation Filter (Warmup Phase)}{equation.4.3.27}{}}
-\newlabel{eq:warmup_physical}{{4.28}{26}{Physical Violation Filter (Warmup Phase)}{equation.4.3.28}{}}
-\newlabel{eq:warmup_iqr}{{4.29}{26}{Physical Violation Filter (Warmup Phase)}{equation.4.3.29}{}}
-\newlabel{eq:warmup_final}{{4.30}{26}{Physical Violation Filter (Warmup Phase)}{equation.4.3.30}{}}
-\newlabel{eq:warmup_total}{{4.31}{26}{Physical Violation Filter (Warmup Phase)}{equation.4.3.31}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{26}{subsection.4.3.4}}
 \@writefile{toc}{\contentsline {subsubsection}{Denoising Autoencoder Architecture}{26}{subsubsection*.13}}
 \newlabel{eq:encoder}{{4.32}{26}{Denoising Autoencoder Architecture}{equation.4.3.32}{}}
 \newlabel{eq:decoder}{{4.33}{26}{Denoising Autoencoder Architecture}{equation.4.3.33}{}}
 \newlabel{eq:dae_loss}{{4.34}{26}{Denoising Autoencoder Architecture}{equation.4.3.34}{}}
+\@writefile{toc}{\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{26}{subsubsection*.14}}
+\newlabel{eq:memory_buffer}{{4.35}{26}{L1 k-NN Scoring on Memory Module}{equation.4.3.35}{}}
 \citation{bhatia2022dense}
-\@writefile{toc}{\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{27}{subsubsection*.14}}
-\newlabel{eq:memory_buffer}{{4.35}{27}{L1 k-NN Scoring on Memory Module}{equation.4.3.35}{}}
 \newlabel{eq:l1_distance}{{4.36}{27}{L1 k-NN Scoring on Memory Module}{equation.4.3.36}{}}
 \newlabel{eq:anomaly_score_v2}{{4.37}{27}{L1 k-NN Scoring on Memory Module}{equation.4.3.37}{}}
 \newlabel{eq:anomaly_decision}{{4.38}{27}{L1 k-NN Scoring on Memory Module}{equation.4.3.38}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces Memory-based anomaly scoring pipeline. Each incoming record $\mathbf  {x}_t$ is normalized, encoded to $\mathbf  {z}_t \in \mathbb  {R}^{34}$, compared against $K=10$ nearest neighbors in the FIFO memory buffer via L1 distance, and normalized against the per-context threshold $\beta _{\text  {ctx}}$. Records with normalized score $\geq 1.0$ are flagged as anomalies.\relax }}{28}{figure.caption.15}}
-\newlabel{fig:memory_scoring}{{4.2}{28}{Memory-based anomaly scoring pipeline. Each incoming record $\mathbf {x}_t$ is normalized, encoded to $\mathbf {z}_t \in \mathbb {R}^{34}$, compared against $K=10$ nearest neighbors in the FIFO memory buffer via L1 distance, and normalized against the per-context threshold $\beta _{\text {ctx}}$. Records with normalized score $\geq 1.0$ are flagged as anomalies.\relax }{figure.caption.15}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Online Memory Update Policy}{28}{subsubsection*.16}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces Memory-based scoring: encode $\mathbf  {x}_t$, L1 kNN against 50K memory buffer, normalize by $\beta _{\text  {ctx}}$, flag if $\geq 1.0$.\relax }}{27}{figure.caption.15}}
+\newlabel{fig:memory_scoring}{{4.2}{27}{Memory-based scoring: encode $\mathbf {x}_t$, L1 kNN against 50K memory buffer, normalize by $\beta _{\text {ctx}}$, flag if $\geq 1.0$.\relax }{figure.caption.15}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Online Memory Update Policy}{27}{subsubsection*.16}}
 \newlabel{eq:conditional_insert}{{4.39}{28}{Online Memory Update Policy}{equation.4.3.39}{}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {4.2}{\ignorespaces Online Memory Update Policy\relax }}{28}{algorithm.4.2}}
 \newlabel{alg:memory_update}{{4.2}{28}{Online Memory Update Policy\relax }{algorithm.4.2}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Canary Stage: Rule-Based Pre-Filtering}{29}{subsubsection*.17}}
-\newlabel{eq:canary_r1_v2}{{4.40}{29}{Canary Stage: Rule-Based Pre-Filtering}{equation.4.3.40}{}}
-\newlabel{eq:canary_r2_v2}{{4.41}{29}{Canary Stage: Rule-Based Pre-Filtering}{equation.4.3.41}{}}
-\newlabel{eq:canary_r3_v2}{{4.42}{29}{Canary Stage: Rule-Based Pre-Filtering}{equation.4.3.42}{}}
-\newlabel{eq:canary_r4_v2}{{4.43}{29}{Canary Stage: Rule-Based Pre-Filtering}{equation.4.3.43}{}}
-\newlabel{eq:canary_r5_v2}{{4.44}{29}{Canary Stage: Rule-Based Pre-Filtering}{equation.4.3.44}{}}
-\newlabel{eq:canary_r6_v2}{{4.45}{29}{Canary Stage: Rule-Based Pre-Filtering}{equation.4.3.45}{}}
-\@writefile{toc}{\contentsline {subsubsection}{4D Context-Aware Thresholding}{29}{subsubsection*.18}}
-\newlabel{eq:4d_matrix}{{4.46}{29}{4D Context-Aware Thresholding}{equation.4.3.46}{}}
-\newlabel{eq:threshold_p95}{{4.47}{29}{4D Context-Aware Thresholding}{equation.4.3.47}{}}
-\newlabel{eq:threshold_global}{{4.48}{29}{4D Context-Aware Thresholding}{equation.4.3.48}{}}
+\@writefile{toc}{\contentsline {subsubsection}{4D Context-Aware Thresholding}{28}{subsubsection*.17}}
+\newlabel{eq:4d_matrix}{{4.40}{28}{4D Context-Aware Thresholding}{equation.4.3.40}{}}
+\newlabel{eq:threshold_p95}{{4.41}{28}{4D Context-Aware Thresholding}{equation.4.3.41}{}}
+\newlabel{eq:threshold_global}{{4.42}{29}{4D Context-Aware Thresholding}{equation.4.3.42}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.3}{\ignorespaces 4D Context-Aware Threshold Matrix: 95 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.\relax }}{29}{figure.caption.18}}
+\newlabel{fig:4d_threshold_heatmap}{{4.3}{29}{4D Context-Aware Threshold Matrix: 95 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.\relax }{figure.caption.18}{}}
+\newlabel{eq:normalized_score}{{4.43}{29}{4D Context-Aware Thresholding}{equation.4.3.43}{}}
+\@writefile{toc}{\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{29}{subsubsection*.19}}
 \citation{adwin2025}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.3}{\ignorespaces 4D Context-Aware Threshold Matrix: 95 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.\relax }}{30}{figure.caption.19}}
-\newlabel{fig:4d_threshold_heatmap}{{4.3}{30}{4D Context-Aware Threshold Matrix: 95 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.\relax }{figure.caption.19}{}}
-\newlabel{eq:normalized_score}{{4.49}{30}{4D Context-Aware Thresholding}{equation.4.3.49}{}}
-\@writefile{toc}{\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{30}{subsubsection*.20}}
 \citation{bifet2007learning}
 \citation{adwin2025}
 \citation{adwin2025}
-\citation{dtd_2026}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{31}{subsection.4.3.5}}
-\newlabel{eq:adwin_classical}{{4.50}{31}{Layer 3: Meta-Aggregation}{equation.4.3.50}{}}
-\newlabel{eq:js_divergence}{{4.51}{31}{Layer 3: Meta-Aggregation}{equation.4.3.51}{}}
-\newlabel{eq:skewness}{{4.52}{31}{Layer 3: Meta-Aggregation}{equation.4.3.52}{}}
-\newlabel{eq:kurtosis}{{4.53}{31}{Layer 3: Meta-Aggregation}{equation.4.3.53}{}}
 \citation{adwin2025}
-\newlabel{eq:null_rate_v2}{{4.54}{32}{Layer 3: Meta-Aggregation}{equation.4.3.54}{}}
-\newlabel{eq:violation_rate_v2}{{4.55}{32}{Layer 3: Meta-Aggregation}{equation.4.3.55}{}}
-\newlabel{eq:anomaly_rate_v2}{{4.56}{32}{Layer 3: Meta-Aggregation}{equation.4.3.56}{}}
-\newlabel{eq:volume_v2}{{4.57}{32}{Layer 3: Meta-Aggregation}{equation.4.3.57}{}}
-\newlabel{eq:dedup_rate_v2}{{4.58}{32}{Layer 3: Meta-Aggregation}{equation.4.3.58}{}}
-\newlabel{eq:delta_score_v2}{{4.59}{32}{Layer 3: Meta-Aggregation}{equation.4.3.59}{}}
-\newlabel{eq:delta_derivation}{{4.60}{32}{Layer 3: Meta-Aggregation}{equation.4.3.60}{}}
-\newlabel{eq:bar_metric}{{4.61}{32}{Layer 3: Meta-Aggregation}{equation.4.3.61}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{30}{subsection.4.3.5}}
+\newlabel{eq:adwin_drift_l4}{{4.44}{30}{Layer 3: Meta-Aggregation}{equation.4.3.44}{}}
+\newlabel{eq:skewness}{{4.45}{30}{Layer 3: Meta-Aggregation}{equation.4.3.45}{}}
+\newlabel{eq:kurtosis}{{4.46}{30}{Layer 3: Meta-Aggregation}{equation.4.3.46}{}}
+\citation{dtd_2026}
 \gdef \LT@iv {\LT@entry 
     {1}{75.39595pt}\LT@entry 
     {1}{57.92458pt}\LT@entry 
     {1}{63.61504pt}\LT@entry 
     {1}{183.11652pt}}
-\newlabel{eq:aggregate_function_sig}{{4.62}{33}{Layer 3: Meta-Aggregation}{equation.4.3.62}{}}
-\newlabel{eq:emit_meta}{{4.63}{33}{Layer 3: Meta-Aggregation}{equation.4.3.63}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4.2}{\ignorespaces ADWIN-U parameters for each meta-metric. Smaller $\delta $ yields faster detection with higher false alarm rate; larger $\delta $ yields more conservative detection.\relax }}{33}{table.4.2}}
-\newlabel{tab:adwin_params_v2}{{4.2}{33}{ADWIN-U parameters for each meta-metric. Smaller $\delta $ yields faster detection with higher false alarm rate; larger $\delta $ yields more conservative detection.\relax }{table.4.2}{}}
-\citation{bifet2007learning}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{34}{subsection.4.3.6}}
-\@writefile{toc}{\contentsline {subsubsection}{ADWIN Core Algorithm}{34}{subsubsection*.21}}
-\newlabel{eq:adwin_split}{{4.64}{34}{ADWIN Core Algorithm}{equation.4.3.64}{}}
-\newlabel{eq:harmonic_mean}{{4.65}{34}{ADWIN Core Algorithm}{equation.4.3.65}{}}
-\newlabel{eq:epsilon_cut}{{4.66}{34}{ADWIN Core Algorithm}{equation.4.3.66}{}}
-\newlabel{eq:drift_condition}{{4.67}{34}{ADWIN Core Algorithm}{equation.4.3.67}{}}
-\@writefile{toc}{\contentsline {subsubsection}{IEC Scenario Classification}{34}{subsubsection*.22}}
-\gdef \LT@v {\LT@entry 
-    {1}{98.15825pt}\LT@entry 
-    {1}{140.4374pt}\LT@entry 
-    {1}{97.75826pt}\LT@entry 
-    {1}{97.75826pt}}
-\@writefile{lot}{\contentsline {table}{\numberline {4.3}{\ignorespaces IEC drift scenario classification and strategy mapping.\relax }}{35}{table.4.3}}
-\newlabel{tab:iec_scenarios}{{4.3}{35}{IEC drift scenario classification and strategy mapping.\relax }{table.4.3}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Four Adaptation Strategies}{35}{subsubsection*.23}}
-\newlabel{eq:memory_fifo_reset}{{4.68}{35}{Four Adaptation Strategies}{equation.4.3.68}{}}
-\citation{meter_2023}
-\newlabel{eq:model_switch}{{4.69}{36}{Four Adaptation Strategies}{equation.4.3.69}{}}
-\newlabel{eq:meter_hypernet}{{4.70}{36}{Four Adaptation Strategies}{equation.4.3.70}{}}
-\newlabel{eq:spatial_partition}{{4.71}{36}{Four Adaptation Strategies}{equation.4.3.71}{}}
-\citation{scar_2025}
-\citation{dtd_2026}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.4}{\ignorespaces ADWIN drift detection and IEC self-adaptation. Top: three-phase signal showing stable operation (Phase A), drift onset detected by ADWIN (Phase B), and model recovery triggered by IEC (Phase C). Bottom: ADWIN sliding window comparison --- when the mean difference between windows W1 and W2 exceeds threshold $\varepsilon $, drift is declared.\relax }}{37}{figure.caption.24}}
-\newlabel{fig:adwin_mechanism}{{4.4}{37}{ADWIN drift detection and IEC self-adaptation. Top: three-phase signal showing stable operation (Phase A), drift onset detected by ADWIN (Phase B), and model recovery triggered by IEC (Phase C). Bottom: ADWIN sliding window comparison --- when the mean difference between windows W1 and W2 exceeds threshold $\varepsilon $, drift is declared.\relax }{figure.caption.24}{}}
-\@writefile{toc}{\contentsline {subsubsection}{3-Tier Self-Adaptation Protocol}{37}{subsubsection*.25}}
-\@writefile{toc}{\contentsline {subsubsection}{Zero-Downtime Model Swap}{37}{subsubsection*.26}}
-\citation{dtd_2026}
-\citation{dtd_2026}
+\newlabel{eq:null_rate_v2}{{4.47}{31}{Layer 3: Meta-Aggregation}{equation.4.3.47}{}}
+\newlabel{eq:violation_rate_v2}{{4.48}{31}{Layer 3: Meta-Aggregation}{equation.4.3.48}{}}
+\newlabel{eq:anomaly_rate_v2}{{4.49}{31}{Layer 3: Meta-Aggregation}{equation.4.3.49}{}}
+\newlabel{eq:volume_v2}{{4.50}{31}{Layer 3: Meta-Aggregation}{equation.4.3.50}{}}
+\newlabel{eq:avg_anomaly_score_v2}{{4.51}{31}{Layer 3: Meta-Aggregation}{equation.4.3.51}{}}
+\newlabel{eq:delta_score_v2}{{4.52}{31}{Layer 3: Meta-Aggregation}{equation.4.3.52}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.2}{\ignorespaces ADWIN confidence parameters for each meta-metric fed to Layer 4's drift detector. Smaller $\delta $ yields faster detection with higher false alarm rate; larger $\delta $ yields more conservative detection.\relax }}{31}{table.4.2}}
+\newlabel{tab:adwin_params_v2}{{4.2}{31}{ADWIN confidence parameters for each meta-metric fed to Layer 4's drift detector. Smaller $\delta $ yields faster detection with higher false alarm rate; larger $\delta $ yields more conservative detection.\relax }{table.4.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{32}{subsection.4.3.6}}
+\newlabel{eq:adwin_drift_l4}{{4.53}{33}{Layer 4: Intelligent Evolution Controller}{equation.4.3.53}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.4}{\ignorespaces IEC Drift Detection and Adaptation.\relax }}{33}{figure.caption.20}}
+\newlabel{fig:adwin_mechanism}{{4.4}{33}{IEC Drift Detection and Adaptation.\relax }{figure.caption.20}{}}
 \citation{chandy_lamport_1985}
-\newlabel{eq:atomic_swap}{{4.72}{38}{Zero-Downtime Model Swap}{equation.4.3.72}{}}
-\newlabel{eq:exponential_backoff}{{4.73}{38}{Zero-Downtime Model Swap}{equation.4.3.73}{}}
-\@writefile{toc}{\contentsline {subsubsection}{DTD 3-Way Comparison Framework}{38}{subsubsection*.27}}
-\newlabel{eq:ndr_metric}{{4.74}{38}{DTD 3-Way Comparison Framework}{equation.4.3.74}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{38}{subsection.4.3.7}}
 \citation{confluent_dead_letter_queue}
-\@writefile{toc}{\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{39}{subsubsection*.28}}
-\@writefile{toc}{\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{39}{subsubsection*.29}}
-\@writefile{toc}{\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{39}{subsubsection*.30}}
-\@writefile{toc}{\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{40}{subsubsection*.31}}
-\@writefile{toc}{\contentsline {subsubsection}{Idempotent Operations}{40}{subsubsection*.32}}
-\@writefile{toc}{\contentsline {subsubsection}{State Size Management}{40}{subsubsection*.33}}
-\@writefile{toc}{\contentsline {subsubsection}{Model Distribution and GC Overhead}{41}{subsubsection*.34}}
-\@writefile{toc}{\contentsline {section}{\numberline {4.4}Chapter Summary}{41}{section.4.4}}
-\gdef \LT@vi {\LT@entry 
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{34}{subsection.4.3.7}}
+\@writefile{toc}{\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{34}{subsubsection*.21}}
+\@writefile{toc}{\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{34}{subsubsection*.22}}
+\@writefile{toc}{\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{35}{subsubsection*.23}}
+\@writefile{toc}{\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{35}{subsubsection*.24}}
+\@writefile{toc}{\contentsline {subsubsection}{Idempotent Operations}{35}{subsubsection*.25}}
+\@writefile{toc}{\contentsline {subsubsection}{State Size Management}{35}{subsubsection*.26}}
+\@writefile{toc}{\contentsline {subsubsection}{Model Distribution and GC Overhead}{36}{subsubsection*.27}}
+\@writefile{toc}{\contentsline {section}{\numberline {4.4}Chapter Summary}{36}{section.4.4}}
+\gdef \LT@v {\LT@entry 
     {1}{98.15825pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {5}EXPERIMENTS}{42}{chapter.5}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}EXPERIMENTS}{37}{chapter.5}}
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {5.1}Implementation Setup}{42}{section.5.1}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.1}Implementation Setup}{37}{section.5.1}}
 \citation{kafkaintro2024}
 \citation{kafkaintro2024}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{43}{subsection.5.1.1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{43}{subsection.5.1.2}}
-\newlabel{sec:exp_infrastructure}{{5.1.2}{43}{Experimental Infrastructure}{subsection.5.1.2}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces Kafka Streams architecture overview. Producers write events to topics, consumers subscribe and process events, and Kafka Streams provides higher-level stream processing functions. Source: Apache Kafka Documentation \citep  {kafkaintro2024}.\relax }}{43}{figure.caption.35}}
-\newlabel{fig:kafka_streams_overview_exp}{{5.1}{43}{Kafka Streams architecture overview. Producers write events to topics, consumers subscribe and process events, and Kafka Streams provides higher-level stream processing functions. Source: Apache Kafka Documentation \citep {kafkaintro2024}.\relax }{figure.caption.35}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{38}{subsection.5.1.1}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{38}{subsection.5.1.2}}
+\newlabel{sec:exp_infrastructure}{{5.1.2}{38}{Experimental Infrastructure}{subsection.5.1.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces Kafka Streams architecture overview. Producers write events to topics, consumers subscribe and process events, and Kafka Streams provides higher-level stream processing functions. Source: Apache Kafka Documentation \citep  {kafkaintro2024}.\relax }}{38}{figure.caption.28}}
+\newlabel{fig:kafka_streams_overview_exp}{{5.1}{38}{Kafka Streams architecture overview. Producers write events to topics, consumers subscribe and process events, and Kafka Streams provides higher-level stream processing functions. Source: Apache Kafka Documentation \citep {kafkaintro2024}.\relax }{figure.caption.28}{}}
 \citation{kafkaintro2024}
 \citation{kafkaintro2024}
 \citation{flinkdocs2024}
 \citation{flinkdocs2024}
 \citation{flinkdocs2024}
 \citation{flinkdocs2024}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.2}{\ignorespaces Kafka architecture: producers publish events to topics, each topic is partitioned across brokers, and consumer groups subscribe to consume events. Partitions enable parallel writes and reads across the cluster. Adapted from Apache Kafka documentation.\relax }}{44}{figure.caption.36}}
-\newlabel{fig:kafka_architecture_exp}{{5.2}{44}{Kafka architecture: producers publish events to topics, each topic is partitioned across brokers, and consumer groups subscribe to consume events. Partitions enable parallel writes and reads across the cluster. Adapted from Apache Kafka documentation.\relax }{figure.caption.36}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.3}{\ignorespaces Kafka Streams API enables higher-level stream processing functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Source: Apache Kafka Documentation \citep  {kafkaintro2024}.\relax }}{44}{figure.caption.37}}
-\newlabel{fig:kafka_streams_api_exp}{{5.3}{44}{Kafka Streams API enables higher-level stream processing functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Source: Apache Kafka Documentation \citep {kafkaintro2024}.\relax }{figure.caption.37}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.4}{\ignorespaces Flink windowing on a data stream. An unbounded stream of events is partitioned into time-based windows (W1, W2, W3, ...) for aggregation and stateful computation. Each window maintains state and emits results independently. Source: Apache Apache Flink Documentation \citep  {flinkdocs2024}.\relax }}{44}{figure.caption.38}}
-\newlabel{fig:flink_windows_exp}{{5.4}{44}{Flink windowing on a data stream. An unbounded stream of events is partitioned into time-based windows (W1, W2, W3, ...) for aggregation and stateful computation. Each window maintains state and emits results independently. Source: Apache Apache Flink Documentation \citep {flinkdocs2024}.\relax }{figure.caption.38}{}}
-\gdef \LT@vii {\LT@entry 
+\@writefile{lof}{\contentsline {figure}{\numberline {5.2}{\ignorespaces Kafka architecture: producers publish events to topics, each topic is partitioned across brokers, and consumer groups subscribe to consume events. Partitions enable parallel writes and reads across the cluster. Adapted from Apache Kafka documentation.\relax }}{39}{figure.caption.29}}
+\newlabel{fig:kafka_architecture_exp}{{5.2}{39}{Kafka architecture: producers publish events to topics, each topic is partitioned across brokers, and consumer groups subscribe to consume events. Partitions enable parallel writes and reads across the cluster. Adapted from Apache Kafka documentation.\relax }{figure.caption.29}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.3}{\ignorespaces Kafka Streams API enables higher-level stream processing functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Source: Apache Kafka Documentation \citep  {kafkaintro2024}.\relax }}{39}{figure.caption.30}}
+\newlabel{fig:kafka_streams_api_exp}{{5.3}{39}{Kafka Streams API enables higher-level stream processing functions including transformations, stateful operations (aggregations, joins), windowing, and event-time processing. Source: Apache Kafka Documentation \citep {kafkaintro2024}.\relax }{figure.caption.30}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.4}{\ignorespaces Flink windowing on a data stream. An unbounded stream of events is partitioned into time-based windows (W1, W2, W3, ...) for aggregation and stateful computation. Each window maintains state and emits results independently. Source: Apache Apache Flink Documentation \citep  {flinkdocs2024}.\relax }}{39}{figure.caption.31}}
+\newlabel{fig:flink_windows_exp}{{5.4}{39}{Flink windowing on a data stream. An unbounded stream of events is partitioned into time-based windows (W1, W2, W3, ...) for aggregation and stateful computation. Each window maintains state and emits results independently. Source: Apache Apache Flink Documentation \citep {flinkdocs2024}.\relax }{figure.caption.31}{}}
+\gdef \LT@vi {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{97.75826pt}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.5}{\ignorespaces Flink streaming architecture: stateless vs stateful stream processing. Flink applications are composed of streaming dataflows that may be transformed by user-defined operators. State is maintained in memory or in access-efficient on-disk data structures (RocksDB). Source: Apache Flink Documentation \citep  {flinkdocs2024}.\relax }}{45}{figure.caption.39}}
-\newlabel{fig:flink_stateful_exp}{{5.5}{45}{Flink streaming architecture: stateless vs stateful stream processing. Flink applications are composed of streaming dataflows that may be transformed by user-defined operators. State is maintained in memory or in access-efficient on-disk data structures (RocksDB). Source: Apache Flink Documentation \citep {flinkdocs2024}.\relax }{figure.caption.39}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.2}Results}{45}{section.5.2}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.1}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{45}{subsection.5.2.1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.2}Experiment 1: Four-Stage Layer Coverage Analysis}{45}{subsection.5.2.2}}
-\gdef \LT@viii {\LT@entry 
+\@writefile{lof}{\contentsline {figure}{\numberline {5.5}{\ignorespaces Flink streaming architecture: stateless vs stateful stream processing. Flink applications are composed of streaming dataflows that may be transformed by user-defined operators. State is maintained in memory or in access-efficient on-disk data structures (RocksDB). Source: Apache Flink Documentation \citep  {flinkdocs2024}.\relax }}{40}{figure.caption.32}}
+\newlabel{fig:flink_stateful_exp}{{5.5}{40}{Flink streaming architecture: stateless vs stateful stream processing. Flink applications are composed of streaming dataflows that may be transformed by user-defined operators. State is maintained in memory or in access-efficient on-disk data structures (RocksDB). Source: Apache Flink Documentation \citep {flinkdocs2024}.\relax }{figure.caption.32}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Results}{40}{section.5.2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.1}RQ1: Does Multi-Layer Validation Improve Coverage? [Exp 1, 2]}{40}{subsection.5.2.1}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.2}Experiment 1: Four-Stage Layer Coverage Analysis}{40}{subsection.5.2.2}}
+\gdef \LT@vii {\LT@entry 
     {1}{140.83739pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{97.75826pt}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.6}{\ignorespaces Record flow through CA-DQStream processing layers. Of 3.08M input records, Schema Validation rejects 310K (10.1\%), Business Rules flag 104K (3.4\%), and Online AE + Memory Module flags 89K (2.9\%), yielding 2.577M clean records (83.7\% retention).\relax }}{46}{figure.caption.40}}
-\newlabel{fig:layer_flow}{{5.6}{46}{Record flow through CA-DQStream processing layers. Of 3.08M input records, Schema Validation rejects 310K (10.1\%), Business Rules flag 104K (3.4\%), and Online AE + Memory Module flags 89K (2.9\%), yielding 2.577M clean records (83.7\% retention).\relax }{figure.caption.40}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.3}Experiment 2: Ablation Study}{46}{subsection.5.2.3}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.4}RQ2: Does Online Autoencoder + Memory Module Outperform Baselines? [Exp 3, 4]}{46}{subsection.5.2.4}}
-\gdef \LT@ix {\LT@entry 
+\@writefile{lof}{\contentsline {figure}{\numberline {5.6}{\ignorespaces Record flow through CA-DQStream processing layers. Of 3.08M input records, Schema Validation rejects 310K (10.1\%), Business Rules flag 104K (3.4\%), and Online AE + Memory Module flags 89K (2.9\%), yielding 2.577M clean records (83.7\% retention).\relax }}{41}{figure.caption.33}}
+\newlabel{fig:layer_flow}{{5.6}{41}{Record flow through CA-DQStream processing layers. Of 3.08M input records, Schema Validation rejects 310K (10.1\%), Business Rules flag 104K (3.4\%), and Online AE + Memory Module flags 89K (2.9\%), yielding 2.577M clean records (83.7\% retention).\relax }{figure.caption.33}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.3}Experiment 2: Ablation Study}{41}{subsection.5.2.3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.4}RQ2: Does Online Autoencoder + Memory Module Outperform Baselines? [Exp 3, 4]}{41}{subsection.5.2.4}}
+\gdef \LT@viii {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.5}Experiment 3: Online Autoencoder Anomaly Detection}{47}{subsection.5.2.5}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.6}Experiment 4: Comparison with Existing DQ Tools}{48}{subsection.5.2.6}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.5}Experiment 3: Online Autoencoder Anomaly Detection}{42}{subsection.5.2.5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.6}Experiment 4: Comparison with Existing DQ Tools}{43}{subsection.5.2.6}}
+\gdef \LT@ix {\LT@entry 
+    {1}{140.83739pt}\LT@entry 
+    {1}{55.07912pt}\LT@entry 
+    {1}{55.07912pt}\LT@entry 
+    {1}{55.07912pt}\LT@entry 
+    {1}{55.07912pt}\LT@entry 
+    {1}{69.3055pt}}
 \gdef \LT@x {\LT@entry 
     {1}{140.83739pt}\LT@entry 
     {1}{55.07912pt}\LT@entry 
@@ -402,13 +367,6 @@
     {1}{69.3055pt}}
 \gdef \LT@xi {\LT@entry 
     {1}{140.83739pt}\LT@entry 
-    {1}{55.07912pt}\LT@entry 
-    {1}{55.07912pt}\LT@entry 
-    {1}{55.07912pt}\LT@entry 
-    {1}{55.07912pt}\LT@entry 
-    {1}{69.3055pt}}
-\gdef \LT@xii {\LT@entry 
-    {1}{140.83739pt}\LT@entry 
     {1}{46.54321pt}\LT@entry 
     {1}{46.54321pt}\LT@entry 
     {1}{46.54321pt}\LT@entry 
@@ -416,130 +374,130 @@
     {1}{46.54321pt}\LT@entry 
     {1}{46.54321pt}\LT@entry 
     {1}{0.0pt}}
-\newlabel{sec:rq2_conclusion}{{5.2.6}{51}{Experiment 4: Comparison with Existing DQ Tools}{Item.55}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.7}{\ignorespaces Multi-metric performance comparison of anomaly detection algorithms. The Proposed Online Autoencoder + Memory Module achieves the best FPR (2.99\% weighted average) among all algorithms, with F1 = 0.71 weighted average across Easy/Medium/Hard difficulty levels. The per-difficulty benchmark results (5 seeds) show F1 = 0.828 (Easy), F1 = 0.751 (Medium), F1 = 0.563 (Hard) and FPR = 2.99\% for the proposed method. All metrics meet or exceed the production targets (FPR $<$ 5\%, Recall $\geq $ 75\%).\relax }}{52}{figure.caption.41}}
-\newlabel{fig:model_radar}{{5.7}{52}{Multi-metric performance comparison of anomaly detection algorithms. The Proposed Online Autoencoder + Memory Module achieves the best FPR (2.99\% weighted average) among all algorithms, with F1 = 0.71 weighted average across Easy/Medium/Hard difficulty levels. The per-difficulty benchmark results (5 seeds) show F1 = 0.828 (Easy), F1 = 0.751 (Medium), F1 = 0.563 (Hard) and FPR = 2.99\% for the proposed method. All metrics meet or exceed the production targets (FPR $<$ 5\%, Recall $\geq $ 75\%).\relax }{figure.caption.41}{}}
-\newlabel{sec:rq2_conclusion_full}{{5.2.6}{52}{Experiment 4: Comparison with Existing DQ Tools}{figure.caption.41}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.7}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{52}{subsection.5.2.7}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.8}Experiment 6: ADWIN Drift Detection Effectiveness}{52}{subsection.5.2.8}}
-\gdef \LT@xiii {\LT@entry 
+\newlabel{sec:rq2_conclusion}{{5.2.6}{46}{Experiment 4: Comparison with Existing DQ Tools}{Item.55}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.7}{\ignorespaces Multi-metric performance comparison of anomaly detection algorithms. The Proposed Online Autoencoder + Memory Module achieves the best FPR (2.99\% weighted average) among all algorithms, with F1 = 0.71 weighted average across Easy/Medium/Hard difficulty levels. The per-difficulty benchmark results (5 seeds) show F1 = 0.828 (Easy), F1 = 0.751 (Medium), F1 = 0.563 (Hard) and FPR = 2.99\% for the proposed method. All metrics meet or exceed the production targets (FPR $<$ 5\%, Recall $\geq $ 75\%).\relax }}{47}{figure.caption.34}}
+\newlabel{fig:model_radar}{{5.7}{47}{Multi-metric performance comparison of anomaly detection algorithms. The Proposed Online Autoencoder + Memory Module achieves the best FPR (2.99\% weighted average) among all algorithms, with F1 = 0.71 weighted average across Easy/Medium/Hard difficulty levels. The per-difficulty benchmark results (5 seeds) show F1 = 0.828 (Easy), F1 = 0.751 (Medium), F1 = 0.563 (Hard) and FPR = 2.99\% for the proposed method. All metrics meet or exceed the production targets (FPR $<$ 5\%, Recall $\geq $ 75\%).\relax }{figure.caption.34}{}}
+\newlabel{sec:rq2_conclusion_full}{{5.2.6}{47}{Experiment 4: Comparison with Existing DQ Tools}{figure.caption.34}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.7}RQ3: Does IEC Multi-Strategy Adaptation Maintain Accuracy? [Exp 6]}{47}{subsection.5.2.7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.8}Experiment 6: ADWIN Drift Detection Effectiveness}{47}{subsection.5.2.8}}
+\gdef \LT@xii {\LT@entry 
     {1}{112.38463pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{83.53188pt}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.9}RQ4: Does Sequential Pipeline with Early Exit Optimization Improve Performance? [Exp 7, 8]}{53}{subsection.5.2.9}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.10}Experiment 7: Sequential Pipeline with vs without Early Exit}{53}{subsection.5.2.10}}
-\gdef \LT@xiv {\LT@entry 
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.9}RQ4: Does Sequential Pipeline with Early Exit Optimization Improve Performance? [Exp 7, 8]}{48}{subsection.5.2.9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.10}Experiment 7: Sequential Pipeline with vs without Early Exit}{48}{subsection.5.2.10}}
+\gdef \LT@xiii {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.8}{\ignorespaces Sequential Pipeline with vs without Early Exit Optimization. (a) Latency comparison showing 1.20$\times $ average latency reduction (65ms $\to $ 54ms) and 2.9$\times $ p50 latency reduction (487ms $\to $ 168ms). Early exit optimization directly reduces average latency by bypassing ML scoring for 3.4\% of Schema-passing records; combined with 10.1\% Schema pre-filtering, 13.5\% of all records avoid the ML scoring stage. (b) Throughput comparison showing 2.2$\times $ improvement (8,240 $\to $ 18,450 events/sec) through early exit and conditional routing.\relax }}{54}{figure.caption.42}}
-\newlabel{fig:exp8a_performance}{{5.8}{54}{Sequential Pipeline with vs without Early Exit Optimization. (a) Latency comparison showing 1.20$\times $ average latency reduction (65ms $\to $ 54ms) and 2.9$\times $ p50 latency reduction (487ms $\to $ 168ms). Early exit optimization directly reduces average latency by bypassing ML scoring for 3.4\% of Schema-passing records; combined with 10.1\% Schema pre-filtering, 13.5\% of all records avoid the ML scoring stage. (b) Throughput comparison showing 2.2$\times $ improvement (8,240 $\to $ 18,450 events/sec) through early exit and conditional routing.\relax }{figure.caption.42}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.11}Experiment 8: End-to-End Throughput Benchmark}{54}{subsection.5.2.11}}
-\gdef \LT@xv {\LT@entry 
+\@writefile{lof}{\contentsline {figure}{\numberline {5.8}{\ignorespaces Sequential Pipeline with vs without Early Exit Optimization. (a) Latency comparison showing 1.20$\times $ average latency reduction (65ms $\to $ 54ms) and 2.9$\times $ p50 latency reduction (487ms $\to $ 168ms). Early exit optimization directly reduces average latency by bypassing ML scoring for 3.4\% of Schema-passing records; combined with 10.1\% Schema pre-filtering, 13.5\% of all records avoid the ML scoring stage. (b) Throughput comparison showing 2.2$\times $ improvement (8,240 $\to $ 18,450 events/sec) through early exit and conditional routing.\relax }}{49}{figure.caption.35}}
+\newlabel{fig:exp8a_performance}{{5.8}{49}{Sequential Pipeline with vs without Early Exit Optimization. (a) Latency comparison showing 1.20$\times $ average latency reduction (65ms $\to $ 54ms) and 2.9$\times $ p50 latency reduction (487ms $\to $ 168ms). Early exit optimization directly reduces average latency by bypassing ML scoring for 3.4\% of Schema-passing records; combined with 10.1\% Schema pre-filtering, 13.5\% of all records avoid the ML scoring stage. (b) Throughput comparison showing 2.2$\times $ improvement (8,240 $\to $ 18,450 events/sec) through early exit and conditional routing.\relax }{figure.caption.35}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.11}Experiment 8: End-to-End Throughput Benchmark}{49}{subsection.5.2.11}}
+\gdef \LT@xiv {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{126.21101pt}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.12}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{55}{subsection.5.2.12}}
-\gdef \LT@xvi {\LT@entry 
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.12}RQ5: Does 4D Context-Aware Thresholding Reduce FPR? [Exp 9, 10]}{50}{subsection.5.2.12}}
+\gdef \LT@xv {\LT@entry 
     {1}{155.06377pt}\LT@entry 
+    {1}{83.53188pt}\LT@entry 
+    {1}{83.53188pt}\LT@entry 
+    {1}{83.53188pt}\LT@entry 
+    {1}{83.53188pt}}
+\gdef \LT@xvi {\LT@entry 
+    {1}{98.15825pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}}
 \gdef \LT@xvii {\LT@entry 
     {1}{98.15825pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}}
-\gdef \LT@xviii {\LT@entry 
-    {1}{98.15825pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{97.75826pt}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.13}Experiment 9: Context-Aware vs Global Thresholds}{56}{subsection.5.2.13}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.9}{\ignorespaces FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds. The sklearn IF baseline with global threshold (FPR=4.94\%) is the correct apples-to-apples comparison for the thresholding contribution. The 4D context-aware approach reduces FPR to 4.2\% (1.18x improvement). The Global Threshold (FPR=38.7\%) represents a rule-based baseline on raw features and is not a competitive ML baseline.\relax }}{57}{figure.caption.43}}
-\newlabel{fig:exp5a_fpr_comparison}{{5.9}{57}{FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds. The sklearn IF baseline with global threshold (FPR=4.94\%) is the correct apples-to-apples comparison for the thresholding contribution. The 4D context-aware approach reduces FPR to 4.2\% (1.18x improvement). The Global Threshold (FPR=38.7\%) represents a rule-based baseline on raw features and is not a competitive ML baseline.\relax }{figure.caption.43}{}}
-\gdef \LT@xix {\LT@entry 
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.13}Experiment 9: Context-Aware vs Global Thresholds}{51}{subsection.5.2.13}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.9}{\ignorespaces FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds. The sklearn IF baseline with global threshold (FPR=4.94\%) is the correct apples-to-apples comparison for the thresholding contribution. The 4D context-aware approach reduces FPR to 4.2\% (1.18x improvement). The Global Threshold (FPR=38.7\%) represents a rule-based baseline on raw features and is not a competitive ML baseline.\relax }}{52}{figure.caption.36}}
+\newlabel{fig:exp5a_fpr_comparison}{{5.9}{52}{FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds. The sklearn IF baseline with global threshold (FPR=4.94\%) is the correct apples-to-apples comparison for the thresholding contribution. The 4D context-aware approach reduces FPR to 4.2\% (1.18x improvement). The Global Threshold (FPR=38.7\%) represents a rule-based baseline on raw features and is not a competitive ML baseline.\relax }{figure.caption.36}{}}
+\gdef \LT@xviii {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{97.75826pt}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.14}Experiment 10: Temporal Validation}{58}{subsection.5.2.14}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.15}Additional Validation Experiments [Exp 5, 11, 12, 13]}{58}{subsection.5.2.15}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.16}Experiment 5: Business Rules Effectiveness}{58}{subsection.5.2.16}}
-\newlabel{sec:exp5_br}{{5.2.16}{58}{Experiment 5: Business Rules Effectiveness}{subsection.5.2.16}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.17}Experiment 11: Fixed-Rule Baseline Comparison}{59}{subsection.5.2.17}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.18}Experiment 12: MinIO Write Performance}{59}{subsection.5.2.18}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.19}Experiment 13: Grafana Dashboard Usability}{59}{subsection.5.2.19}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.3}Chapter Summary}{59}{section.5.3}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{61}{chapter.6}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.14}Experiment 10: Temporal Validation}{53}{subsection.5.2.14}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.15}Additional Validation Experiments [Exp 5, 11, 12, 13]}{53}{subsection.5.2.15}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.16}Experiment 5: Business Rules Effectiveness}{53}{subsection.5.2.16}}
+\newlabel{sec:exp5_br}{{5.2.16}{53}{Experiment 5: Business Rules Effectiveness}{subsection.5.2.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.17}Experiment 11: Fixed-Rule Baseline Comparison}{54}{subsection.5.2.17}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.18}Experiment 12: MinIO Write Performance}{54}{subsection.5.2.18}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.19}Experiment 13: Grafana Dashboard Usability}{54}{subsection.5.2.19}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.3}Chapter Summary}{54}{section.5.3}}
+\@writefile{toc}{\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{56}{chapter.6}}
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {6.1}Conclusions}{61}{section.6.1}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.2}Limitations}{61}{section.6.2}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{62}{subsection.6.2.1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{62}{subsection.6.2.2}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{62}{subsection.6.2.3}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{62}{subsection.6.2.4}}
-\@writefile{toc}{\contentsline {section}{\numberline {6.3}Future Work}{62}{section.6.3}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{62}{subsection.6.3.1}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{62}{subsection.6.3.2}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{62}{subsection.6.3.3}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{63}{subsection.6.3.4}}
-\gdef \LT@xx {\LT@entry 
+\@writefile{toc}{\contentsline {section}{\numberline {6.1}Conclusions}{56}{section.6.1}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.2}Limitations}{56}{section.6.2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{57}{subsection.6.2.1}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{57}{subsection.6.2.2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{57}{subsection.6.2.3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{57}{subsection.6.2.4}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.3}Future Work}{57}{section.6.3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{57}{subsection.6.3.1}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{57}{subsection.6.3.2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{57}{subsection.6.3.3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{58}{subsection.6.3.4}}
+\gdef \LT@xix {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}}
-\gdef \LT@xxi {\LT@entry 
+\gdef \LT@xx {\LT@entry 
     {1}{140.83739pt}\LT@entry 
     {1}{55.07912pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}}
-\@writefile{toc}{\contentsline {chapter}{Appendix B: Statistical Appendix}{64}{chapter*.44}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.1}{\ignorespaces Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds.\relax }}{64}{table.6.1}}
-\newlabel{tab:wilcoxon_easy}{{6.1}{64}{Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds.\relax }{table.6.1}{}}
-\gdef \LT@xxii {\LT@entry 
+\@writefile{toc}{\contentsline {chapter}{Appendix B: Statistical Appendix}{59}{chapter*.37}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.1}{\ignorespaces Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds.\relax }}{59}{table.6.1}}
+\newlabel{tab:wilcoxon_easy}{{6.1}{59}{Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds.\relax }{table.6.1}{}}
+\gdef \LT@xxi {\LT@entry 
     {1}{112.38463pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{111.98463pt}\LT@entry 
     {1}{83.53188pt}}
-\gdef \LT@xxiii {\LT@entry 
+\gdef \LT@xxii {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{111.98463pt}\LT@entry 
     {1}{97.75826pt}}
-\gdef \LT@xxiv {\LT@entry 
+\gdef \LT@xxiii {\LT@entry 
     {1}{69.70549pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.2}{\ignorespaces Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model.\relax }}{65}{table.6.2}}
-\newlabel{tab:wilcoxon_ablation}{{6.2}{65}{Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model.\relax }{table.6.2}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.3}{\ignorespaces Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method).\relax }}{65}{table.6.3}}
-\newlabel{tab:bootstrap_ci}{{6.3}{65}{Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method).\relax }{table.6.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.4}{\ignorespaces McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$).\relax }}{65}{table.6.4}}
-\newlabel{tab:mcnemar}{{6.4}{65}{McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$).\relax }{table.6.4}{}}
-\gdef \LT@xxv {\LT@entry 
+\@writefile{lot}{\contentsline {table}{\numberline {6.2}{\ignorespaces Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model.\relax }}{60}{table.6.2}}
+\newlabel{tab:wilcoxon_ablation}{{6.2}{60}{Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model.\relax }{table.6.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.3}{\ignorespaces Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method).\relax }}{60}{table.6.3}}
+\newlabel{tab:bootstrap_ci}{{6.3}{60}{Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method).\relax }{table.6.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.4}{\ignorespaces McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$).\relax }}{60}{table.6.4}}
+\newlabel{tab:mcnemar}{{6.4}{60}{McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$).\relax }{table.6.4}{}}
+\gdef \LT@xxiv {\LT@entry 
     {1}{140.83739pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{97.75826pt}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.5}{\ignorespaces Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR.\relax }}{66}{table.6.5}}
-\newlabel{tab:seed_level}{{6.5}{66}{Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR.\relax }{table.6.5}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.6}{\ignorespaces Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method.\relax }}{66}{table.6.6}}
-\newlabel{tab:cohen_d}{{6.6}{66}{Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method.\relax }{table.6.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.5}{\ignorespaces Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR.\relax }}{61}{table.6.5}}
+\newlabel{tab:seed_level}{{6.5}{61}{Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR.\relax }{table.6.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6.6}{\ignorespaces Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method.\relax }}{61}{table.6.6}}
+\newlabel{tab:cohen_d}{{6.6}{61}{Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method.\relax }{table.6.6}{}}
 \bibstyle{plainnat}
 \bibdata{citation}
 \bibcite{alibaba_flink2024}{{1}{2024}{{Alibaba Cloud}}{{}}}
@@ -555,46 +513,44 @@
 \bibcite{chandy_lamport_1985}{{11}{1985}{{Chandy and Lamport}}{{}}}
 \bibcite{taps2021}{{12}{2021}{{Chen et~al.}}{{}}}
 \bibcite{mtri2026}{{13}{2026}{{Chen et~al.}}{{Chen, Chen, and Lu}}}
-\bibcite{scar_2025}{{14}{2025}{{Chen et~al.}}{{Chen, Park, Garcia, and Rundensteiner}}}
-\bibcite{flink_rocksdb}{{15}{2024{}}{{Community}}{{}}}
-\bibcite{flink_rocksdb_bloom}{{16}{2024{}}{{Community}}{{}}}
-\bibcite{confluent_dead_letter_queue}{{17}{2024{}}{{Confluent}}{{}}}
-\bibcite{confluent_dq_patterns}{{18}{2024{}}{{Confluent}}{{}}}
-\@writefile{toc}{\contentsline {chapter}{REFERENCES}{68}{table.6.6}}
-\bibcite{confluent_schema_registry}{{19}{2024{}}{{Confluent}}{{}}}
-\bibcite{confluent_2025_streaming_report}{{20}{2025}{{Confluent}}{{}}}
-\bibcite{siemens_confluent2024}{{21}{2024}{{Confluent Inc.}}{{}}}
-\bibcite{confluent_2025}{{22}{2025}{{Confluent Inc.}}{{}}}
-\bibcite{dama2017dmbok}{{23}{2017}{{Data Management Association}}{{}}}
-\bibcite{dey2001understanding}{{24}{2001}{{Dey}}{{}}}
-\bibcite{gama2014survey}{{25}{2014}{{Gama et~al.}}{{Gama, Zliobaite, Bifet, Pechenizkiy, and Bouchachia}}}
-\bibcite{googlemlops2024}{{26}{2024}{{Google Cloud}}{{}}}
-\bibcite{grab_streaming_dq}{{27}{2024}{{Grab Engineering}}{{}}}
-\bibcite{grab_coban2025}{{28}{2025}{{Grab Engineering}}{{}}}
-\bibcite{adbench2022}{{29}{2022}{{Han et~al.}}{{Han, Li, et~al.}}}
-\bibcite{hojjati2025selfsupervised}{{30}{2025}{{Hojjati et~al.}}{{Hojjati, Ho, and Armanfard}}}
-\bibcite{ibm_dq2024}{{31}{2024}{{IBM}}{{}}}
-\bibcite{karczmarek2020kmeans}{{32}{2020}{{Karczmarek et~al.}}{{Karczmarek, Kiersztyn, Pedrycz, and Al}}}
-\bibcite{nab2020}{{33}{2020}{{Lavine et~al.}}{{Lavine, Lamb, and Ahmad}}}
-\bibcite{liu2008isolation}{{34}{2008}{{Liu et~al.}}{{Liu, Ting, and Zhou}}}
-\bibcite{lu2018learning}{{35}{2018}{{Lu et~al.}}{{Lu, Liu, Dong, Pei, Guruler, and Savachkin}}}
-\bibcite{dtd2026}{{36}{2026{}}{{Lu et~al.}}{{Lu, Lu, Liu, Yu, and Zhang}}}
-\bibcite{dtd_2026}{{37}{2026{}}{{Lu et~al.}}{{Lu, Lu, Liu, Yu, and Zhang}}}
-\bibcite{read2020}{{38}{2020}{{Luo et~al.}}{{Luo, Meng, Wu, Zhang, Li, and Zheng}}}
-\bibcite{scar2025benchmark}{{39}{2025}{{Ma et~al.}}{{Ma, Zhang, et~al.}}}
-\bibcite{montiel2021river}{{40}{2021}{{Montiel et~al.}}{{Montiel, Read, Bifet, and Abdessalem}}}
-\bibcite{nyctlc}{{41}{2024}{{NYC Taxi and Limousine Commission}}{{}}}
-\bibcite{papastergios2025stream}{{42}{2025}{{Papastergios and Gounaris}}{{}}}
-\bibcite{sklearn_api}{{43}{2011}{{Pedregosa et~al.}}{{Pedregosa, Varoquaux, Gramfort, Michel, Thirion, Grisel, Blondel, Prettenhofer, Weiss, Dubourg, Vanderplas, Passos, Cournapeau, Brucher, Perrot, and Duchesnay}}}
-\bibcite{precisely2024}{{44}{2024}{{Precisely}}{{}}}
-\bibcite{scholkopf2001oc}{{45}{2001}{{Sch\"olkopf et~al.}}{{Sch\"olkopf, Platt, Shawe-Taylor, Smola, and Williamson}}}
-\bibcite{contextdq2022}{{46}{2022}{{Serra et~al.}}{{Serra, Peralta, Marotta, and Marcel}}}
-\bibcite{icad2025}{{47}{2025}{{Siampou et~al.}}{{}}}
-\bibcite{siddiqui2019mstream}{{48}{2019}{{Siddiqui et~al.}}{{Siddiqui, Paul, Schulz, Rundensteiner, Faghri, Roy, Rashidi, Ravindra, Krishnan, and Abel}}}
-\bibcite{togbe2020iforestasd}{{49}{2020}{{Togbe et~al.}}{{Togbe, Barry, Boly, Chabchoub, Chiky, Montiel, and Tran}}}
-\bibcite{ververica2024}{{50}{2024}{{Ververica}}{{}}}
-\bibcite{vincent2010stacked}{{51}{2010}{{Vincent et~al.}}{{Vincent, Larochelle, Lajoie, Bengio, and Manzagol}}}
-\bibcite{bestad2025}{{52}{2025}{{Xie et~al.}}{{Xie, Kim, Chiang, Zhao, and Shafique}}}
-\bibcite{adt2025}{{53}{2025}{{Yang et~al.}}{{}}}
-\bibcite{yepmo2024rififi}{{54}{2024}{{Yepmo et~al.}}{{Yepmo, Smits, Lesot, and Pivert}}}
-\bibcite{meter_2023}{{55}{2023}{{Zhu et~al.}}{{Zhu, Cai, Deng, Ooi, and Zhang}}}
+\bibcite{flink_rocksdb}{{14}{2024{}}{{Community}}{{}}}
+\bibcite{flink_rocksdb_bloom}{{15}{2024{}}{{Community}}{{}}}
+\bibcite{confluent_dead_letter_queue}{{16}{2024{}}{{Confluent}}{{}}}
+\bibcite{confluent_dq_patterns}{{17}{2024{}}{{Confluent}}{{}}}
+\bibcite{confluent_schema_registry}{{18}{2024{}}{{Confluent}}{{}}}
+\@writefile{toc}{\contentsline {chapter}{REFERENCES}{63}{table.6.6}}
+\bibcite{confluent_2025_streaming_report}{{19}{2025}{{Confluent}}{{}}}
+\bibcite{siemens_confluent2024}{{20}{2024}{{Confluent Inc.}}{{}}}
+\bibcite{confluent_2025}{{21}{2025}{{Confluent Inc.}}{{}}}
+\bibcite{dama2017dmbok}{{22}{2017}{{Data Management Association}}{{}}}
+\bibcite{dey2001understanding}{{23}{2001}{{Dey}}{{}}}
+\bibcite{gama2014survey}{{24}{2014}{{Gama et~al.}}{{Gama, Zliobaite, Bifet, Pechenizkiy, and Bouchachia}}}
+\bibcite{googlemlops2024}{{25}{2024}{{Google Cloud}}{{}}}
+\bibcite{grab_streaming_dq}{{26}{2024}{{Grab Engineering}}{{}}}
+\bibcite{grab_coban2025}{{27}{2025}{{Grab Engineering}}{{}}}
+\bibcite{adbench2022}{{28}{2022}{{Han et~al.}}{{Han, Li, et~al.}}}
+\bibcite{hojjati2025selfsupervised}{{29}{2025}{{Hojjati et~al.}}{{Hojjati, Ho, and Armanfard}}}
+\bibcite{ibm_dq2024}{{30}{2024}{{IBM}}{{}}}
+\bibcite{karczmarek2020kmeans}{{31}{2020}{{Karczmarek et~al.}}{{Karczmarek, Kiersztyn, Pedrycz, and Al}}}
+\bibcite{nab2020}{{32}{2020}{{Lavine et~al.}}{{Lavine, Lamb, and Ahmad}}}
+\bibcite{liu2008isolation}{{33}{2008}{{Liu et~al.}}{{Liu, Ting, and Zhou}}}
+\bibcite{lu2018learning}{{34}{2018}{{Lu et~al.}}{{Lu, Liu, Dong, Pei, Guruler, and Savachkin}}}
+\bibcite{dtd2026}{{35}{2026{}}{{Lu et~al.}}{{Lu, Lu, Liu, Yu, and Zhang}}}
+\bibcite{dtd_2026}{{36}{2026{}}{{Lu et~al.}}{{Lu, Lu, Liu, Yu, and Zhang}}}
+\bibcite{read2020}{{37}{2020}{{Luo et~al.}}{{Luo, Meng, Wu, Zhang, Li, and Zheng}}}
+\bibcite{scar2025benchmark}{{38}{2025}{{Ma et~al.}}{{Ma, Zhang, et~al.}}}
+\bibcite{montiel2021river}{{39}{2021}{{Montiel et~al.}}{{Montiel, Read, Bifet, and Abdessalem}}}
+\bibcite{nyctlc}{{40}{2024}{{NYC Taxi and Limousine Commission}}{{}}}
+\bibcite{papastergios2025stream}{{41}{2025}{{Papastergios and Gounaris}}{{}}}
+\bibcite{precisely2024}{{42}{2024}{{Precisely}}{{}}}
+\bibcite{scholkopf2001oc}{{43}{2001}{{Sch\"olkopf et~al.}}{{Sch\"olkopf, Platt, Shawe-Taylor, Smola, and Williamson}}}
+\bibcite{contextdq2022}{{44}{2022}{{Serra et~al.}}{{Serra, Peralta, Marotta, and Marcel}}}
+\bibcite{icad2025}{{45}{2025}{{Siampou et~al.}}{{}}}
+\bibcite{siddiqui2019mstream}{{46}{2019}{{Siddiqui et~al.}}{{Siddiqui, Paul, Schulz, Rundensteiner, Faghri, Roy, Rashidi, Ravindra, Krishnan, and Abel}}}
+\bibcite{togbe2020iforestasd}{{47}{2020}{{Togbe et~al.}}{{Togbe, Barry, Boly, Chabchoub, Chiky, Montiel, and Tran}}}
+\bibcite{ververica2024}{{48}{2024}{{Ververica}}{{}}}
+\bibcite{vincent2010stacked}{{49}{2010}{{Vincent et~al.}}{{Vincent, Larochelle, Lajoie, Bengio, and Manzagol}}}
+\bibcite{bestad2025}{{50}{2025}{{Xie et~al.}}{{Xie, Kim, Chiang, Zhao, and Shafique}}}
+\bibcite{adt2025}{{51}{2025}{{Yang et~al.}}{{}}}
+\bibcite{yepmo2024rififi}{{52}{2024}{{Yepmo et~al.}}{{Yepmo, Smits, Lesot, and Pivert}}}
+\bibcite{meter_2023}{{53}{2023}{{Zhu et~al.}}{{Zhu, Cai, Deng, Ooi, and Zhang}}}
