@@ -23,9 +23,16 @@ LOGGER.info("Device: %s", DEVICE)
 class AE(nn.Module):
     def __init__(self, d=34, h=68):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(d,h), nn.ReLU(), nn.Linear(h,d), nn.ReLU())
-    def forward(self, x): return self.net(x)
-    def encode(self, x): return self.net[:2](x)
+        # 34D -> 68D -> 34D (bottleneck = 34D)
+        self.enc1 = nn.Linear(d, h); self.enc2 = nn.Linear(h, d)
+        self.dec1 = nn.Linear(d, h); self.dec2 = nn.Linear(h, d)
+
+    def forward(self, x):
+        z = torch.relu(self.enc2(torch.relu(self.enc1(x))))   # bottleneck
+        return torch.relu(self.dec2(torch.relu(self.dec1(z))))
+
+    def encode(self, x):
+        return torch.relu(self.enc2(torch.relu(self.enc1(x))))  # 34D latent
 
 
 # =============================================================================
@@ -211,35 +218,74 @@ def extract_features(pq_path, max_rows=None):
 
 
 # =============================================================================
-# Batch Scoring
+# Batch Scoring (Optimized for large test sets)
 # =============================================================================
 class Scorer:
-    def __init__(self, ae, mean, std, mem, cb, k=10):
+    def __init__(self, ae, mean, std, mem, cb, k=10, gamma=0.0):
         self.ae = ae; self.mean = mean; self.std = std
-        self.mem = mem; self.cb = cb; self.k = k
+        self.mem = mem; self.cb = cb; self.k = k; self.gamma = gamma
+        # Pre-compute: mean of active memory (1 centroid)
+        self.mem_mean = self.mem.active().mean(0, keepdim=True) if self.mem.cnt > 0 else None
 
     def score(self, X):
+        """Score with mean memory centroid (fast) OR full kNN (accurate)."""
         if self.mean is None or self.mem.cnt < 2:
             return np.full(len(X), 0.5)
-        M = self.mem.active()
+        M = self.mem.active()  # [cnt, 34]
         Xn = (torch.from_numpy(X).to(DEVICE) - self.mean) / (self.std + 1e-8)
         n = len(Xn); cnt = len(M)
-        cs = max(50, min(5000, 100_000_000 // (cnt * 34)))
-        out = []
-        for s in range(0, n, cs):
-            chunk = Xn[s:s+cs].unsqueeze(1)
-            diff = chunk - M.unsqueeze(0)
-            d = diff.abs().sum(2)
-            v, _ = d.topk(min(self.k, cnt), dim=1, largest=False)
-            out.append(v.sum(1).cpu().numpy())
-        return np.concatenate(out)
+
+        # Use chunk size bounded by AVAILABLE GPU/CPU memory
+        max_bytes = 200_000_000  # 200MB per chunk
+        cs = max(100, min(2000, max_bytes // (cnt * 34 * 4)))
+
+        # Compute AE reconstruction error if gamma > 0
+        recon_err = None
+        if self.gamma > 0:
+            recon_out = []
+            for s in range(0, n, cs):
+                chunk = Xn[s:s+cs]
+                recon = self.ae(chunk + torch.randn_like(chunk) * 0.1)
+                err = (chunk - recon).abs().sum(1).detach()
+                recon_out.append(err.cpu().numpy())
+            recon_err = np.concatenate(recon_out)
+
+        # If memory is large (>2048), use mean centroid for speed
+        if cnt > 2048:
+            mem_mean = self.mem_mean.to(DEVICE)
+            out = []
+            for s in range(0, n, cs):
+                chunk = Xn[s:s+cs]  # [cs, 34]
+                diff = (chunk - mem_mean).abs().sum(1)  # [cs]
+                out.append(diff.cpu().numpy())
+            dist_score = np.concatenate(out)
+        else:
+            out = []
+            for s in range(0, n, cs):
+                chunk = Xn[s:s+cs].unsqueeze(1)  # [C,1,34]
+                diff = chunk - M.unsqueeze(0)     # [C,cnt,34]
+                d = diff.abs().sum(2)             # [C,cnt]
+                v, _ = d.topk(min(self.k, cnt), dim=1, largest=False)
+                out.append(v.sum(1).cpu().numpy())
+            dist_score = np.concatenate(out)
+
+        if recon_err is not None:
+            return dist_score + self.gamma * recon_err
+        return dist_score
 
     def score_ctx(self, X, nb, h, d, rc):
         raw = self.score(X)
         if self.cb is None:
             return raw
-        cids = np.array([CB.cid(int(h[i]), int(d[i]), float(rc[i])) for i in range(len(X))], dtype=np.int32)
-        betas = np.array([self.cb.beta_for(int(nb[i]), int(cids[i])) for i in range(len(X))], dtype=np.float32)
+        nb_i = nb.astype(np.int32)
+        h_i = h.astype(np.int32); d_i = d.astype(np.int32)
+        rc_f = rc.astype(np.float32)
+        sp = (rc_f > 1).astype(np.int32)
+        sn = ((h_i >= 20) | (h_i <= 6)).astype(np.int32)
+        sw = (d_i >= 5).astype(np.int32)
+        cids = np.clip((sp << 2) | (sn << 1) | sw, 0, 79).astype(np.int32)
+        nb_i = np.clip(nb_i, 0, 9).astype(np.int32)
+        betas = self.cb.T[nb_i, cids]
         return raw / np.maximum(betas, 1e-6)
 
 
@@ -267,8 +313,10 @@ def main():
     ap.add_argument('--signing-key', required=True)
     ap.add_argument('--minio-ep', default=''); ap.add_argument('--minio-ak', default='minioadmin')
     ap.add_argument('--minio-sk', default='minioadmin123')
-    ap.add_argument('--mlen', type=int, default=8192); ap.add_argument('--epochs', type=int, default=30)
-    ap.add_argument('--bs', type=int, default=256); ap.add_argument('--eval-only', default='')
+    ap.add_argument('--mlen', type=int, default=8192); ap.add_argument('--epochs', type=int, default=8)
+    ap.add_argument('--bs', type=int, default=8192); ap.add_argument('--hidden', type=int, default=32)
+    ap.add_argument('--gamma', type=float, default=0.0); ap.add_argument('--k', type=int, default=10)
+    ap.add_argument('--eval-only', default='')
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
@@ -293,7 +341,10 @@ def main():
         # AE training (middle 80%)
         X_tr = torch.from_numpy(X[int(n*0.1):int(n*0.9)]).float().to(DEVICE)
         Xn = (X_tr - mean) / (std + 1e-8)
-        ae = AE(34, 68).to(DEVICE)
+        ae = AE(d=34, h=args.hidden).to(DEVICE)
+        # Ensure bottleneck dim is always 34 (used by Memory)
+        bottleneck_dim = ae.enc2.out_features  # Should be 34
+        LOGGER.info("  AE: input=34, hidden=%d, bottleneck=%d", args.hidden, bottleneck_dim)
         opt = torch.optim.Adam(ae.parameters(), lr=5e-3)
         crit = nn.MSELoss()
 
@@ -311,14 +362,19 @@ def main():
             if (ep + 1) % 10 == 0:
                 LOGGER.info("  Epoch %d/%d: loss=%.6f", ep+1, args.epochs, tot / max(nb, 1))
         ae.eval()
+        ae.eval()
         LOGGER.info("  AE done in %.1fs (%.0f samp/s)", time.time()-t1, len(Xn)*args.epochs / max(time.time()-t1, 1))
 
         # Memory init (last 10%)
-        mem = Memory(args.mlen, 34)
+        # Use bottleneck dimension from encoder output
+        bottleneck_dim = ae.enc2.out_features  # Should be 34
+        mem = Memory(args.mlen, bottleneck_dim)
         X_mem = torch.from_numpy(X[int(n*0.9):]).float().to(DEVICE)
         n_mem = min(args.mlen, len(X_mem))
         with torch.no_grad():
             enc = ae.encode((X_mem - mean) / (std + 1e-8))
+            # Verify dimensions match
+            assert enc.shape[1] == bottleneck_dim, f"Encoder output {enc.shape[1]} != Memory dim {bottleneck_dim}"
             mem.M[:n_mem] = enc[-n_mem:].clone()
             mem.U[:n_mem].fill_(1.0); mem.cnt = n_mem
         LOGGER.info("  Memory: %d/%d slots", n_mem, args.mlen)
@@ -326,7 +382,7 @@ def main():
         # ContextBeta (warmup on 4K sample)
         cb = CB(0.5, 95)
         wn = min(4096, len(Xn))
-        scorer_w = Scorer(ae, mean, std, mem, None, 10)
+        scorer_w = Scorer(ae, mean, std, mem, None, k=args.k, gamma=args.gamma)
         raw = scorer_w.score(X[:wn])
         cids = np.array([CB.cid(int(hours[i]), int(dows[i]), float(rcs[i])) for i in range(wn)], dtype=np.int32)
         for i in range(wn): cb.rec(int(nb_ids[i]), int(cids[i]), raw[i])
@@ -339,8 +395,8 @@ def main():
         state = {
             'ae': ae.state_dict(), 'mean': mean.cpu(), 'std': std.cpu(),
             'mem': mem.sd(), 'cb': cb.sd(),
-            'k': 10, 'gamma': 0.0, 'mlen': args.mlen,
-            'cfg': {'mlen': args.mlen, 'hidden': 68, 'k': 10, 'gamma': 0,
+            'k': args.k, 'gamma': args.gamma, 'mlen': args.mlen,
+            'cfg': {'mlen': args.mlen, 'hidden': args.hidden, 'k': args.k, 'gamma': args.gamma,
                     'warmup_epochs': args.epochs}
         }
         buf = io.BytesIO(); torch.save(state, buf, pickle_module=pickle)
@@ -361,11 +417,19 @@ def main():
     else:
         # Load checkpoint
         state = torch.load(args.eval_only, map_location='cpu', weights_only=False)
-        ae = AE(34, 68); ae.load_state_dict(state['ae']); ae.to(DEVICE); ae.eval()
+        hidden = state['cfg'].get('hidden', 68)  # Use saved hidden size, default 68
+        input_dim = state['cfg'].get('input_dim', 34)  # Default 34
+        ae = AE(d=input_dim, h=hidden); ae.load_state_dict(state['ae']); ae.to(DEVICE); ae.eval()
+        bottleneck_dim = ae.enc2.out_features
+        LOGGER.info("Loaded checkpoint: hidden=%d, bottleneck=%d", hidden, bottleneck_dim)
         mean = state['mean'].to(DEVICE); std = state['std'].to(DEVICE)
-        mem = Memory(state['mlen'], 34); mem.ld(state['mem'])
-        cb = CB(0.5, 95); cb.T = state['cb']['T']; cb.beta = float(state['cb']['beta']); cb.fitted = True
-        LOGGER.info("Loaded checkpoint: %s", args.eval_only)
+        mem = Memory(state['mlen'], bottleneck_dim); mem.ld(state['mem'])
+        scorer = Scorer(ae, mean, std, mem, cb, k=k_run, gamma=gamma_run)
+        k_ckpt = state['cfg'].get('k', 10); gamma_ckpt = state['cfg'].get('gamma', 0.0)
+        LOGGER.info("Memory dim from checkpoint: %d (k=%d, gamma=%.2f)", bottleneck_dim, k_ckpt, gamma_ckpt)
+
+    k_run = args.k if not args.eval_only else state.get('cfg', {}).get('k', 10)
+    gamma_run = args.gamma if not args.eval_only else state.get('cfg', {}).get('gamma', 0.0)
 
     # ===== EVALUATION =====
     LOGGER.info("=" * 60)
@@ -376,7 +440,7 @@ def main():
     LOGGER.info("Ground truth: %d samples, %d anomalies (%.2f%%)",
                 len(gt), int(gt.sum()), gt.sum() / len(gt) * 100)
 
-    scorer = Scorer(ae, mean, std, mem, cb, 10)
+    scorer = Scorer(ae, mean, std, mem, cb, k=args.k, gamma=args.gamma)
     use_n = min(pq.ParquetFile(args.test).metadata.num_rows, len(gt))
     LOGGER.info("Scoring %d samples...", use_n)
 

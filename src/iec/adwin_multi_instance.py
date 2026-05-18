@@ -1,21 +1,23 @@
 """
-SimpleADWIN-U: Multi-Instance SimpleADWIN for Drift Detection.
-Task 3.21-3.25: Multiple SimpleADWIN instances per neighborhood × metric
+MultiInstanceADWIN: Multi-Instance ADWIN-U for Drift Detection.
 
-SimpleADWIN-U Architecture:
-- 10 neighborhoods × 6 metrics = 60 instances (Phase 1D expansion)
+Task 3.21-3.25: Multiple ADWIN-U instances per neighborhood x metric
+
+ADWIN-U Architecture:
+- 10 neighborhoods x 6 metrics = 60 instances
 - Each instance monitors one metric stream per neighborhood
 - Delta (sensitivity) configurable per metric type
+- Supports higher-order statistics: mean, variance, skewness, kurtosis
 
 Metrics monitored:
-1. volume
-2. null_rate
-3. violation_rate
-4. anomaly_rate
-5. avg_anomaly_score
-6. delta_score
+1. volume             -> statistic='variance'  (detect volume spikes)
+2. null_rate          -> statistic='skewness'  (detect NULL burst asymmetry)
+3. violation_rate     -> statistic='mean'       (detect rule violation level changes)
+4. anomaly_rate       -> statistic='mean'      (detect ML behavior changes)
+5. avg_anomaly_score  -> statistic='mean'      (detect concept drift via score shifts)
+6. delta_score        -> statistic='mean'      (detect canary-vs-ML disagreement shifts)
 
-Spec: Phase 1D — SimpleADWIN Expansion (6→10 neighborhoods)
+Spec: Phase 1D - ADWIN-U Expansion (ADWIN -> ADWIN-U upgrade)
 """
 
 from collections import deque
@@ -24,16 +26,17 @@ from typing import Dict, List, Optional
 import logging
 import math
 
-from src.ml.memstream_core import SimpleADWIN
+from src.ml.adwin_u import ADWIN_U
 
 LOGGER = logging.getLogger('cadqstream-adwin-u')
 
 
 class MultiInstanceADWIN:
-    """SimpleADWIN-U: Multiple SimpleADWIN instances for spatial-temporal drift detection.
+    """MultiInstanceADWIN: Multiple ADWIN-U instances for spatial-temporal drift detection.
 
-    Creates separate SimpleADWIN instance for each (neighborhood, metric) pair.
-    Enables fine-grained drift detection with per-metric sensitivity tuning.
+    Creates separate ADWIN-U instance for each (neighborhood, metric) pair.
+    Enables fine-grained drift detection with per-metric sensitivity tuning
+    and higher-order statistical tests (mean, variance, skewness, kurtosis).
 
     Args:
         neighborhoods: List of neighborhood IDs to monitor
@@ -48,22 +51,25 @@ class MultiInstanceADWIN:
         metrics: List[str] = None,
         delta_config: Dict[str, float] = None,
         default_delta: float = 0.002,
-        max_window: int = 500
+        max_window: int = 500,
+        use_secondary_check: bool = False,
     ):
-        """Initialize multi-instance SimpleADWIN.
+        """Initialize multi-instance ADWIN-U.
 
         Args:
             neighborhoods: List of neighborhood IDs to monitor.
-                Defaults to 10 NYC neighborhoods (Phase 1D).
+                Defaults to 10 NYC neighborhoods.
             metrics: List of metric names to monitor.
                 Defaults to 6 metrics from MetaAggregator.
             delta_config: Per-metric delta (sensitivity) overrides.
                 Lower delta = more conservative (fewer false positives).
             default_delta: Delta for metrics not in delta_config.
-            max_window: Maximum window size per SimpleADWIN instance.
+            max_window: Maximum window size per ADWIN-U instance.
+            use_secondary_check: Require secondary statistic confirmation.
+                Reduces false positives but increases detection latency.
         """
 
-        # Default neighborhoods (10 — Phase 1D expansion)
+        # Default neighborhoods (10 - Phase 1D expansion)
         if neighborhoods is None:
             neighborhoods = [
                 'manhattan', 'brooklyn', 'queens_lower', 'queens_upper',
@@ -83,7 +89,7 @@ class MultiInstanceADWIN:
         if delta_config is None:
             delta_config = {
                 'volume':             0.005,   # Less sensitive (high variance)
-                'null_rate':          0.001,   # CRITICAL — DO NOT CHANGE
+                'null_rate':          0.001,   # CRITICAL - DO NOT CHANGE
                 'violation_rate':     0.005,   # Moderate sensitivity
                 'anomaly_rate':       0.005,   # Moderate sensitivity
                 'avg_anomaly_score':  0.005,   # Moderate sensitivity
@@ -95,10 +101,11 @@ class MultiInstanceADWIN:
         self.delta_config = delta_config
         self.default_delta = default_delta
         self.max_window = max_window
+        self.use_secondary_check = use_secondary_check
 
-        # Create SimpleADWIN instances (60 total: 10 neighborhoods × 6 metrics)
+        # Create ADWIN-U instances (60 total: 10 neighborhoods x 6 metrics)
         self.adwin_instances = {}
-        
+
         # Track drift history for get_total_drifts()
         self.drift_history: deque = deque(maxlen=1000)
 
@@ -107,15 +114,21 @@ class MultiInstanceADWIN:
                 key = f"{neighborhood}_{metric}"
                 delta = delta_config.get(metric, default_delta)
 
-                self.adwin_instances[key] = SimpleADWIN(delta=delta, max_window=max_window)
+                self.adwin_instances[key] = ADWIN_U.for_metric(
+                    metric_name=metric,
+                    delta=delta,
+                    use_secondary_check=use_secondary_check,
+                )
 
         LOGGER.info(
-            "[SimpleADWIN-U] Initialized %d instances (neighborhoods=%d, metrics=%d, max_window=%d)",
-            len(self.adwin_instances), len(neighborhoods), len(metrics), max_window
+            "[MultiInstanceADWIN] Initialized %d ADWIN-U instances "
+            "(neighborhoods=%d, metrics=%d, max_window=%d, secondary_check=%s)",
+            len(self.adwin_instances), len(neighborhoods), len(metrics),
+            max_window, use_secondary_check
         )
 
     def update(self, neighborhood: str, metric_name: str, value: float):
-        """Update SimpleADWIN instance and check for drift.
+        """Update ADWIN-U instance and check for drift.
 
         Args:
             neighborhood: Neighborhood ID
@@ -131,7 +144,7 @@ class MultiInstanceADWIN:
             # Unknown neighborhood or metric - skip
             return {'drift_detected': False}
 
-        # Update SimpleADWIN
+        # Update ADWIN-U
         adwin = self.adwin_instances[key]
         adwin.update(value)
 
@@ -143,7 +156,11 @@ class MultiInstanceADWIN:
                 'metric': metric_name,
                 'value': value,
                 'timestamp': datetime.utcnow().isoformat(),
-                'drift_key': key
+                'drift_key': key,
+                'drift_type': adwin.last_drift_type,
+                'drift_type_name': adwin.drift_type_name(adwin.last_drift_type),
+                'drift_magnitude': adwin.last_drift_magnitude,
+                'statistic': adwin.statistic,
             }
             self.drift_history.append(drift_event)
             return drift_event
@@ -151,7 +168,7 @@ class MultiInstanceADWIN:
         return {'drift_detected': False}
 
     def update_meta_metrics(self, meta_metrics: dict):
-        """Update all SimpleADWIN instances from MetaAggregator output.
+        """Update all ADWIN-U instances from MetaAggregator output.
 
         Args:
             meta_metrics: Dict keyed by neighborhood name, e.g.
@@ -178,7 +195,7 @@ class MultiInstanceADWIN:
         return drifts
 
     def get_statistics(self):
-        """Get statistics from all SimpleADWIN instances.
+        """Get statistics from all ADWIN-U instances.
 
         Returns:
             Dict with instance counts and drift statistics
@@ -197,7 +214,7 @@ class MultiInstanceADWIN:
         }
 
     def reset_instance(self, neighborhood: str, metric_name: str):
-        """Reset specific SimpleADWIN instance.
+        """Reset specific ADWIN-U instance.
 
         Args:
             neighborhood: Neighborhood ID
@@ -207,10 +224,14 @@ class MultiInstanceADWIN:
 
         if key in self.adwin_instances:
             delta = self.delta_config.get(metric_name, self.default_delta)
-            self.adwin_instances[key] = SimpleADWIN(delta=delta, max_window=self.max_window)
+            self.adwin_instances[key] = ADWIN_U.for_metric(
+                metric_name=metric_name,
+                delta=delta,
+                use_secondary_check=self.use_secondary_check,
+            )
 
     def reset_all(self):
-        """Reset all SimpleADWIN instances and clear drift history."""
+        """Reset all ADWIN-U instances and clear drift history."""
         for key in self.adwin_instances:
             # Key format: 'neighborhood_metric' where neighborhood may contain underscores
             # (e.g., 'queens_lower_volume', 'staten_island_anomaly_rate').
@@ -218,30 +239,67 @@ class MultiInstanceADWIN:
             metric_name = key.rsplit('_', 1)[-1]
             neighborhood = key[:-(len(metric_name) + 1)]
             delta = self.delta_config.get(metric_name, self.default_delta)
-            self.adwin_instances[key] = SimpleADWIN(delta=delta, max_window=self.max_window)
+            self.adwin_instances[key] = ADWIN_U.for_metric(
+                metric_name=metric_name,
+                delta=delta,
+                use_secondary_check=self.use_secondary_check,
+            )
         self.drift_history.clear()
 
     def get_total_drifts(self) -> int:
         """
-        Get total number of drift events across all SimpleADWIN instances.
-        
+        Get total number of drift events across all ADWIN-U instances.
+
         Returns:
             Total drift count (cumulative across instances).
         """
         return len(self.drift_history) if hasattr(self, 'drift_history') else 0
 
-    def get_adwin_instance(self, neighborhood: str, metric_name: str) -> Optional[object]:
+    def get_adwin_instance(self, neighborhood: str, metric_name: str):
         """
-        Get specific SimpleADWIN instance for a neighborhood and metric.
-        
+        Get specific ADWIN-U instance for a neighborhood and metric.
+
         Args:
             neighborhood: Neighborhood name
             metric_name: Metric name
-            
+
         Returns:
-            SimpleADWIN instance or None if not found
+            ADWIN_U instance or None if not found
         """
         key = f"{neighborhood}_{metric_name}"
         return self.adwin_instances.get(key)
 
+    def get_drift_type_counts(self) -> Dict[str, int]:
+        """
+        Get count of each drift type detected.
 
+        Returns:
+            Dict mapping drift type names to counts.
+        """
+        counts = {
+            'mean_shift': 0,
+            'variance_shift': 0,
+            'skewness_shift': 0,
+            'kurtosis_shift': 0,
+            'none': 0,
+        }
+        for event in self.drift_history:
+            dt_name = event.get('drift_type_name', 'none')
+            if dt_name in counts:
+                counts[dt_name] += 1
+        return counts
+
+    def get_recent_drifts(self, limit: int = 50) -> List[dict]:
+        """
+        Get most recent drift events.
+
+        Args:
+            limit: Maximum number of events to return.
+
+        Returns:
+            List of recent drift event dicts.
+        """
+        return list(self.drift_history)[-limit:]
+
+
+__all__ = ['MultiInstanceADWIN']

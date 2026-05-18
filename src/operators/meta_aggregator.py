@@ -242,7 +242,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
                 'delta_score': 0.0,
                 'window_start': datetime.fromtimestamp(context.window().start / 1000).isoformat(),
                 'window_end': datetime.fromtimestamp(context.window().end / 1000).isoformat(),
-                'neighborhood_id': key,
+                'neighborhood': key,
                 '_dlq': True,
                 '_dlq_reason': 'null_metrics',
             }
@@ -260,7 +260,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
                 'delta_score': 0.0,
                 'window_start': datetime.fromtimestamp(context.window().start / 1000).isoformat(),
                 'window_end': datetime.fromtimestamp(context.window().end / 1000).isoformat(),
-                'neighborhood_id': key,
+                'neighborhood': key,
                 '_dlq': True,
                 '_dlq_reason': 'null_metrics',
             }
@@ -268,7 +268,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
 
         violation_rate = metrics.get('violation_rate', 0.0)
         anomaly_rate = metrics.get('anomaly_rate', 0.0)
-        epsilon = 1e-6
+        epsilon = 1e-8
 
         delta_score = abs(violation_rate - anomaly_rate) / (violation_rate + anomaly_rate + epsilon)
         metrics['delta_score'] = delta_score
@@ -276,7 +276,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
         window = context.window()
         metrics['window_start'] = datetime.fromtimestamp(window.start / 1000).isoformat()
         metrics['window_end'] = datetime.fromtimestamp(window.end / 1000).isoformat()
-        metrics['neighborhood_id'] = key
+        metrics['neighborhood'] = key
 
         yield metrics
 

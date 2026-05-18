@@ -1,0 +1,7 @@
+{
+  "memory_len": 8192,
+  "train_samples": 81920,
+  "train_time": 29337.49310517311,
+  "epochs": 200,
+  "max_thres": 1581.5494384765625
+}

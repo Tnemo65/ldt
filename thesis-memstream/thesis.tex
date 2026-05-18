@@ -51,6 +51,11 @@
 \def\Comment#1{{\fontsize{8.5pt}{10pt}\selectfont$\triangleright$ #1}}
 \def\Return{\Statep\textbf{return}\ }
 \makeatother
+% pseudocode package compatibility (TeX Live 2015)
+\makeatletter
+\let\Indm\relax
+\let\Indp\relax
+\makeatother
 
 \graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/},{./figs/eda/}}
 

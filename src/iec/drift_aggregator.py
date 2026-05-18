@@ -137,11 +137,20 @@ class DriftAggregator:
         self._drift_counts_metric: Dict[str, int] = defaultdict(int)
         self._drift_counts_total: int = 0
 
-    def add_drift(self, neighborhood: str, metric: str) -> None:
-        """Add a drift event."""
+    def add_drift(self, neighborhood: str, metric: str, drift_type: int = 0, drift_type_name: str = 'none') -> None:
+        """Add a drift event.
+
+        Args:
+            neighborhood: Neighborhood ID
+            metric: Metric name
+            drift_type: ADWIN_U drift type constant (0=none, 1=mean, 2=variance, 3=skewness, 4=kurtosis)
+            drift_type_name: Human-readable drift type name
+        """
         self._recent_drifts.append({
             'neighborhood': neighborhood,
             'metric': metric,
+            'drift_type': drift_type,
+            'drift_type_name': drift_type_name,
             'timestamp': time.time(),
         })
         self._drift_counts_nb[neighborhood] += 1
@@ -178,12 +187,18 @@ class DriftAggregator:
             return SeverityLevel.HIGH
 
     def assess_drift_severity_detailed(self) -> Dict:
-        """Get detailed severity assessment with counts."""
+        """Get detailed severity assessment with counts and drift type breakdown."""
         severity = self.assess_drift_severity()
         n_recent = len(self._recent_drifts)
 
         affected_nb = len(set(d['neighborhood'] for d in self._recent_drifts))
         affected_metrics = len(set(d['metric'] for d in self._recent_drifts))
+
+        # Count drift types
+        drift_types = {}
+        for d in self._recent_drifts:
+            dt_name = d.get('drift_type_name', 'none')
+            drift_types[dt_name] = drift_types.get(dt_name, 0) + 1
 
         return {
             'severity': severity,
@@ -192,6 +207,7 @@ class DriftAggregator:
             'affected_neighborhoods': affected_nb,
             'affected_metrics': affected_metrics,
             'drift_rate': n_recent / self.max_recent if self.max_recent > 0 else 0.0,
+            'drift_types': drift_types,
         }
 
     def get_affected_neighborhoods(self) -> List[str]:

@@ -294,7 +294,12 @@ class IECController:
 
         # Step 2: Add drifts to aggregator
         for event in drift_events:
-            self._aggregator.add_drift(event['neighborhood'], event['metric'])
+            self._aggregator.add_drift(
+                event['neighborhood'],
+                event['metric'],
+                drift_type=event.get('drift_type', 0),
+                drift_type_name=event.get('drift_type_name', 'none'),
+            )
 
         # Step 3: Assess severity
         severity = self._aggregator.assess_drift_severity()

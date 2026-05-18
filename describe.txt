@@ -271,12 +271,13 @@ IECOperator (MapFunction, moi meta-record goi 1 lan):
          - Neu avg_knn_distance > 2x baseline -> quick_retrain
          - Baseline = mean of first 50 post-retrain kNN distances
 
-   STEP 4: CircuitBreaker Gate
-       - should_allow_action() -> True/False
+   STEP 4: CircuitBreaker Gate [UNIMPLEMENTED]
+       - Planned: should_allow_action() -> True/False
          CLOSED: cho phep action
          OPEN: neu > 10 consecutive actions -> block 5 phut
          HALF_OPEN: sau cooldown, cho phep 3 actions de test
        - Neu circuit OPEN -> tra ve do_nothing (coi nhu binh thuong)
+       - NOTE: Circuit breaker not implemented yet (circuit_breaker.py not created)
 
    STEP 5: Execute Strategy
        do_nothing:
@@ -958,10 +959,11 @@ Sau khi retrain xong:
 - New memory distributed
 - Pipeline tu dong su dung artifacts moi
 
-Circuit breaker protection:
-- Neu > 10 consecutive retrain actions -> OPEN (block 5 min)
+Circuit breaker protection [UNIMPLEMENTED]:
+- Planned: Neu > 10 consecutive retrain actions -> OPEN (block 5 min)
 - Prevents action storms
 - Cho phep system ong dinh truoc khi tiep tuc adaptations
+- NOTE: Circuit breaker not implemented yet (pending implementation)
 
 
 ================================================================================
@@ -1223,7 +1225,7 @@ c:\proj\ldt\
 |   |   |-- iec_controller.py          # Main IEC logic
 |   |   |-- adwin_multi_instance.py    # 60 ADWIN instances
 |   |   |-- drift_aggregator.py        # Severity assessment
-|   |   |-- circuit_breaker.py        # Action storm prevention
+|   |   |-- circuit_breaker.py        # Action storm prevention [UNIMPLEMENTED - reserved]
 |   |   |-- verification_feedback.py   # Phase 4 reserved
 |   |-- workers/
 |   |   |-- action_replay_worker.py    # Kafka consumer for retrain
@@ -1285,13 +1287,14 @@ Output topics:
 - dq-meta-stream (meta metrics)
 - iec-action-replay (retrain signals)
 
-3. CIRCUIT BREAKER
+3. CIRCUIT BREAKER [UNIMPLEMENTED]
 
-CLOCK ngat retrain storms:
+Planned: CLOCK ngat retrain storms:
 - > 10 consecutive retrain actions -> OPEN (block 5 min)
 - OPEN -> HALF_OPEN (test 3 actions)
 - HALF_OPEN success -> CLOSED
 - HALF_OPEN failure -> OPEN
+- NOTE: Not implemented (reserved for future)
 
 4. DEAD LETTER QUEUE
 
@@ -1355,15 +1358,16 @@ Meta-metrics (6D) thay vi raw features (34D):
 - Practical: 60 ADWIN instances thay vi 34*10=340
 - Robust: filter noise, chi signal drift thuc su
 
-6. TAI SAO CIRCUIT BREAKER?
+6. TAI SAO CIRCUIT BREAKER? [UNIMPLEMENTED]
 
-Retrain actions co side effects:
+Planned: Retrain actions co side effects:
 - Reset memory buffer -> 50,000 entries mat
 - Model broadcast -> 768MB network per update
 - GC pauses -> 150-200ms per TaskManager
 
 Neu 10+ retrains trong 1 tieng -> system instability
 Circuit breaker prevents action storms.
+- NOTE: Not implemented (reserved for future phase)
 
 7. TAI SAO HMAC SIGNING?
 

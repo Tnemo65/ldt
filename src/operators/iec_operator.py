@@ -140,7 +140,7 @@ class IECOperator(MapFunction):
 
         Args:
             meta_metrics: Meta-metrics from MetaAggregator.
-                Can be a flat dict with neighborhood_id field, or a dict keyed
+                Can be a flat dict with neighborhood field, or a dict keyed
                 by neighborhood name.
 
         Returns:
@@ -152,8 +152,8 @@ class IECOperator(MapFunction):
         self.stats['windows_processed'] += 1
 
         # Normalize format: if flat dict, wrap in {neighborhood: metrics}
-        if 'neighborhood_id' in meta_metrics:
-            nb = meta_metrics.get('neighborhood_id', 'unknown')
+        if 'neighborhood' in meta_metrics:
+            nb = meta_metrics.get('neighborhood', 'unknown')
             meta_metrics = {nb: meta_metrics}
 
         try:
@@ -202,6 +202,10 @@ class IECOperator(MapFunction):
             'drifts_detected': drifts,
             'drift_count': len(drifts),
             'drift_assessment': severity,
+            'drift_types': {
+                drift.get('drift_type_name', 'none'): True
+                for drift in drifts
+            },
             'iec_strategy': strategy,
             'iec_confidence': confidence,
             'iec_severity': severity,
@@ -269,6 +273,8 @@ class IECOperator(MapFunction):
                         'layer': 'L4',
                         'neighborhood': nb,
                         'metric': drift.get('metric', 'unknown'),
+                        'drift_type': drift.get('drift_type_name', 'none'),
+                        'statistic': drift.get('statistic', 'mean'),
                     },
                     'type': 'counter'
                 }).encode('utf-8')

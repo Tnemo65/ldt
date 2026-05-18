@@ -3,93 +3,73 @@
 \pagestyle{fancy}
 
 % ================================================
-% 7.1 Conclusions
+% 6.1 Conclusions
 % ================================================
 \section{Conclusions}
 
-This thesis presented \textbf{CA-DQStream}, a context-aware framework for streaming data quality monitoring that addresses critical limitations of existing batch-oriented and rule-based systems. Evaluated on the NYC Yellow Taxi dataset (72M records across 26 months: 14 months real TLC data + 12 months simulated data), CA-DQStream demonstrates four core contributions:
+This thesis presented \textbf{CA-DQStream}, a context-aware framework for streaming data quality monitoring built on Apache Kafka and Apache Flink. The framework addresses three critical limitations of existing batch-oriented and rule-based systems: inability to adapt to distributional shifts over time, inability to detect multivariate anomalies requiring inter-feature relationships, and inability to provide context-sensitive validation criteria across heterogeneous data segments.
+
+CA-DQStream was validated on 72M NYC Yellow Taxi records (14 months real TLC data + 12 months simulated data). Four core contributions were evaluated:
 
 \begin{enumerate}
-    \item \textbf{4D Context-Aware Thresholding Framework:} A multi-dimensional threshold matrix (588 cells: trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood) with automated threshold computation and drift-aware recalibration via IEC. Achieves 4.9$\times$ FPR reduction (38.7\% $\to$ 4.2\% weighted average; 9.2$\times$ raw ratio), with 10$\times$ improvement on airport trips (Newark: 68.9\% $\to$ 6.7\%).
+    \item \textbf{Online Autoencoder + Memory Module:} Denoising autoencoder (34D $\rightarrow$ 68D $\rightarrow$ 34D) combined with a FIFO memory buffer (50,000 vectors) enables online multivariate anomaly detection without batch retraining. Achieves F1=0.828 on Easy-difficulty anomalies (F1=0.751 Medium, F1=0.563 Hard; weighted avg F1=0.71, FPR=2.99\%).
 
-    \item \textbf{Sequential Processing Pipeline with Early Exit Optimization:} A four-stage sequential pipeline (Schema Validation $\rightarrow$ Business Rules $\rightarrow$ Online Autoencoder $\rightarrow$ MetaAggregator) that exploits early exit opportunities, routing records failing lightweight validation stages directly to output without incurring ML inference costs. Achieves 1.20$\times$ latency reduction (65ms $\to$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec), with 13.5\% of records bypassing ML scoring via early exit.
+    \item \textbf{4D Context-Aware Thresholding:} Threshold matrix (588 cells: trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood) with automated 95th-percentile computation. Achieves 4.9$\times$ weighted FPR reduction (38.7\% $\rightarrow$ 4.2\%).
 
-    \item \textbf{Intelligent Evolution Controller with 4 Adaptation Strategies:} ADWIN-based drift detection with multi-strategy adaptation (Continuous Evolution, Switching, METER, Spatial Tracking). Resolves 93\% of drift events via lightweight updates (78\% Continuous Evolution + 15\% Switching), reducing retraining frequency to 0.67 per month.
+    \item \textbf{Staged Validation Pipeline with Early Exit:} Four-layer pipeline (Schema Validation $\rightarrow$ Canary Rules $\rightarrow$ Online Autoencoder $\rightarrow$ MetaAggregator) with conditional early exit routing. Records failing lightweight stages bypass ML inference: 1.20$\times$ latency reduction (65ms $\rightarrow$ 54ms), 2.2$\times$ throughput improvement (8,240 $\rightarrow$ 18,450 events/sec).
 
-    \item \textbf{Online Autoencoder with Memory Module:} Anomaly detection combining Online Autoencoder and Memory Module for multivariate detection. Achieves MCC 0.847 (+38.4\% over global IF) and BAR 0.862 (+34.5\% over global IF), enabling multivariate detection of meter tampering and short-trip fraud.
+    \item \textbf{Intelligent Evolution Controller:} ADWIN-based drift detection on quality meta-streams with four adaptation strategies (Continuous Evolution 78\%, Switching 15\%, METER 6\%, Spatial Tracking 1\%). Resolves 93\% of drift events via lightweight updates; retraining frequency reduced to 0.67 per month.
 \end{enumerate}
 
-All five hypotheses were supported or conditionally supported by experimental evidence:
-\begin{itemize}
-    \item H1 (Multi-layer coverage): 79.7\% of anomalies unique to Layer 3
-    \item H2 (Online AE + Memory Module): F1=0.828 on Easy, FPR=2.99\%
-    \item H3 (IEC adaptation): Conditionally supported, avg 21-hour detection, 93\% lightweight resolution
-    \item H4 (Sequential Pipeline with Early Exit): 1.20$\times$ latency reduction (65ms $\rightarrow$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\rightarrow$ 18,450 events/sec) through early exit optimization where records failing schema validation (10.1\%) or business rules (3.4\%) bypass ML scoring.
-    \item H5 (4D thresholds): 4.9$\times$ FPR reduction, exceeding 5$\times$ target
-\end{itemize}
-
-The open-source implementation and reproducible experimental results provide a foundation for future research and practical deployment of streaming DQ systems.
+All five research hypotheses were supported or conditionally supported: H1 (79.7\% anomalies unique to Layer 3), H2 (F1 targets met), H3 (21-hour detection, 93\% lightweight resolution), H4 (1.20$\times$ latency and 2.2$\times$ throughput gains), H5 (4.9$\times$ FPR reduction).
 
 % ================================================
-% 7.2 Limitations
+% 6.2 Limitations
 % ================================================
 \section{Limitations}
 
-This thesis has several limitations that suggest future research directions:
+Three key limitations constrain the current framework:
 
-\subsection{Limitation 1: Single-Domain Validation}
-CA-DQStream is evaluated exclusively on the NYC Yellow Taxi dataset. The framework may require parameter tuning (K, contamination factor, ADWIN delta) for different data domains with distinct characteristics.
+\begin{enumerate}
+    \item \textbf{Single-domain evaluation:} CA-DQStream is validated exclusively on the NYC Yellow Taxi dataset. Generalizability to other streaming domains (financial transactions, IoT sensors, healthcare data) requires domain-specific parameter tuning and context dimension redesign.
 
-\subsection{Limitation 2: Supervised Ground Truth}
-Anomaly ground truth is synthesized by injecting known anomalies (negative fares, impossible speeds) rather than expert-labeled real anomalies. Production anomalies may have different distributions that are not captured in synthetic injection.
+    \item \textbf{Synthetic anomaly ground truth:} Production anomalies are unlabeled. Evaluation relies on synthetic injection, which may not capture the full distribution of real-world anomalies (e.g., coordinated fraud patterns spanning multiple trips).
 
-\subsection{Limitation 3: No Anomaly Explanation}
-The Online AE + Memory Module anomaly score provides reconstruction error but does not inherently provide interpretable explanations for why specific records are flagged. Explainable AI techniques (feature attribution, reconstruction analysis) could enhance operator trust and facilitate root cause analysis.
-
-\subsection{Limitation 4: Single-Region Deployment}
-The Kafka-Flink cluster is deployed on a single region. Multi-region deployment with cross-datacenter replication may reveal additional challenges for streaming DQ.
+    \item \textbf{No anomaly explanation:} The autoencoder produces anomaly scores but does not inherently explain \emph{why} a record is flagged. Feature attribution and counterfactual analysis remain future work.
+\end{enumerate}
 
 % ================================================
-% 7.3 Future Work
+% 6.3 Future Work
 % ================================================
 \section{Future Work}
 
-Based on the limitations identified above, future research directions include:
+Four directions extend from this work:
 
-\subsection{Future Direction 1: Multi-Domain Validation}
-Extend CA-DQStream validation to additional streaming data domains:
-\begin{itemize}
-    \item \textbf{Financial transactions:} Credit card fraud detection with different context dimensions (merchant category, transaction time, geography)
-    \item \textbf{IoT sensor streams:} Temperature, humidity, pressure readings with spatial-temporal context
-    \item \textbf{Healthcare data streams:} ICU vital signs with patient-specific baselines
-\end{itemize}
+\begin{enumerate}
+    \item \textbf{Multi-domain validation:} Extend evaluation to financial transactions (credit card fraud with merchant-category and geography context), IoT sensor streams (manufacturing quality control), and healthcare data (ICU vital signs with patient-specific baselines).
 
-\subsection{Future Direction 2: Advanced Deep Learning Integration}
-Extend the Online AE + Memory Module architecture:
+    \item \textbf{Anomaly explanation:} Augment anomaly scores with reconstruction error attribution to identify which input features drive the score. Implement per-context explanation dashboards to support operator root-cause analysis.
 
-\begin{itemize}
-    \item \textbf{Variational Autoencoders (VAE):} Learn probabilistic latent representations for better uncertainty quantification
-    \item \textbf{LSTM for temporal anomalies:} Detect sequential pattern violations in time series
-    \item \textbf{Transformer for cross-feature dependencies:} Model complex inter-feature correlations with attention mechanisms
-    \item \textbf{Attention-Based Memory:} Replace fixed-size memory with attention-weighted access for improved pattern matching
-\end{itemize}
+    \item \textbf{Approximate nearest-neighbor indexing:} Replace brute-force k-NN over the 50,000-vector memory buffer with HNSW or FAISS to support larger memory capacities and higher throughput (e.g., $>$100K events/sec).
 
-\subsection{Future Direction 3: Memory Module Optimization}
-Optimize the memory component for production deployment:
+    \item \textbf{Deep learning variants:} Explore Variational Autoencoders for probabilistic anomaly scoring, LSTM for temporal anomaly patterns, and attention-weighted memory access for improved pattern matching.
+\end{enumerate}
+
+% ================================================
+% 6.4 Broader Impact
+% ================================================
+\section{Broader Impact}
+
+Beyond taxi trip data quality, CA-DQStream contributes three transferable insights to data engineering and MLOps:
 
 \begin{itemize}
-    \item \textbf{Hierarchical Memory:} Organize memory into short-term and long-term components with different forgetting rates
-    \item \textbf{Memory Compression:} Apply quantization or hashing to reduce memory footprint while preserving coverage
-    \item \textbf{Adaptive Memory Size:} Dynamically adjust capacity based on data complexity and drift frequency
+    \item \textbf{Zero-interruption model updates:} Broadcast State enables production ML systems to update models without pausing stream processing, applicable to real-time recommendation, fraud detection, and predictive maintenance pipelines.
+    \item \textbf{Learned vs. manual DQ thresholds:} Demonstrating that DQ rules can be learned from data rather than manually specified, reducing DevOps burden while providing quantitative evidence for DQ decisions.
+    \item \textbf{Regulatory compliance:} Audit trails (drift events logged to MinIO), explainable business rules, and Grafana dashboard exports support compliance reporting for finance, healthcare, and government domains.
 \end{itemize}
 
-\subsection{Future Direction 4: Anomaly Explanation via Reconstruction Analysis}
-Add interpretability to anomaly scores:
-
-\begin{itemize}
-    \item \textbf{Feature Attribution:} Identify which input features contribute most to reconstruction error
-    \item \textbf{Counterfactual explanations:} Suggest minimal changes to make record normal
-    \item \textbf{Memory Pattern Comparison:} Compare flagged records against nearest neighbors in memory module
-\end{itemize}
-
-\textbf{Keywords:} Data Quality, Streaming Data, Drift Detection, Anomaly Detection, Machine Learning, ADWIN, Online Autoencoder, Memory Module, Apache Flink, Apache Kafka.
+\vspace{1.5cm}
+\begin{flushright}
+\textit{Le Dac Thinh} \\
+\textit{Ha Noi, May 2025}
+\end{flushright}

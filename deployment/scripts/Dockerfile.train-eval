@@ -1,30 +1,27 @@
 # ============================================================
-# CA-DQStream Training + Evaluation Docker Image
+# CA-DQStream GPU Training + Evaluation
 # ============================================================
-# Build: docker build -t ldt-train-eval -f deployment/scripts/Dockerfile.train-eval ..
-# Run:   docker run --rm -v c:/proj/ldt/data:/data -v c:/proj/ldt/scripts:/out \
-#            --network host ldt-train-eval \
-#            --train /data/prod/train_oct2024.parquet ...
+# Build: docker build -t ldt-train-eval-gpu -f deployment/scripts/Dockerfile.train-eval ..
+# Run:   docker run --gpus '"device=0"' --rm -v c:/proj/ldt/data:/data \
+#            -v c:/proj/ldt/scripts:/out --network host \
+#            ldt-train-eval-gpu --train /data/prod/train_oct2024.parquet ...
 # ============================================================
-FROM python:3.10-slim
+FROM pytorch/pytorch:2.1.0-cuda11.8-cudnn8-runtime
 
 WORKDIR /app
 
 # Install system deps
 RUN apt-get update && apt-get install -y \
-    gcc liblz4-1 \
+    liblz4-1 bzip2 libbz2-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# PyTorch (CPU) + deps
+# Install Python deps
 RUN pip install --no-cache-dir \
-    torch --extra-index-url https://download.pytorch.org/whl/cpu \
-    "numpy>=1.24.0" \
-    "pyarrow" \
+    "pyarrow>=12.0,<19" \
     "scikit-learn>=1.3.0" \
-    "pandas>=2.0.0" \
+    "pandas>=2.0.0,<3" \
     "boto3>=1.34.0"
 
-# Copy script
 COPY scripts/train_eval_prod.py /app/train_eval_prod.py
 
 ENTRYPOINT ["python", "/app/train_eval_prod.py"]

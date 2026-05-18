@@ -51,6 +51,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from src.ml.adwin_u import ADWIN_U
+
 # Full ContextBeta imported from memstream_context_beta below
 # (basic inline class removed — see memstream_context_beta.py)
 
@@ -1388,6 +1390,12 @@ class MemStreamCore:
 class SimpleADWIN:
     """Simplified ADWIN drift detector.
 
+    .. deprecated::
+        SimpleADWIN has been replaced by ADWIN_U (src.ml.adwin_u).
+        ADWIN_U supports higher-order statistics (mean, variance, skewness,
+        kurtosis) for multi-type drift detection. Use ADWIN_U.for_metric()
+        for production deployments.
+
     Detects concept drift by monitoring the mean of a data stream.
     Uses a sliding window to compare recent vs. older distribution.
     """
@@ -1491,10 +1499,10 @@ class BARController:
         window = self._recent_updates[-self.bar_window_size:]
         return sum(window) / len(window)
 
-    def _get_adwin(self, neighborhood: str) -> SimpleADWIN:
+    def _get_adwin(self, neighborhood: str) -> ADWIN_U:
         """Get or create ADWIN for neighborhood."""
         if neighborhood not in self._adwins:
-            self._adwins[neighborhood] = SimpleADWIN(delta=self.adwin_delta)
+            self._adwins[neighborhood] = ADWIN_U(delta=self.adwin_delta)
         return self._adwins[neighborhood]
 
     def should_update_memory(
