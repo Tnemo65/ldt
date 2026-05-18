@@ -1,0 +1,315 @@
+==============================================================================
+COMPREHENSIVE RAW DATA QUALITY REPORT -- FULL 2024 (Jan-Dec 2024)
+Total rows analyzed : 41,169,720
+==============================================================================
+
+------------------------------------------------------------------------------
+ISSUE 1 -- SCHEMA & STRUCTURE
+------------------------------------------------------------------------------
+  Columns found in raw files:
+    - VendorID
+    - tpep_pickup_datetime
+    - tpep_dropoff_datetime
+    - passenger_count
+    - trip_distance
+    - RatecodeID
+    - store_and_fwd_flag
+    - PULocationID
+    - DOLocationID
+    - payment_type
+    - fare_amount
+    - extra
+    - mta_tax
+    - tip_amount
+    - tolls_amount
+    - improvement_surcharge
+    - total_amount
+    - congestion_surcharge
+    - Airport_fee
+    - duration_s
+    - speed_mph
+    - hour
+    - month
+    - weekday
+    - date
+
+------------------------------------------------------------------------------
+ISSUE 2 -- NULL VALUES
+------------------------------------------------------------------------------
+  Columns with NULL values (6 columns):
+  Column                                NULL Count        Rate      Non-Null
+  -----------------------------------  ------------  ----------  ------------
+  passenger_count                        4,091,232     9.9375%    37,078,488
+  RatecodeID                             4,091,232     9.9375%    37,078,488
+  store_and_fwd_flag                     4,091,232     9.9375%    37,078,488
+  congestion_surcharge                   4,091,232     9.9375%    37,078,488
+  Airport_fee                            4,091,232     9.9375%    37,078,488
+  speed_mph                                778,691     1.8914%    40,391,029
+
+  NULL passenger_count by month (schema evolution):
+    Month 01:    140,162 rows NULL (0.3404%)
+    Month 02:    185,610 rows NULL (0.4508%)
+    Month 03:    426,190 rows NULL (1.0352%)
+    Month 04:    408,576 rows NULL (0.9924%)
+    Month 05:    404,666 rows NULL (0.9829%)
+    Month 06:    410,781 rows NULL (0.9978%)
+    Month 07:    278,989 rows NULL (0.6777%)
+    Month 08:    258,667 rows NULL (0.6283%)
+    Month 09:    483,731 rows NULL (1.1750%)
+    Month 10:    393,895 rows NULL (0.9568%)
+    Month 11:    373,674 rows NULL (0.9076%)
+    Month 12:    326,291 rows NULL (0.7926%)
+
+------------------------------------------------------------------------------
+ISSUE 3 -- OUT-OF-RANGE VALUES
+------------------------------------------------------------------------------
+  RatecodeID (valid: [1, 2, 3, 4, 5, 6, 99]):
+    NULL: 4,091,232 (9.9375%)
+
+  PULocationID (valid: 1-263):
+    Out-of-range: 146,201 (0.3551%)
+    Invalid values distribution (top 10):
+      PULocationID=264: 122,200 rows
+      PULocationID=265: 24,001 rows
+
+  DOLocationID (valid: 1-263):
+    Out-of-range: 370,258 (0.8993%)
+    Invalid values distribution (top 10):
+      DOLocationID=264: 186,355 rows
+      DOLocationID=265: 183,903 rows
+
+  passenger_count (valid: 1-6):
+    Out-of-range: 401,638 (0.9756%)
+    Invalid values distribution:
+      passenger_count=0: 401,354 rows
+      passenger_count=8: 192 rows
+      passenger_count=7: 56 rows
+      passenger_count=9: 36 rows
+
+  payment_type (valid: 1-5):
+    Out-of-range: 4,091,232 (9.9375%)
+
+------------------------------------------------------------------------------
+ISSUE 4 -- NEGATIVE VALUES (Hard Rules)
+------------------------------------------------------------------------------
+  fare_amount < 0:
+    Negative count : 731,024 (1.7756%)
+    Positive/Zero  : 40,438,696 (98.2244%)
+    Min negative   : -2261.20
+    Max negative   : -0.01
+    Mean negative  : -19.04
+    Median negative: -10.00
+      [-1000000000.0,  -100) :    6,421 rows
+      [    -100,   -50) :   75,632 rows
+      [     -50,   -20) :  110,859 rows
+      [     -20,   -10) :  166,421 rows
+      [     -10,    -5) :  165,735 rows
+      [      -5,     0) :  205,956 rows
+
+  trip_distance < 0:
+    Negative count : 0 (0.0000%)
+    Positive/Zero  : 41,169,720 (100.0000%)
+
+  total_amount < 0:
+    Negative count : 609,344 (1.4801%)
+    Positive/Zero  : 40,560,376 (98.5199%)
+    Min negative   : -2265.45
+    Max negative   : -0.01
+    Mean negative  : -27.93
+    Median negative: -17.20
+      [-1000000000.0,  -100) :    9,704 rows
+      [    -100,   -50) :   86,817 rows
+      [     -50,   -20) :  152,470 rows
+      [     -20,   -10) :  258,020 rows
+      [     -10,    -5) :   91,036 rows
+      [      -5,     0) :   11,297 rows
+
+  extra < 0: 304,569 rows (0.7398%)
+  mta_tax < 0: 583,164 rows (1.4165%)
+  tip_amount < 0: 1,331 rows (0.0032%)
+  tolls_amount < 0: 49,272 rows (0.1197%)
+  improvement_surcharge < 0: 606,112 rows (1.4722%)
+
+------------------------------------------------------------------------------
+ISSUE 5 -- SPEED OUTLIERS
+------------------------------------------------------------------------------
+  Total rows with valid speed  : 40,391,029 (98.1086%)
+  NULL speed (uncomputable)   : 778,691 (1.8914%)
+  Speed < 0 mph               : 0 (0.0000%)
+  Speed 0-5 mph              : 3,964,597 (9.8155%)
+  Speed 5-80 mph             : 36,413,187 (90.1517%)
+  Speed > 80 mph              : 13,245 (0.0328%)
+  Speed > 100 mph             : 12,171 (0.0301%)
+  Speed > 200 mph             : 9,525 (0.0236%)
+  Speed mean                  : 18.58 mph
+  Speed median                : 9.28 mph
+  Speed p95                   : 24.24 mph
+  Speed p99                   : 34.91 mph
+  Speed max                   : 5379164.60 mph
+
+  Speed > 80 mph distribution:
+    [   80,    100) mph:    1,063 rows
+    [  100,    150) mph:    1,597 rows
+    [  150,    200) mph:    1,043 rows
+    [  200,    300) mph:    1,308 rows
+    [  300, 1000000000) mph:    8,234 rows
+
+------------------------------------------------------------------------------
+ISSUE 6 -- DURATION OUTLIERS
+------------------------------------------------------------------------------
+  Duration = 0s        : 11,935 (0.0290%)
+  Duration < 0s        : 1,575 (0.0038%)
+  Duration > 4h        : 23,374 (0.0568%)
+  Duration > 24h       : 230 (0.0006%)
+  Duration median      : 779s (13.0 min)
+  Duration p95         : 2648s (0.7 h)
+  Duration max         : 586051s (162.8 h)
+
+------------------------------------------------------------------------------
+ISSUE 7 -- EXTREME VALUES (non-negative)
+------------------------------------------------------------------------------
+  fare_amount statistics:
+    Mean   : $19.27
+    Median : $13.50
+    p95    : $66.00
+    p99    : $80.40
+    Max    : $335544.44
+    > $1,000   : 36 rows
+    > $10,000  : 4 rows
+    > $100,000 : 2 rows
+
+  trip_distance statistics:
+    Mean   : 4.98 miles
+    Median : 1.76 miles
+    p95    : 14.30 miles
+    p99    : 20.05 miles
+    Max    : 398608.62 miles
+    > 100 miles    : 1,613 rows
+    > 1,000 miles : 1,024 rows
+    > 10,000 miles: 899 rows
+    > 100,000 miles: 138 rows
+
+------------------------------------------------------------------------------
+ISSUE 8 -- ZERO / NEAR-ZERO TRIPS
+------------------------------------------------------------------------------
+  trip_distance = 0       : 776,305 (1.8856%)
+  0 < dist < 0.1 mile   : 180,059 (0.4374%)
+    Zero-distance fare breakdown:
+      Fare = 0    : 6,183 rows
+      Fare > 0    : 714,784 rows
+      Fare > $50  : 121,196 rows
+      Mean fare   : $24.49
+
+------------------------------------------------------------------------------
+ISSUE 9 -- TEMPORAL ANOMALIES
+------------------------------------------------------------------------------
+  Pickup datetime outside 2024: 88,752 rows
+    Before 2024-01-01: 49 rows
+      Min: 2002-12-31 16:46:07, Max: 2023-12-31 23:58:37
+    After 2024-12-31: 88,703 rows
+      Min: 2024-12-31 00:00:01, Max: 2026-06-26 23:53:12
+  Dropoff before pickup        : 1,575 rows
+
+------------------------------------------------------------------------------
+ISSUE 10 -- DUPLICATE RECORDS
+------------------------------------------------------------------------------
+  Duplicate by key: tpep_pickup_datetime, PULocationID, DOLocationID, trip_distance, fare_amount
+  Duplicate rows  : 5,788 (0.0141%)
+
+------------------------------------------------------------------------------
+ISSUE 11 -- FARE PER MILE ANOMALIES
+------------------------------------------------------------------------------
+  Records with valid fare & distance: 39,717,729
+  Fare/mile > $50    : 192,614 rows (0.4850%)
+  Fare/mile > $100   : 133,322 rows (0.3357%)
+  Fare/mile > $1,000 : 57,604 rows (0.1450%)
+  Fare/mile mean     : $13.61
+  Fare/mile median   : $7.35
+  Fare/mile p95      : $14.77
+  Fare/mile p99      : $26.75
+  Fare/mile max      : $167772.22
+
+------------------------------------------------------------------------------
+ISSUE 12 -- MONTHLY DATA VOLUME & NULL PATTERNS
+------------------------------------------------------------------------------
+  Month                Rows   %Null_pax   %Neg_fare  %Neg_total    Speed>80
+  ------------  ------------  ----------  ----------  ----------  ----------
+  2024-01         2,964,637     4.7278%     1.2632%     1.1976%       1,107
+  2024-02         3,007,534     6.1715%     1.3517%     1.1996%         953
+  2024-03         3,582,613    11.8961%     1.6319%     1.2368%       1,241
+  2024-04         3,514,295    11.6261%     1.6381%     1.2449%       1,140
+  2024-05         3,723,843    10.8669%     1.6098%     1.3157%       1,158
+  2024-06         3,539,172    11.6067%     1.7423%     1.3787%       1,115
+  2024-07         3,076,876     9.0673%     1.9062%     1.6373%       1,091
+  2024-08         2,979,192     8.6825%     1.9553%     1.7770%       1,047
+  2024-09         3,633,025    13.3148%     2.0116%     1.5444%       1,199
+  2024-10         3,833,780    10.2743%     1.9661%     1.6022%       1,107
+  2024-11         3,646,372    10.2478%     1.9600%     1.6609%       1,023
+  2024-12         3,668,381     8.8947%     2.1384%     1.9217%       1,064
+
+------------------------------------------------------------------------------
+ISSUE 13 -- OVERLAP BETWEEN VIOLATIONS
+------------------------------------------------------------------------------
+  fare_amount < 0  : 731,024 rows
+  total_amount < 0 : 609,344 rows
+  Overlap (both)   : 606,483 rows
+  Fare only        : 124,541 rows
+  Total only       : 2,861 rows
+  Non-overlapping  : 127,402 rows
+  => 82.6% of violated rows have BOTH negative fare AND total
+
+------------------------------------------------------------------------------
+SUMMARY TABLE -- ALL DATA QUALITY ISSUES (2024 RAW DATA)
+------------------------------------------------------------------------------
+
+  #    Issue Category                                 Affected Rows        Rate
+  ----  ---------------------------------------------  --------------  ----------
+
+  [NULL VALUES]
+    1    passenger_count                                    4,091,232     9.9375%
+    2    RatecodeID                                         4,091,232     9.9375%
+    3    store_and_fwd_flag                                 4,091,232     9.9375%
+    4    speed_mph (uncomputable)                             778,691     1.8914%
+
+  [OUT-OF-RANGE]
+    5    PULocationID (range 1-263)                           146,201     0.3551%
+    6    DOLocationID (range 1-263)                           370,258     0.8993%
+    7    passenger_count (range 1-6)                          401,638     0.9756%
+    8    RatecodeID (valid set)                                     0     0.0000%
+
+  [HARD RULE VIOLATIONS]
+    9    fare_amount < 0                                      731,024     1.7756%
+    10   total_amount < 0                                     609,344     1.4801%
+    11   trip_distance < 0                                          0     0.0000%
+
+  [SPEED ANOMALIES]
+    12   speed > 80 mph                                        13,245     0.0322%
+    13   speed > 100 mph                                       12,171     0.0296%
+    14   speed > 200 mph                                        9,525     0.0231%
+
+  [DURATION ANOMALIES]
+    15   duration = 0s                                         11,935     0.0290%
+    16   duration > 4h                                         23,374     0.0568%
+    17   duration > 24h                                           230     0.0006%
+
+  [ZERO-DISTANCE]
+    18   trip_distance = 0 miles                              776,305     1.8856%
+    19   0 < distance < 0.1 mile                              180,059     0.4374%
+
+  [EXTREME VALUES]
+    20   fare > $100,000                                            2     0.0000%
+    21   fare > $10,000                                             4     0.0000%
+    22   distance > 100,000 miles                                 138     0.0003%
+    23   distance > 10,000 miles                                  899     0.0022%
+
+  [FARE/MILE EXTREMES]
+    24   fare/mile > $1,000                                    57,604     0.1399%
+    25   fare/mile > $100                                     133,322     0.3238%
+
+  [TEMPORAL ANOMALIES]
+    26   pickup outside 2024                                   88,752     0.2156%
+    27   dropoff before pickup                                  1,575     0.0038%
+
+==============================================================================
+Report complete. Total rows: 41,169,720
+==============================================================================

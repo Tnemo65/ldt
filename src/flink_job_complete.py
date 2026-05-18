@@ -756,10 +756,12 @@ def main():
     # ── Layer 3: MetaAggregator (1-min window per neighborhood) ───────────
     # Already keyed by neighborhood, so window operates directly.
     # ExtractNeighborhoodFunction already produced (key, record) tuples.
-    # Re-extract neighborhood from the record field (index 1) for windowing.
+    # MemStreamScoringOperator sets x['neighborhood'] on the record dict.
+    # Use that directly — avoids re-extraction and handles the case where
+    # MemStreamScoringOperator returned a plain Dict (loss of tuple structure).
     meta_window_stream = (
         layer2_stream
-        .map(lambda x: (extract_neighborhood_key(x[1]) if isinstance(x, tuple) else x[0], x[1]))
+        .map(lambda x: (x.get('neighborhood') or extract_neighborhood_key(x), x))
         .key_by(lambda x: x[0], key_type=Types.STRING())
         .window(TumblingProcessingTimeWindows.of(Time.minutes(1)))
         .aggregate(

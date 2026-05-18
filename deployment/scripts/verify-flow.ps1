@@ -408,7 +408,15 @@ if ($FAILED -notcontains "F-Grafana") {
 Write-Hdr "G. MinIO Storage (L2)"
 
 Write-Sec "G1. Buckets"
-$buckets = docker exec ldt-minio mc ls local/ 2>$null
+# Use docker run --rm with mc image to check MinIO buckets (minio-init has restart:no)
+$envVars = @(
+    "MC_HOST=http://minio:9000",
+    "MC_ALIAS=local",
+    "MC_USER=minioadmin",
+    "MC_PASS=minioadmin123"
+)
+$envArg = ($envVars | ForEach-Object { "-e", $_ }) -join " "
+$buckets = docker run --rm --network cadqstream-net $envArg minio/mc ls local/ 2>$null
 if ($buckets) {
     $bCount = ($buckets -split "`n" | Where-Object { $_ -ne "" }).Count
     Write-Info "MinIO buckets: $bCount"
@@ -430,7 +438,7 @@ Write-Sec "G2. Bucket Contents"
 if ($buckets) {
     $checkBuckets = @("cadqstream-raw", "cadqstream-violations", "cadqstream-anomalies", "cadqstream-metrics", "cadqstream-drift", "cadqstream-dlq", "cadqstream-checkpoints", "ml-models")
     foreach ($b in $checkBuckets) {
-        $contents = docker exec ldt-minio mc ls "local/$b/" 2>$null
+        $contents = docker run --rm --network cadqstream-net $envArg minio/mc ls "local/$b/" 2>$null
         $fCount = if ($contents) { ($contents -split "`n" | Where-Object { $_ -ne "" }).Count } else { 0 }
         if ($fCount -gt 0) {
             Write-Info "Bucket $b : $fCount file(s)"
@@ -443,7 +451,7 @@ if ($buckets) {
     $sensitive = @("cadqstream-violations", "cadqstream-anomalies", "ml-models")
     $publicFound = $false
     foreach ($b in $sensitive) {
-        $pubCheck = docker exec ldt-minio mc anonymous get "local/$b" 2>$null
+        $pubCheck = docker run --rm --network cadqstream-net $envArg minio/mc anonymous get "local/$b" 2>$null
         if ($pubCheck -match "Enabled") {
             Write-Fail "Bucket $b has PUBLIC ACCESS (security risk!)"
             $FAILED += "G-BucketPublic-$b"

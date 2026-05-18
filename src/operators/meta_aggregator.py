@@ -27,6 +27,7 @@ from pyflink.datastream.window import TumblingProcessingTimeWindows
 from pyflink.common.time import Time
 from pyflink.common.typeinfo import Types
 from datetime import datetime
+from typing import Iterable
 import json
 import logging
 import urllib.request
@@ -225,12 +226,14 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
     def __init__(self):
         pass
 
-    def process(self, key, context, elements, out):
-        """Process window results using out.collect() instead of yield."""
-        metrics = next(iter(elements))
+    def process(self, key, context, elements) -> Iterable:
+        """PyFlink ProcessWindowFunction with 3-arg signature (key, context, elements).
 
-        if metrics is None:
-            out.collect({
+        Uses yield instead of out.collect() to emit results.
+        """
+        metrics_list = list(elements)
+        if not metrics_list:
+            yield {
                 'volume': 0,
                 'null_rate': 0.0,
                 'violation_rate': 0.0,
@@ -242,7 +245,25 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
                 'neighborhood_id': key,
                 '_dlq': True,
                 '_dlq_reason': 'null_metrics',
-            })
+            }
+            return
+
+        metrics = metrics_list[0]
+
+        if metrics is None:
+            yield {
+                'volume': 0,
+                'null_rate': 0.0,
+                'violation_rate': 0.0,
+                'anomaly_rate': 0.0,
+                'avg_anomaly_score': 0.0,
+                'delta_score': 0.0,
+                'window_start': datetime.fromtimestamp(context.window().start / 1000).isoformat(),
+                'window_end': datetime.fromtimestamp(context.window().end / 1000).isoformat(),
+                'neighborhood_id': key,
+                '_dlq': True,
+                '_dlq_reason': 'null_metrics',
+            }
             return
 
         violation_rate = metrics.get('violation_rate', 0.0)
@@ -257,7 +278,7 @@ class MetaWindowProcessFunction(ProcessWindowFunction):
         metrics['window_end'] = datetime.fromtimestamp(window.end / 1000).isoformat()
         metrics['neighborhood_id'] = key
 
-        out.collect(metrics)
+        yield metrics
 
 
 def extract_neighborhood_key(record: dict) -> str:

@@ -1,5 +1,5 @@
-This is BibTeX, Version 0.99d (TeX Live 2015/Debian)
-Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+This is BibTeX, Version 0.99e (TeX Live 2026)
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
 The top-level auxiliary file: thesis.aux
 The style file: plainnat.bst
 Database file #1: citation.bib
@@ -19,50 +19,49 @@ Warning--empty journal in dama2017dmbok
 Warning--empty journal in grab_coban2025
 Warning--empty journal in adbench2022
 Warning--empty journal in liu2008isolation
-Warning--empty journal in dtd_2026
 Warning--empty journal in read2020
 Warning--empty journal in papastergios2025stream
 Warning--empty journal in contextdq2022
 Warning--empty journal in ververica2024
-You've used 53 entries,
+You've used 52 entries,
             2773 wiz_defined-function locations,
-            895 strings with 15794 characters,
-and the built_in function-call counts, 24309 in all, are:
-= -- 2186
-> -- 1427
+            892 strings with 15615 characters,
+and the built_in function-call counts, 23784 in all, are:
+= -- 2145
+> -- 1379
 < -- 38
-+ -- 496
-- -- 438
-* -- 1847
-:= -- 3780
-add.period$ -- 214
-call.type$ -- 53
-change.case$ -- 299
++ -- 479
+- -- 423
+* -- 1797
+:= -- 3694
+add.period$ -- 210
+call.type$ -- 52
+change.case$ -- 291
 chr.to.int$ -- 48
-cite$ -- 123
-duplicate$ -- 1101
-empty$ -- 1943
-format.name$ -- 507
-if$ -- 5093
-int.to.chr$ -- 6
+cite$ -- 120
+duplicate$ -- 1081
+empty$ -- 1912
+format.name$ -- 491
+if$ -- 4990
+int.to.chr$ -- 5
 int.to.str$ -- 1
-missing$ -- 43
-newline$ -- 325
-num.names$ -- 212
-pop$ -- 635
+missing$ -- 42
+newline$ -- 319
+num.names$ -- 208
+pop$ -- 618
 preamble$ -- 1
-purify$ -- 246
+purify$ -- 239
 quote$ -- 0
-skip$ -- 871
+skip$ -- 857
 stack$ -- 0
-substring$ -- 688
-swap$ -- 118
+substring$ -- 686
+swap$ -- 116
 text.length$ -- 8
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 583
-warning$ -- 17
-while$ -- 206
+type$ -- 572
+warning$ -- 16
+while$ -- 203
 width$ -- 0
-write$ -- 756
-(There were 19 warnings)
+write$ -- 743
+(There were 18 warnings)

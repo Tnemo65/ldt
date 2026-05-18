@@ -117,14 +117,14 @@ DEFAULT_CONFIG = {
     'in_dim': 34,
     'hidden_dim': 68,
     'out_dim': 34,
-    'memory_len': 2048,
+    'memory_len': 8192,
     'k_neighbors': 10,
     'gamma': 0.0,
     'warmup_epochs': 500,    # Production warmup
     'warmup_batch_size': 256,
     'warmup_noise_std': 0.1,
     'default_beta': 0.5,
-    'warmup_buffer_limit': 1536,  # Reduced for production: min records to trigger MemStream warmup
+    'warmup_buffer_limit': 8192,  # Must equal memory_len for full warmup
     'seed': 42,
 }
 
@@ -320,8 +320,8 @@ class MemStreamScoringOperator(MapFunction):
     def _validate_config(self):
         """CRITICAL assertions on config (HARD-BLOCK)."""
         cfg = self.config
-        assert cfg.get('memory_len', 0) >= 2048, (
-            f"[MemStream] HARD-BLOCK: memory_len must be >= 2048, "
+        assert cfg.get('memory_len', 0) >= 8192, (
+            f"[MemStream] HARD-BLOCK: memory_len must be >= 8192, "
             f"got {cfg.get('memory_len')}"
         )
         assert cfg.get('warmup_epochs', 0) >= 500, (
@@ -368,7 +368,7 @@ class MemStreamScoringOperator(MapFunction):
         )
 
         # Create MemStream config
-        cfg.memory_len = self.config.get('memory_len', 2048)
+        cfg.memory_len = self.config.get('memory_len', 8192)
         cfg.warmup_epochs = self.config.get('warmup_epochs', 500)
         cfg.warmup_batch_size = self.config.get('warmup_batch_size', 256)
         cfg.warmup_noise_std = self.config.get('warmup_noise_std', 0.1)

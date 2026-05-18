@@ -661,3 +661,54 @@ services:
         limits:
           cpus: "0.1"
           memory: 128M
+
+  # =============================================================================
+  # E2E Test Injector — triggers pipeline layers with targeted test data
+  # =============================================================================
+  # Usage:
+  #   # Run full suite inside container:
+  #   docker compose run --rm e2e-test-injector
+  #
+  #   # Run specific test:
+  #   docker compose run --rm e2e-test-injector --test l1-l2
+  #   docker compose run --rm e2e-test-injector --test l3
+  #
+  #   # Override Kafka (from host machine):
+  #   docker compose run --rm e2e-test-injector --bootstrap localhost:29092
+  #
+  # Run locally (outside containers):
+  #   python deployment/kafka/e2e_test_injector.py --bootstrap localhost:29092
+  # =============================================================================
+
+  e2e-test-injector:
+    build:
+      context: ./kafka
+      dockerfile: Dockerfile.e2e-test
+    container_name: ldt-e2e-test-injector
+    hostname: e2e-test-injector
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - cadqstream-net
+    restart: "no"
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    command: >
+      python3 /app/e2e_test_injector.py
+      --bootstrap kafka:9092
+      --minio minio:9000
+      --minio-user ${MINIO_ROOT_USER}
+      --minio-pass ${MINIO_ROOT_PASSWORD}
+      --topic taxi-nyc-raw-v2
+      --test all
+      --warmup-count 20
+      --l1-count 5
+      --l2-count 10
+      --l3-count 15
+      --verify-wait 15.0
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M

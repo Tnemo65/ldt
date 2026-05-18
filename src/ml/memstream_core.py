@@ -114,7 +114,7 @@ class MemStreamConfig:
         self.out_dim: int = 34          # v10: symmetric
 
         # Memory
-        self.memory_len: int = 2048
+        self.memory_len: int = 8192
         self.memory_init_fraction: float = 0.1
 
         # kNN scoring (v10 benchmark)
@@ -137,7 +137,7 @@ class MemStreamConfig:
         self.seed: int = 42
 
         # Warmup validation
-        self.warmup_min_samples: int = 2048
+        self.warmup_min_samples: int = 8192
         self.warmup_neighborhood_ids_required: bool = False
 
     def validate(self) -> None:
@@ -146,9 +146,9 @@ class MemStreamConfig:
         Raises:
             ValueError: If any invariant is violated
         """
-        if self.memory_len < 2048:
+        if self.memory_len < 8192:
             raise ValueError(
-                f"memory_len={self.memory_len} is below minimum 2,048"
+                f"memory_len={self.memory_len} is below minimum 8,192"
             )
         if self.gamma != 0.0:
             raise ValueError(

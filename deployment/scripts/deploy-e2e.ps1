@@ -370,11 +370,13 @@ if ($script:FAILED.Count -gt 0) { return 1 }
 # =============================================================================
 Write-Section "PHASE 5: MinIO (Storage)"
 
-$mcReady = docker exec ldt-minio mc ready local 2>$null
+# Use docker run --rm with mc image to check MinIO buckets (minio-init has restart:no)
+$mcEnv = "-e MC_HOST=http://minio:9000 -e MC_ALIAS=local -e MC_USER=minioadmin -e MC_PASS=minioadmin123"
+$mcReady = docker run --rm --network cadqstream-net $mcEnv minio/mc ready local 2>$null
 if ($LASTEXITCODE -eq 0) { Write-Pass "MinIO is reachable" }
 else { Add-Fail "MinIO mc ready failed"; return 1 }
 
-$allBuckets = docker exec ldt-minio mc ls local/ 2>$null
+$allBuckets = docker run --rm --network cadqstream-net $mcEnv minio/mc ls local/ 2>$null
 $bucketLines = $allBuckets -split "`n" | ForEach-Object {
     if ($_ -match 'local/(\S+)') { $matches[1].TrimEnd('/') }
 } | Where-Object { $_ -ne "" }
@@ -400,7 +402,7 @@ $bucketChecks = @{
 }
 $filledBuckets = 0
 foreach ($b in $bucketChecks.Keys) {
-    $contents = docker exec ldt-minio mc ls "local/$b/" 2>$null
+    $contents = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/$b/" 2>$null
     if ($contents) {
         $fc = (@($contents -split "`n" | Where-Object { $_ -ne "" })).Count
         Write-Info "Bucket $b : $fc files ($($bucketChecks[$b]))"
@@ -412,18 +414,18 @@ Write-Pass "$filledBuckets/$($bucketChecks.Count) buckets have content"
 Write-Step "5d: MinIO bucket security"
 $sensitive = @("cadqstream-violations", "cadqstream-anomalies", "ml-models")
 foreach ($b in $sensitive) {
-    $pub = docker exec ldt-minio mc anonymous get "local/$b" 2>$null
+    $pub = docker run --rm --network cadqstream-net $mcEnv minio/mc anonymous get "local/$b" 2>$null
     $bName = $b
     if ($pub -match "Enabled") { Add-Fail "Bucket ${bName} has PUBLIC ACCESS (security risk)"; return 1 }
     else { Write-Pass "Bucket ${bName}: private access verified" }
 }
 
-$chkpt = docker exec ldt-minio mc ls "local/cadqstream-checkpoints/" 2>$null
+$chkpt = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/cadqstream-checkpoints/" 2>$null
 if ($chkpt) { Write-Pass "cadqstream-checkpoints has files (Flink checkpoint data)" }
 else { Add-Warn "cadqstream-checkpoints is empty (Flink checkpoints may use local volume)" }
 
 Write-Step "5f: ML model artifacts in ml-models"
-$modelFiles = docker exec ldt-minio mc ls "local/ml-models/" 2>$null
+$modelFiles = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/ml-models/" 2>$null
 if ($modelFiles) {
     $mCount = (@($modelFiles -split "`n" | Where-Object { $_ -match "local/ml-models/\S+" })).Count
     Write-Info "ml-models: $mCount files"
@@ -686,7 +688,7 @@ if (-not $SkipTests) {
 
     Write-Step "9g: MinIO violation buckets after test injection"
     foreach ($bucket in @("cadqstream-violations", "cadqstream-anomalies")) {
-        $files = docker exec ldt-minio mc ls "local/$bucket/" 2>$null
+        $files = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/$bucket/" 2>$null
         if ($files) {
             $fCount = (@($files -split "`n" | Where-Object { $_ -ne "" })).Count
             Write-Pass "Bucket $bucket : $fCount files"
@@ -710,7 +712,7 @@ $swStatus = docker ps --filter "name=ldt-stats-writer" --format "{{.Status}}" 2>
 if ($swStatus -match "Up") { Write-Pass "stats-writer is running" }
 else { Add-Warn "stats-writer not running (non-critical)" }
 
-$statsFiles = docker exec ldt-minio mc ls "local/cadqstream-metrics/" 2>$null
+$statsFiles = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/cadqstream-metrics/" 2>$null
 if ($statsFiles) {
     $sfCount = (@($statsFiles -split "`n" | Where-Object { $_ -ne "" })).Count
     Write-Pass "cadqstream-metrics/ bucket: $sfCount files (stats snapshots)"
@@ -739,7 +741,7 @@ foreach ($p in @("$DEPLOYMENT_DIR\models\neighborhood_mapping.json", "$DEPLOYMEN
 }
 if (-not $nmFound) { Add-Warn "neighborhood_mapping.json not found locally" }
 
-$nmMinio = docker exec ldt-minio mc ls "local/ml-models/neighborhood_mapping.json" 2>$null
+$nmMinio = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/ml-models/neighborhood_mapping.json" 2>$null
 if ($nmMinio) { Write-Pass "neighborhood_mapping.json in MinIO ml-models/" }
 else { Add-Warn "neighborhood_mapping.json not in MinIO" }
 
@@ -756,10 +758,10 @@ foreach ($p in @("$DEPLOYMENT_DIR\models\context_thresholds_v2.json", "$DEPLOYME
 }
 if (-not $ctFound) { Write-Info "context_thresholds_v2.json: not found (generated during warmup)" }
 
-$checkpoint = docker exec ldt-minio mc ls "local/ml-models/checkpoints/" 2>$null
+$checkpoint = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/ml-models/checkpoints/" 2>$null
 if ($checkpoint) { Write-Pass "Model checkpoint in ml-models/checkpoints/" }
 else {
-    $root = docker exec ldt-minio mc ls "local/ml-models/" 2>$null
+    $root = docker run --rm --network cadqstream-net $mcEnv minio/mc ls "local/ml-models/" 2>$null
     if ($root -match "memstream_checkpoint|\.pt") { Write-Pass "Model checkpoint found in ml-models root" }
     else { Add-Warn "No model checkpoint in ml-models (models may be in container or not yet trained)" }
 }

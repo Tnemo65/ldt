@@ -22,8 +22,8 @@
 \usetikzlibrary {fit}
 \usepackage{array}
 \usepackage{multirow}
-\usepackage[chapter]{algorithm}
-\usepackage{algpseudocode}
+%\usepackage[chapter]{algorithm}
+%\usepackage{algpseudocode}
 \usepackage{pseudocode}
 \usepackage{titlesec}
 \usepackage{fancyhdr}
@@ -33,7 +33,7 @@
 \usepackage{pdfpages}
 \usepackage{niceframe}
 \usepackage[square,numbers]{natbib}
-\usepackage{subcaption,booktabs}
+\usepackage{subcaption,booktabs,siunitx}
 \usepackage{longtable}
 \usepackage{bibentry}
 \usepackage[printonlyused,withpage]{acronym}
@@ -43,6 +43,13 @@
 \newcolumntype{R}[1]{>{\raggedleft\arraybackslash}m{#1}}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
 \newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
+
+% Custom commands for clean algorithm formatting (minimal)
+\makeatletter
+\newcounter{indentDepth}
+\def\Statep{\stepcounter{indentDepth}\ifnum\value{indentDepth}>1 \hspace*{1.5em}\fi}
+\def\Comment#1{{\fontsize{8.5pt}{10pt}\selectfont$\triangleright$ #1}}
+\makeatother
 
 \graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/}}
 

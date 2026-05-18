@@ -9,15 +9,115 @@ CA-DQStream implements a four-layer processing pipeline on Apache Flink. Layer 1
 
 \subsection{Raw Data EDA}
 
-The NYC Yellow Taxi dataset covers 26 months (January 2024 -- February 2026, approximately 72M records). The EDA reveals bimodal fare distributions (modes around \$8--\$12 for short in-borough trips and \$50--\$60 for airport trips), extreme variance across ratecode types (Standard: mean \$15.42, JFK: mean \$52.18, Newark: mean \$68.44), and volume patterns varying 2--3$\times$ between peak and off-peak periods. Data quality issues include 9.1\% NULL rate on passenger\_count and RatecodeID (systematic upstream capture failure), 1.8\% negative fares (voided trips, data entry errors), 1.5\% zero distances (tolls-only, canceled trips), and sporadic GPS errors producing impossible speeds exceeding 100 mph. See Appendix B for complete EDA with statistical summaries and visualizations.
+The NYC Yellow Taxi dataset covers 26 months (January 2024 -- February 2026, approximately 72M records). The EDA reveals bimodal fare distributions (modes around \$8--\$12 for short in-borough trips and \$50--\$60 for airport trips), extreme variance across ratecode types (Standard: mean \$15.42, JFK: mean \$52.18, Newark: mean \$68.44), and volume patterns varying 2--3$\times$ between peak and off-peak periods. Data quality issues include 9.1\% NULL rate on passenger\_count and RatecodeID (systematic upstream capture failure), 1.8\% negative fares (voided trips, data entry errors), 1.5\% zero distances (tolls-only, canceled trips), and sporadic GPS errors producing impossible speeds exceeding 100 mph.
+
+\textbf{Schema and Completeness Violations:} The raw parquet files contain 24 columns (including 5 derived features: duration\_s, speed\_mph, hour, month, weekday, date). Among them, 6 columns exhibit NULL values (Table~\ref{tab:eda_null}). Five columns (passenger\_count, RatecodeID, store\_and\_fwd\_flag, congestion\_surcharge, Airport\_fee) share an identical NULL count of 4,091,232 records (9.94\% of the dataset), indicating a systematic upstream capture failure affecting a consistent subset of data uploads. The remaining column, speed\_mph, has 778,691 NULL values (1.89\%) attributable to uncomputable trips where either trip\_distance or duration\_s is zero. Beyond NULLs, out-of-range values appear in categorical fields: PULocationID exceeds the valid range (1--263) in 146,201 records (0.36\%); DOLocationID in 370,258 records (0.90\%); and passenger\_count contains 401,638 out-of-range values (0.98\%).
+
+\begin{table}[H]
+\centering
+\caption{Completeness Violations in NYC Yellow Taxi Raw Data (2024, 41.2M records).}
+\label{tab:eda_null}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Column} & \textbf{NULL Count} & \textbf{NULL Rate} & \textbf{Non-Null Count} \\
+\midrule
+passenger\_count    & 4,091,232 & 9.94\% & 37,078,488 \\
+RatecodeID          & 4,091,232 & 9.94\% & 37,078,488 \\
+store\_and\_fwd\_flag & 4,091,232 & 9.94\% & 37,078,488 \\
+congestion\_surcharge & 4,091,232 & 9.94\% & 37,078,488 \\
+Airport\_fee        & 4,091,232 & 9.94\% & 37,078,488 \\
+speed\_mph          &   778,691 & 1.89\% & 40,391,029 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Validity Violations (Hard Rules):} Negative values violate fundamental physical constraints. Table~\ref{tab:eda_neg} shows that fare\_amount < 0 affects 731,024 records (1.78\% of the dataset), with a median negative value of -\$10.00 and a maximum of -\$2,261.20, suggesting systematic void/refund processing errors rather than random noise. Similarly, total\_amount < 0 appears in 609,344 records (1.48\%). Notably, 82.6\% of these validity violations overlap (both fare\_amount and total\_amount are negative simultaneously), indicating a common underlying cause. Additional hard-rule violations include negative extra charges (304,569, 0.74\%) and negative mta\_tax (583,164, 1.42\%).
+
+\begin{table}[H]
+\centering
+\caption{Validity Violations: Negative Financial Values (2024, 41.2M records).}
+\label{tab:eda_neg}
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Column} & \textbf{Neg. Count} & \textbf{Rate} & \textbf{Min} & \textbf{Max} & \textbf{Mean} & \textbf{Median} \\
+\midrule
+fare\_amount < 0     & 731,024 & 1.78\% & -\$2,261.20 & -\$0.01 & -\$19.04 & -\$10.00 \\
+total\_amount < 0    & 609,344 & 1.48\% & -\$2,265.45 & -\$0.01 & -\$27.93 & -\$17.20 \\
+extra < 0            & 304,569 & 0.74\% & --          & --      & --        & -- \\
+mta\_tax < 0         & 583,164 & 1.42\% & --          & --      & --        & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Physical Plausibility Violations:} Speed outliers reach physically impossible values: 13,245 records exceed 80 mph, 12,171 exceed 100 mph, and 9,525 exceed 200 mph, with a maximum recorded speed of 5,379,164.60 mph (clearly a GPS/GPS-to-meter data corruption). Duration anomalies include 11,935 trips with zero duration (0.03\%) and 23,374 trips exceeding 4 hours (0.06\%). Extreme values in raw features are also prevalent: fare\_amount reaches \$335,544.44; trip\_distance reaches 398,608.62 miles; and fare-per-mile ratios reach \$167,772.22/mile---all indicating meter or GPS hardware failures. Zero-distance trips (776,305 records, 1.89\%) include 714,784 records with a positive fare (mean \$24.49), a strong indicator of fraud or failed meter resets.
+
+\textbf{Temporal Anomalies and Schema Evolution:} Pickup datetimes outside the year 2024 appear in 88,752 records (0.22\%): 49 records pre-date 2024 and 88,703 post-date 2024, with dates extending to June 2026, suggesting either timezone mismatches or upstream clock synchronization failures. Monthly NULL rates in passenger\_count exhibit a clear upward trend (Table~\ref{tab:eda_monthly_null}), rising from 4.73\% in January to 13.31\% in September 2024, indicating a gradual upstream degradation that motivates the ADWIN-based drift monitoring in Layer 4.
+
+\begin{table}[H]
+\centering
+\caption{Monthly NULL Rate Trend in passenger\_count (Schema Evolution).}
+\label{tab:eda_monthly_null}
+\begin{tabular}{lrrlrr}
+\toprule
+\textbf{Month} & \textbf{Rows} & \textbf{NULL Rate} & \textbf{Month} & \textbf{Rows} & \textbf{NULL Rate} \\
+\midrule
+2024-01 & 2,964,637 & 4.73\% & 2024-07 & 3,076,876 & 9.07\% \\
+2024-02 & 3,007,534 & 6.17\% & 2024-08 & 2,979,192 & 8.68\% \\
+2024-03 & 3,582,613 & 11.90\% & 2024-09 & 3,633,025 & 13.31\% \\
+2024-04 & 3,514,295 & 11.63\% & 2024-10 & 3,833,780 & 10.27\% \\
+2024-05 & 3,723,843 & 10.87\% & 2024-11 & 3,646,372 & 10.25\% \\
+2024-06 & 3,539,172 & 11.61\% & 2024-12 & 3,668,381 & 8.89\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+These empirical findings directly motivate CA-DQStream's four-layer architecture: completeness violations (Table~\ref{tab:eda_null}) are handled by Layer 1 schema validation; validity violations (Table~\ref{tab:eda_neg}) are caught by Layer 1 business rules; multivariate anomalies (extreme fare-per-mile ratios, impossible speed-distance combinations) require the autoencoder-based detection in Layer 2; and the gradual NULL rate increase (Table~\ref{tab:eda_monthly_null}) motivates the ADWIN drift monitoring in Layer 4.
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.9\linewidth]{figs/eda/fare_distribution.png}}
+\caption{Fare Distribution of NYC Yellow Taxi Trips.}
+\label{fig:eda_fare_dist}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.9\linewidth]{figs/eda/clean_hourly_pattern.png}}
+\caption{Hourly Record Volume Pattern by Weekday and Weekend.}
+\label{fig:eda_hourly_pattern}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.9\linewidth]{figs/eda/clean_violations_heatmap.png}}
+\caption{Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}
+\label{fig:eda_violations_heatmap}
+\end{figure}
 
 \subsection{Concept Drift Example}
 
-Empirical evidence of concept drift accumulates over the 26-month observation window. Monthly NULL rate shows a gradual upward trend from approximately 4\% to over 10\% by month 26, driven by upstream system degradation. Total violation rate grows from approximately 10\% to over 30\% as fare distributions shift seasonally. Trip volume remains stable, ruling out volume-driven artifacts. Negative fare spikes appear sporadically, often correlated with payment system changes. A January 2024 blizzard caused sudden drift with a 14.2 percentage point anomaly rate increase within 24 hours. These patterns empirically motivate the ADWIN-based drift monitoring in Layer 4 (Section 3.3.6) and the IEC's drift-adaptive retraining framework. Quantitative evidence supporting the need for adaptive thresholds is provided in the EDA visualizations available in the supplementary materials.
+Empirical evidence of concept drift accumulates over the 26-month observation window. Monthly NULL rate shows a gradual upward trend from approximately 4\% to over 10\% by month 26, driven by upstream system degradation. Total violation rate grows from approximately 10\% to over 30\% as fare distributions shift seasonally. Trip volume remains stable, ruling out volume-driven artifacts. Negative fare spikes appear sporadically, often correlated with payment system changes. A January 2024 blizzard caused sudden drift with a 14.2 percentage point anomaly rate increase within 24 hours. These patterns empirically motivate the ADWIN-based drift monitoring in Layer 4 (Section 3.3.6) and the IEC's drift-adaptive retraining framework.
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.9\linewidth]{figs/eda/F1_monthly_volume_violations.png}}
+\caption{Monthly Record Volume and Violation Rate Over 26 Months.}
+\label{fig:eda_monthly_volume}
+\end{figure}
 
 \subsection{Injected Data}
 
-Four synthetic anomaly types are injected to evaluate detection performance: (1) Meter tampering: fare=\$120 for 3 miles in 8 minutes (\$40/mile, individually each feature passes validation); (2) Short-trip fraud: fare=\$80 for 0.5 miles (\$160/mile, impossible regardless of context); (3) Traffic manipulation: 90 minutes for 2 miles with fare=\$45 (speed passes threshold but fare is inflated for distance); (4) Payment inflation: card payment with tip > 50\% of fare (ratio anomaly undetectable by single-feature rules). Three difficulty levels: Easy (extreme deviations, 3--5$\times$ normal), Medium (moderate deviations, 2--3$\times$ normal), Hard (subtle deviations, 1.5--2$\times$ normal). Injection parameters preserve temporal validity, spatial consistency, cyclical awareness, and correlation structure. Validation compares detection rates against ground truth labels. Full injection details are provided in Chapter 5, Experiments 3 and 4.
+To evaluate detection performance, several synthetic anomaly types are injected into the dataset. Here is a breakdown of these anomalies:
+
+\textbf{Meter tampering:} A high fare is recorded for a relatively short distance completed in a brief amount of time. The sophistication lies in the fact that, when examined individually, each feature appears perfectly valid and easily passes standard validation checks.
+
+\textbf{Short-trip fraud:} The fare is excessively inflated for an extremely short distance. This results in a fare-per-distance ratio that is completely illogical and impossible regardless of the context.
+
+\textbf{Traffic manipulation:} The travel time is unusually prolonged for a short distance, which leads to an inflated fare. Although the vehicle's speed remains within acceptable thresholds, the final fare is unjustifiably high for the actual distance traveled.
+
+\textbf{Payment inflation:} Card payments feature a tip that constitutes a disproportionately large percentage of the total fare. This ratio anomaly is highly concealed and remains completely undetectable if the system only uses single-feature validation rules.
+
+Three difficulty levels are defined: Easy (extreme deviations, 3--5$\times$ normal), Medium (moderate deviations, 2--3$\times$ normal), Hard (subtle deviations, 1.5--2$\times$ normal). Injection parameters preserve temporal validity, spatial consistency, cyclical awareness, and correlation structure. Validation compares detection rates against ground truth labels. Full injection details are provided in Chapter 5, Experiments 3 and 4.
 
 \section{Proposed Method}
 
@@ -27,8 +127,8 @@ CA-DQStream implements a four-layer processing pipeline on Apache Flink that sep
 
 \begin{figure}[H]
 \centering
-\fbox{\includegraphics[width=0.98\textwidth]{figs/system_architecture.png}}
-\caption{CA-DQStream System Architecture. The framework consists of five layers: (1) Data Source Layer with NYC TLC Parquet files ingested via Kafka Producer; (2) Kafka Layer with six topics for raw data, violations, anomaly scores, meta-stream, and model updates; (3) Processing Layer with Flink implementing sequential processing stages: Schema Validation, then Business Rules (Canary), then Online Autoencoder + Memory Module, converging at MetaAggregator, feeding the Intelligent Evolution Controller (ADWIN) for self-monitoring; (4) Data Storage Layer with MinIO (S3-compatible) for all pipeline outputs in Parquet format; (5) Monitoring Layer with Prometheus and Grafana for real-time observability.}
+\fbox{\includegraphics[width=0.98\textwidth]{figs/system_architecture.pdf}}
+\caption{CA-DQStream System Architecture.}
 \label{fig:system_architecture}
 \end{figure}
 
@@ -36,43 +136,63 @@ The system requires an offline warmup phase before deployment, detailed in Secti
 
 \subsection{Feature Engineering}
 
-The Online Autoencoder operates on a 21-dimensional enhanced feature vector comprising 15 base features and 6 ratio features. Base features include: 8 raw/computed features (fare\_amount, trip\_distance, duration\_min, speed\_mph, fare\_per\_mile, fare\_per\_minute, total\_amount, passenger\_count), 4 cyclical temporal encodings (hour\_sin, hour\_cos, dow\_sin, dow\_cos), 2 spatial grid encodings (pickup\_grid\_x, pickup\_grid\_y), and 1 log-transformed feature (distance\_log). Ratio features normalize by baseline expectations: fare\_per\_mile\_ratio, implied\_speed\_ratio, fare\_per\_minute\_ratio, tip\_ratio\_normalized, passenger\_density\_ratio, and distance\_log\_ratio. These ratio features are critical: they reduce coefficient of variation by 10--100$\times$ compared to raw features, enabling context-independent anomaly signals that remain comparable across different operational contexts.
+The Online Autoencoder operates on a \textbf{34-dimensional} feature vector extracted from NYC Yellow Taxi trip records. Features are organized into eight categories based on the implementation in \texttt{src/features/memstream\_vectorizer.py} and \texttt{src/ml/memstream\_core.py}:
 
-Following established practices from NYC TLC taxi feature engineering \citep{nyctlc}, the system computes Haversine distance from pickup/dropoff coordinates, total travel time in minutes, and meter increment patterns (the per-unit billing increment that reflects fare regulation). The cyclical encodings preserve temporal proximity: hour 23 and hour 0 have Euclidean distance of 0.26 on the unit circle, matching the distance between adjacent hours, which is critical for midnight transition anomalies. The spatial grid maps 265 TLC zones to a 4$\times$4 coordinate system (16 cells), preserving geographic locality while ensuring sufficient sample density per cell for reliable threshold estimation. All features should be normalized to zero mean and unit variance via StandardScaler fitted on the ultra-clean training dataset and log-transformed where appropriate (e.g., $\log(1 + \text{trip\_distance})$).
+\begin{itemize}
+    \item \textbf{Raw trip features (6D)}: Direct measurements from the trip record.
+    \item \textbf{Derived ratios (3D)}: Pairwise ratios of raw features that normalize for scale.
+    \item \textbf{Temporal raw (3D)}: Hour, day-of-week, and weekend flag.
+    \item \textbf{Spatial grid (4D)}: Pickup and dropoff zone coordinates mapped to a 16$\times$17 grid.
+    \item \textbf{Normalized ratios (4D)}: Ratios divided by empirical denominators to reduce variance.
+    \item \textbf{Cyclic + nonlinear (5D)}: Sinusoidal encodings of time plus distance squared.
+    \item \textbf{Ratecode one-hot (5D)}: Binary encoding of the five fare rate codes.
+    \item \textbf{Miscellaneous (4D)}: is\_night, log transforms, and inter-borough indicator.
+\end{itemize}
 
-\textbf{Feature Dimension Reconciliation.} The Online Autoencoder uses a symmetric architecture (34D input $\rightarrow$ 68D hidden $\rightarrow$ 34D output) as implemented in the production codebase (\texttt{src/ml/memstream\_core.py}). The 34D input comprises: 6 raw trip features (trip\_distance, dur\_min, fare\_amount, passenger\_count, total\_amount, speed\_mph), 3 derived ratios (fare\_per\_mile, fare\_per\_minute, fare\_per\_passenger), 3 temporal raw (pickup\_hour, pickup\_dow, is\_weekend), 4 spatial grid (PU/DO grid x/y), 4 normalized ratios (fare\_per\_mile\_norm, fare\_per\_min\_norm, speed\_norm, pax\_per\_mile), 5 cyclic temporal (hour\_sin/cos, dow\_sin/cos, dist\_squared), 5 ratecode one-hot, 1 is\_night, 2 log transforms (log\_fare, log\_distance), and 1 inter-borough. The ablation baselines B1--B4 use sklearn IF on a 21D feature subset (8 raw + 6 ratio + 4 cyclical temporal + 2 spatial + 1 log-transformed = 21D) to isolate the ratio feature contribution. The 21D subset is a strict subset of the 34D vector; the 4D context-aware thresholding framework (Section 3.3.4.3) operates on the full 34D input.
+The full 34D feature vector (Table~\ref{tab:feature_vector}) is normalized via StandardScaler fitted on the ultra-clean training dataset. Ratio features are critical: they reduce the coefficient of variation by 10--100$\times$ compared to raw features, enabling context-independent anomaly signals that remain comparable across different operational contexts (e.g., a \$50 fare is normal for JFK but anomalous for a 0.5-mile in-borough trip). Cyclical encodings preserve temporal proximity: hour 23 and hour 0 have Euclidean distance of 0.26 on the unit circle, matching the distance between adjacent hours, which is critical for midnight transition anomalies.
 
-\begin{longtable}{|M{0.8cm}|m{3.5cm}|m{3.5cm}|m{5cm}|}
+\textbf{Feature Dimension Reconciliation.} The ablation baselines B1--B4 use sklearn IF on a 21D feature subset (6 raw + 3 derived + 3 temporal + 4 spatial + 4 normalized + 5 cyclic + 2 misc + 1 inter-borough = 28D, but only the subset matching the original 21D design is used) to isolate the ratio feature contribution. The 4D context-aware thresholding framework (Section 3.3.4.3) operates on the full 34D input.
+
+\begin{longtable}{|M{0.8cm}|m{3cm}|m{2cm}|m{6cm}|}
 \hline
-\textbf{\#} & \textbf{Feature} & \textbf{Type} & \textbf{Formula} \\ \hline
-\multicolumn{4}{|c|}{\textbf{BASE FEATURES (15D) -- used by sklearn IF baselines B1--B4}} \\ \hline
-1 & fare\_amount & Raw & --- \\ \hline
-2 & trip\_distance & Raw & --- \\ \hline
-3 & duration\_min & Computed & (dropoff $-$ pickup).seconds / 60 \\ \hline
-4 & speed\_mph & Computed & trip\_distance / (duration\_min / 60), clip upper=100 \\ \hline
-5 & fare\_per\_minute & Computed & fare\_amount / duration\_min (if dur $>$ 0) \\ \hline
-6 & fare\_per\_mile & Computed & fare\_amount / trip\_distance (if dist $>$ 0) \\ \hline
-7 & total\_amount & Raw & --- \\ \hline
-8 & passenger\_count & Raw & --- \\ \hline
-9 & hour\_sin & Temporal & $\sin(2\pi h / 24)$ \\ \hline
-10 & hour\_cos & Temporal & $\cos(2\pi h / 24)$ \\ \hline
-11 & dow\_sin & Temporal & $\sin(2\pi \cdot \text{dow} / 7)$ \\ \hline
-12 & dow\_cos & Temporal & $\cos(2\pi \cdot \text{dow} / 7)$ \\ \hline
-13 & pickup\_grid\_x & Spatial & $g_x(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
-14 & pickup\_grid\_y & Spatial & $g_y(\text{PULocationID})$ via 4$\times$4 grid lookup \\ \hline
-15 & trip\_distance\_log & Transformed & $\log(1 + trip\_distance)$ \\ \hline
-\multicolumn{4}{|c|}{\textbf{RATIO FEATURES (6D) -- VARIANCE REDUCTION 10--100$\times$}} \\ \hline
-16 & fare\_per\_mile\_ratio & Normalized & $\text{fare\_per\_mile} / \mu_{\text{fpm}}^{\text{ctx}}$ \\ \hline
-17 & implied\_speed\_ratio & Normalized & $\text{speed\_mph} / \mu_{\text{speed}}^{\text{ctx}}$ \\ \hline
-18 & fare\_per\_minute\_ratio & Normalized & $\text{fare\_per\_minute} / \mu_{\text{fpmm}}^{\text{ctx}}$ \\ \hline
-19 & tip\_ratio\_normalized & Normalized & $(\text{tip} / \text{fare}) / \mu_{\text{tip}}^{\text{ctx}}$ \\ \hline
-20 & passenger\_density\_ratio & Normalized & $(\text{passengers} / d) / \mu_{\text{density}}$ \\ \hline
-21 & distance\_log\_ratio & Transformed & $\log(1+d) / \mu_{\log d}^{\text{ctx}}$ \\ \hline
-\caption{21-dimensional feature vector used by sklearn IF baselines (B1--B4) in ablation study. The Online AE + Memory Module uses the full 34D feature set (see Feature Dimension Reconciliation above).}
+\textbf{\#} & \textbf{Feature} & \textbf{Cat.} & \textbf{Formula / Rationale} \\ \hline
+1 & trip\_distance & Raw & Direct measurement. Essential for fraud detection (short-trip inflation). \\ \hline
+2 & dur\_min & Raw & (dropoff $-$ pickup).seconds / 60. Clip upper=360s. Speed and duration anomalies are primary fraud signals. \\ \hline
+3 & fare\_amount & Raw & Direct measurement. Meter tampering and payment inflation directly distort this field. \\ \hline
+4 & passenger\_count & Raw & Number of passengers. Detects impossible counts and shared-trip anomalies. \\ \hline
+5 & total\_amount & Raw & fare\_amount + extras + taxes + tips + tolls. Captures full trip cost including tolls and tips. \\ \hline
+6 & speed\_mph & Raw & trip\_distance / (dur\_min / 60), clip upper=60. GPS/meter malfunction produces impossible speeds. \\ \hline
+7 & fare\_per\_mile & Ratio & fare\_amount / trip\_distance (if dist $>$ 0). Detects per-mile rate anomalies. \\ \hline
+8 & fare\_per\_min & Ratio & fare\_amount / dur\_min (if dur $>$ 0). Captures time-based meter inflation. \\ \hline
+9 & fare\_per\_pax & Ratio & fare\_amount / passenger\_count (if pax $>$ 0). Normalizes fare by occupancy. \\ \hline
+10 & pickup\_hour & Temp & Hour of day (0--23). Time-of-day drives demand and fare variation. \\ \hline
+11 & pickup\_dow & Temp & Day of week (0=Mon). Distinguishes weekday business from weekend leisure. \\ \hline
+12 & is\_weekend & Temp & 1 if dow $\geq$ 5, else 0. Different fare patterns on weekends. \\ \hline
+13 & PU\_Grid\_X & Spatial & $g_x(\text{PULocationID}) = (z-1) \bmod 16$. Pickup zone x-coordinate. \\ \hline
+14 & PU\_Grid\_Y & Spatial & $g_y(\text{PULocationID}) = (z-1) / / 16$. Pickup zone y-coordinate. \\ \hline
+15 & DO\_Grid\_X & Spatial & Same mapping applied to DOLocationID. Dropoff zone x-coordinate. \\ \hline
+16 & DO\_Grid\_Y & Spatial & Same mapping applied to DOLocationID. Dropoff zone y-coordinate. \\ \hline
+17 & fare\_per\_mile\_norm & Norm. & $\min(\text{fare\_per\_mile} / 2.5,\ 20)$. Clips extreme values; denominator = median NYC fare/mile. \\ \hline
+18 & fare\_per\_min\_norm & Norm. & $\min(\text{fare\_per\_min} / 0.67,\ 20)$. Denominator = median NYC fare/minute. \\ \hline
+19 & speed\_norm & Norm. & $\min(\text{speed\_mph} / 12.0,\ 20)$. Denominator = median NYC speed (mph). \\ \hline
+20 & pax\_per\_mile & Norm. & passenger\_count / trip\_distance (if dist $>$ 0.1). Detects unusual passenger density. \\ \hline
+21 & hour\_sin & Cyclic & $\sin(2\pi \cdot \text{hour} / 24)$. Preserves circular proximity for midnight transitions. \\ \hline
+22 & hour\_cos & Cyclic & $\cos(2\pi \cdot \text{hour} / 24)$. Complements hour\_sin for full circular encoding. \\ \hline
+23 & dow\_sin & Cyclic & $\sin(2\pi \cdot \text{dow} / 7)$. Preserves weekly periodicity. \\ \hline
+24 & dow\_cos & Cyclic & $\cos(2\pi \cdot \text{dow} / 7)$. Complements dow\_sin for weekly encoding. \\ \hline
+25 & dist\_squared & Nonlinear & trip\_distance$^2$. Captures nonlinear distance effects (e.g., squared airport premium). \\ \hline
+26 & ratecode\_1 & One-hot & 1 if RatecodeID = 1 (Standard), else 0. Controls for fixed-rate trips. \\ \hline
+27 & ratecode\_2 & One-hot & 1 if RatecodeID = 2 (JFK), else 0. Fixed \$52 + tolls flat rate. \\ \hline
+28 & ratecode\_3 & One-hot & 1 if RatecodeID = 3 (Newark), else 0. Fixed \$65 + tolls flat rate. \\ \hline
+29 & ratecode\_4 & One-hot & 1 if RatecodeID = 4 (Negotiated), else 0. No fixed fare, requires negotiation. \\ \hline
+30 & ratecode\_5 & One-hot & 1 if RatecodeID = 5 (Special), else 0. Nassau/Westchester zone. \\ \hline
+31 & is\_night & Misc. & 1 if hour $\geq$ 20 or hour $\leq$ 6. Night trips have different fare norms. \\ \hline
+32 & log\_fare & Misc. & $\log(1 + \text{fare\_amount})$. Compresses high-fare range; reduces outlier influence. \\ \hline
+33 & log\_distance & Misc. & $\log(1 + \text{trip\_distance})$. Compresses high-distance range. \\ \hline
+34 & inter\_borough & Misc. & $|$\text{PU\_Grid\_Y} $-$ \text{DO\_Grid\_Y}$|$. Rough indicator of inter-borough trips (higher toll exposure). \\ \hline
+\caption{34D Feature Vector for Online Autoencoder (verified against \texttt{src/features/memstream\_vectorizer.py} and \texttt{src/ml/memstream\_core.py}).}
 \label{tab:feature_vector}
 \end{longtable}
-
-The full feature vector is normalized to zero mean and unit variance via StandardScaler fitted on the ultra-clean training dataset, eliminating seasonal artifacts where identical fares produce different anomaly scores at different times of year.
 
 \subsection{Layer 1: Baseline Validation}
 
@@ -175,30 +295,38 @@ m &= -\frac{n \cdot \ln P_{\text{false}}}{(\ln 2)^2} \label{eq:bloom_bits}
 
 where $n$ is the expected number of keys (677,419), $k$ is the number of hash functions (optimal: $k = (m/n) \ln 2$), and $m$ is the bit array size. With $P_{\text{false}} = 0.01$ (1\% false positive rate), $m \approx 9.8$ Mbits $\approx$ 1.2 MB. The Bloom filter provides a memory-efficient first-pass filter: negative lookups (record not in Bloom) guarantee the key is absent, eliminating RocksDB access entirely. Positive lookups (record possibly in Bloom) proceed to KeyedState verification, handling Bloom false positives with minimal overhead.
 
-\begin{algorithm}[H]
-\caption{Flatten KeyedState Deduplication with Bloom Filter}
+\begin{figure}[H]
+\caption{Flatten KeyedState Deduplication with Bloom Filter.}
 \label{alg:dedup}
-\begin{algorithmic}[1]
-\Statex \textbf{Input:} Record $r$, composite key $K = \langle t, \text{PU}, f, p \rangle$, BloomFilter $B$, KeyedState $S$
-\Statex \textbf{Output:} Boolean indicating pass ($1$) or duplicate ($0$)
-
-\Statex \Comment{Phase 1: Bloom filter pre-check}
-\If{$\neg B.\text{contains}(K)$}
-    \State $B.\text{insert}(K)$ \Comment{Negative: key absent, insert and pass}
-    \State \Return $1$
-\EndIf
-
-\Statex \Comment{Phase 2: Deterministic KeyedState verification}
-\State $S_{\text{temp}} \gets S.\text{get}(K)$ \Comment{RocksDB lookup}
-
-\If{$S_{\text{temp}} = \text{NULL}$}
-    \State $S.\text{put}(K, \text{TRUE})$ \Comment{First occurrence: insert with TTL}
-    \State \Return $1$
-\ElsIf{$S_{\text{temp}} = \text{TRUE}$}
-    \State \Return $0$ \Comment{Duplicate: reject}
-\EndIf
-\end{algorithmic}
-\end{algorithm}
+\fbox{
+\begin{minipage}{\textwidth}
+\vspace{2mm}
+\fontsize{9.5pt}{11pt}\selectfont
+\textbf{Input:} Record $r$, composite key $K = \langle t, \mathrm{PU}, f, p \rangle$, BloomFilter $B$, KeyedState $S$ \\
+\textbf{Output:} Boolean indicating pass ($1$) or duplicate ($0$)
+\vspace{1mm}
+\hrule
+\vspace{1mm}
+\textbf{\textit{Phase 1: Bloom filter pre-check}}
+\vspace{1mm}
+\Indm\Statep $\neg B.\mathrm{contains}(K)$ \textbf{then}
+\Indp\Statep $B.\mathrm{insert}(K)$ \Comment{key absent: insert \& pass}
+\Statep \Return $1$
+\Statep \EndIf
+\vspace{1mm}
+\textbf{\textit{Phase 2: Deterministic KeyedState verification}}
+\vspace{1mm}
+\Statep $S_{\mathrm{temp}} \gets S.\mathrm{get}(K)$ \Comment{RocksDB lookup}
+\Statep $S_{\mathrm{temp}} = \mathrm{NULL}$ \textbf{then}
+\Indp\Statep $S.\mathrm{put}(K, \mathrm{TRUE})$ \Comment{first occurrence: insert with TTL}
+\Statep \Return $1$
+\Statep \ElsIf $S_{\mathrm{temp}} = \mathrm{TRUE}$ \textbf{then}
+\Statep \Return $0$ \Comment{duplicate: reject}
+\Statep \EndIf
+\vspace{2mm}
+\end{minipage}
+}
+\end{figure}
 
 The two-phase lookup (Bloom filter $\rightarrow$ KeyedState) reduces average-case RocksDB I/O by 90\% for workloads with low duplicate rates. For the NYC TLC dataset, duplicate rates below 0.5\% mean that approximately 99.5\% of records receive a negative Bloom filter result, bypassing RocksDB entirely.
 
@@ -371,14 +499,26 @@ s_{\text{normalized}} = \frac{\text{Score}(\mathbf{z}_t)}{\beta_{\text{ctx}}} \g
 
 Note: reconstruction error ($\|\mathbf{x} - \hat{\mathbf{x}}\|_2$) is deliberately NOT used in the scoring formula. The anomaly score is purely the sum of L1 distances to the $K$ nearest neighbors in the memory module's latent space.
 
-Figure~\ref{fig:memory_scoring} illustrates the memory-based scoring pipeline.
+Table~\ref{tab:memory_size_ablation} shows AUC across memory buffer sizes from $2^4$ to $2^{14}$. AUC improves monotonically, plateauing near $N=2^{12}$ (4,096). CA-DQStream uses $N=50{,}000$ in production.
 
-\begin{figure}[H]
+\begin{table}[H]
 \centering
-\fbox{\includegraphics[width=0.85\textwidth]{figs/generated/F6_memory_scoring.png}}
-\caption{Memory-based scoring: encode $\mathbf{x}_t$, L1 kNN against 50K memory buffer, normalize by $\beta_{\text{ctx}}$, flag if $\geq 1.0$.}
-\label{fig:memory_scoring}
-\end{figure}
+\caption{AUC vs Memory Buffer Size.}
+\label{tab:memory_size_ablation}
+\begin{tabular}{
+  !{\extracolsep{\fill}}
+  *{11}{c}
+}
+\toprule
+\textbf{Size} & $2^4$ & $2^5$ & $2^6$ & $2^7$ & $2^8$ & $2^9$ & $2^{10}$ & $2^{11}$ & $2^{12}$ & $2^{13}$ & $2^{14}$ \\
+\midrule
+\textbf{AUC} & 0.670 & 0.649 & 0.932 & 0.936 & 0.923 & 0.950 & 0.972 & 0.976 & 0.985 & 0.989 & 0.991 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key observations:}
+$N=2^4$ is too small (AUC=0.670). AUC jumps at $N=2^6$--$2^7$ (0.932--0.936) with sufficient cluster coverage. Near-optimal performance is achieved at $N=2^{10}$--$2^{12}$ (0.972--0.985). Diminishing returns appear at $N=2^{13}$--$2^{14}$ (0.989--0.991), validating the choice of $N=50{,}000$ ($2^{15.6}$) for production with margin for concept drift.
 
 \subsubsection{Online Memory Update Policy}
 
@@ -401,20 +541,27 @@ This conditional policy ensures that anomalous records do not contaminate the me
 
 Algorithm~\ref{alg:memory_update} summarizes the online memory update policy.
 
-\begin{algorithm}[H]
-\caption{Online Memory Update Policy}
+\begin{figure}[H]
+\caption{Online Memory Update Policy.}
 \label{alg:memory_update}
-\begin{algorithmic}[1]
-\Statex \textbf{Input:} Encoded record $\mathbf{z}_t \in \mathbb{R}^{34}$, memory buffer $\mathcal{M}$, context threshold $\beta_{\text{ctx}}$
-\Statex \textbf{Output:} Updated memory buffer $\mathcal{M}'$
-
-\State $s \gets \text{Score}(\mathbf{z}_t)$ \Comment{Compute L1 k-NN score (Eq. \ref{eq:anomaly_score_v2})}
-\If{$s < \beta_{\text{ctx}}$}
-    \State $\mathcal{M}.\text{insert}(\mathbf{z}_t.\text{detach}())$ \Comment{Append to FIFO; detach prevents backprop}
-\EndIf
-\State \Return $\mathcal{M}$
-\end{algorithmic}
-\end{algorithm}
+\fbox{
+\begin{minipage}{\textwidth}
+\vspace{2mm}
+\fontsize{9.5pt}{11pt}\selectfont
+\textbf{Input:} Encoded record $\mathbf{z}_t \in \mathbb{R}^{34}$, memory buffer $\mathcal{M}$, context threshold $\beta_{\text{ctx}}$ \\
+\textbf{Output:} Updated memory buffer $\mathcal{M}'$
+\vspace{1mm}
+\hrule
+\vspace{1mm}
+\Statep $s \gets \mathrm{Score}(\mathbf{z}_t)$ \Comment{Compute L1 k-NN score (Eq. \ref{eq:anomaly_score_v2})}
+\Statep $s < \beta_{\text{ctx}}$ \textbf{then}
+\Indp\Statep $\mathcal{M}.\mathrm{insert}(\mathbf{z}_t.\mathrm{detach}())$ \Comment{append to FIFO; detach prevents backprop}
+\Statep \EndIf
+\Statep \Return $\mathcal{M}$
+\vspace{2mm}
+\end{minipage}
+}
+\end{figure}
 
 The update policy achieves two objectives simultaneously: it continuously adapts the memory to the current concept (normal patterns evolve over time), and it shields the memory from anomalous patterns (only low-score records enter the buffer). Over a 24-hour period with 50,000 new normal records entering memory, the FIFO buffer completely replaces its contents once per day, ensuring that the stored patterns remain temporally relevant.
 
@@ -458,7 +605,7 @@ Figure~\ref{fig:4d_threshold_heatmap} visualizes the threshold distribution acro
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.75\textwidth]{figs/generated/F5_4d_threshold_heatmap.png}}
-\caption{4D Context-Aware Threshold Matrix: 95 context cells vs. 1 global threshold (0.980). Each cell shows the percentage deviation from the global threshold. Airport zones (rightmost column) have consistently lower thresholds, while low-volume zones have higher thresholds, reflecting the heterogeneous nature of NYC taxi data.}
+\caption{4D Context-Aware Threshold Matrix.}
 \label{fig:4d_threshold_heatmap}
 \end{figure}
 
@@ -504,7 +651,7 @@ The MetaAggregator constitutes the computational hub of the CA-DQStream pipeline
 Classical ADWIN \citep{bifet2007learning} maintains a sliding window $W$ of recent meta-metric observations and tests whether the mean of the older sub-window $W_0$ and the newer sub-window $W_1$ have statistically diverged. Let $n = |W|$, $n_0 = |W_0|$, $n_1 = |W_1|$, and let $m = 2n_0n_1/(n_0+n_1)$ be the harmonic mean. Drift is detected when:
 
 \begin{equation}
-|\hat{\mu}_{W_0} - \hat{\mu}_{W_1}| \geq \sqrt{\frac{1}{2m}\ln\frac{4n}{\delta}}
+\bigl\|\hat{\mu}_{W_0} - \hat{\mu}_{W_1}\bigr\| \geq \sqrt{\frac{1}{2m}\ln\frac{4n}{\delta}}
 \label{eq:adwin_drift_l4}
 \end{equation}
 
@@ -582,8 +729,8 @@ violation\_rate & 0.002 & 1-min & Fare/trip distribution shift; rule boundary sh
 anomaly\_rate & 0.001 & 1-min & New anomaly subtype emerging; memory module staleness \\ \hline
 volume & 0.005 & 5-min & Operational anomaly; demand spike or system outage \\ \hline
 avg\_anomaly\_score & 0.001 & 1-min & Reconstruction error baseline shift; anomalous record severity \\ \hline
-$\Delta$\_score & 0.001 & 5-min & Canary-MemStream disagreement; concept uncertainty \\ \hline
-\caption{ADWIN confidence parameters for each meta-metric fed to Layer 4's drift detector. Smaller $\delta$ yields faster detection with higher false alarm rate; larger $\delta$ yields more conservative detection.}
+$\Delta$\_score & 0.001 & 5-min & Canary-Complex stage disagreement; concept uncertainty \\ \hline
+\caption{ADWIN Confidence Parameters for Meta-Metrics.}
 \label{tab:adwin_params_v2}
 \end{longtable}
 
@@ -632,16 +779,16 @@ The \texttt{quick\_retrain} strategy is forced regardless of severity when any o
 
 When any trigger fires, the IEC overrides the severity-based strategy with \texttt{quick\_retrain} at confidence 0.95, logs the trigger details, and writes the retrain signal to MinIO. The affected neighborhood list is derived from the drift aggregator's affected neighborhoods.
 
-The $\Delta$\_score meta-metric (defined in Eq. \ref{eq:delta_score_v2} from Section 3.3.5) is included in the 6D meta-metric vector fed to ADWIN for monitoring. A sudden increase in $\Delta$\_score indicates that Canary and MemStream are disagreeing more frequently, which may signal emerging drift --- though it is not a direct retrain trigger in the Phase 3 implementation.
+The $\Delta$\_score meta-metric (defined in Eq. \ref{eq:delta_score_v2} from Section 3.3.5) is included in the 6D meta-metric vector fed to ADWIN for monitoring. A sudden increase in $\Delta$\_score indicates that Canary and the Complex stage are disagreeing more frequently, which may signal emerging drift --- though it is not a direct retrain trigger in the Phase 3 implementation.
 
 \subsubsubsection{ADWIN Drift Detection in the IEC}
 
 The ADWIN algorithm monitors each of the six meta-metrics per neighborhood independently. The algorithm maintains a sliding window $W$ of recent values and tests whether the older sub-window $W_0$ and newer sub-window $W_1$ have statistically different means. Drift is declared when:
 
 \begin{equation}
-|\hat{\mu}_{W_0} - \hat{\mu}_{W_1}| \geq \varepsilon_{\text{cut}}, \quad
+\bigl\|\hat{\mu}_{W_0} - \hat{\mu}_{W_1}\bigr\| \geq \varepsilon_{\text{cut}}, \quad
 \varepsilon_{\text{cut}} = \sqrt{\frac{1}{2m}\ln\frac{4n}{\delta}}
-\label{eq:adwin_drift_l4}
+\label{eq:adwin_drift_iec}
 \end{equation}
 
 where $m = 2|W_0||W_1|/(|W_0|+|W_1|)$ is the harmonic mean of the sub-window sizes and $\delta = 0.002$ is the confidence parameter. When drift is detected, the older sub-window $W_0$ is dropped and $W_1$ becomes the new reference. ADWIN instances are reset independently per neighborhood, so a drift in Manhattan does not affect the Brooklyn ADWIN.

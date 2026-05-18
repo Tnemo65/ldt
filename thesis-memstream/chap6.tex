@@ -9,7 +9,7 @@
 
 This thesis presented \textbf{CA-DQStream}, a context-aware framework for streaming data quality monitoring that addresses critical limitations of existing batch-oriented and rule-based systems. Evaluated on the NYC Yellow Taxi dataset (72M records across 26 months: 14 months real TLC data + 12 months simulated data), CA-DQStream introduces four core innovations:
 
-\subsection{Contribution 1: 4D Context-Aware Thresholding Framework [RQ5]}
+\subsection{Contribution 1: Online Autoencoder + Memory Module [RQ1]}
 
 Traditional DQ systems use global thresholds that fail catastrophically on heterogeneous data. CA-DQStream introduces a \textbf{4-dimensional context-aware threshold matrix} (trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood = 588 cells) with automated threshold computation and intelligent fallback for sparse cells.
 
@@ -25,7 +25,7 @@ Traditional DQ systems use global thresholds that fail catastrophically on heter
 
 \textbf{Novelty:} First streaming DQ framework to combine (1) multi-dimensional context with (2) automated threshold computation and (3) drift-aware recalibration. Existing context-aware DQ systems use manual threshold specification or separate models per context.
 
-\subsection{Contribution 2: Staged Validation Pipeline with Early Exit [RQ4]}
+\subsection{Contribution 2: 4D Context-Aware Thresholding [RQ2]}
 
 Traditional naive sequential pipelines force every record through every validation stage regardless of whether earlier stages have already made a determination. CA-DQStream introduces a \textbf{staged validation pipeline with conditional early exit routing}: lightweight stages (Schema Validation, Business Rules) filter out obvious violations early, routing failed records directly to the output stream without entering the expensive ML scoring stage; only records passing all prior stages enter ML scoring, with results converging at the MetaAggregator for a unified quality verdict.
 
@@ -39,7 +39,7 @@ Traditional naive sequential pipelines force every record through every validati
 
 \textbf{Novelty:} First application of staged validation with conditional early exit routing to streaming data quality validation. Great Expectations, AWS Deequ, Soda Core, and Stream DaQ all use naive sequential processing where every record traverses every stage regardless of whether earlier stages could make a determination.
 
-\subsection{Contribution 3: Intelligent Evolution Controller (IEC) [RQ3]}
+\subsection{Contribution 3: Intelligent Evolution Controller (IEC) [RQ1]}
 
 Traditional drift detection systems use single-strategy adaptation (always retrain). CA-DQStream introduces a \textbf{multi-strategy Intelligent Evolution Controller} that selects from four complementary strategies based on drift characteristics:
 
@@ -60,7 +60,7 @@ Traditional drift detection systems use single-strategy adaptation (always retra
 
 \textbf{Novelty:} First multi-strategy drift adaptation controller for streaming DQ. Existing systems use fixed single-strategy (always retrain), wasting compute on minor drift that could be corrected incrementally.
 
-\subsection{Contribution 4: Online Autoencoder + Memory Module [RQ2]}
+\subsection{Contribution 4: Staged Validation Pipeline [RQ1]}
 
 Basic anomaly detection lacks context awareness and online learning capability. CA-DQStream introduces an \textbf{Online Autoencoder + Memory Module} that combines denoising autoencoder reconstruction with a streaming memory component for dynamic anomaly detection:
 
@@ -86,20 +86,16 @@ Basic anomaly detection lacks context awareness and online learning capability. 
 % ================================================
 \section{Validation of Research Hypotheses}
 
-All six research hypotheses were supported by experimental evidence:
+All two research hypotheses were supported by experimental evidence:
 
 \begin{longtable}{|m{6.5cm}|m{3cm}|m{4cm}|}
 \hline
 \textbf{Hypothesis} & \textbf{Status} & \textbf{Evidence} \\ \hline
-\textbf{H1:} Multi-layer architecture detects $\geq$ 50\% more violations than schema-only & \checkmark SUPPORTED & 52\% improvement (473K vs 311K), exceeding 50\% threshold \\ \hline
-\textbf{H2:} Online Autoencoder + Memory Module achieves F1 $\geq$ 0.828 on Easy-difficulty anomalies (benchmark-validated) & \checkmark SUPPORTED & F1=0.828 Easy, F1=0.751 Medium, F1=0.563 Hard (weighted avg F1=0.71), FPR=2.99\% (below 5\% target) \\ \hline
-\textbf{H3:} IEC detects drift within 24 hours on average (1440 aggregated 1-minute windows) and selects appropriate strategies based on drift characteristics, with 93\% of drift events resolved by lightweight updates without full retraining & \checkmark CONDITIONALLY SUPPORTED & Avg 21 hours across 54 events; exceeds 2-hour target but meets relaxed 24-hour threshold; 93\% resolved by lightweight strategies \\ \hline
-\textbf{H4:} Staged validation pipeline with early exit routing reduces average latency through conditional bypass and increases throughput by reducing unnecessary ML inference & \checkmark SUPPORTED & Average latency reduced, throughput improved by 2.2$\times$ \\ \hline
-\textbf{H5:} 4D context-aware thresholds reduce FPR by at least 1$\times$ compared to global thresholds while maintaining Recall $\geq$ 0.80 & \checkmark SUPPORTED & FPR 4.94\% $\to$ 4.2\% (1.18$\times$ reduction); F1 0.64 $\to$ 0.87 (+35.9\% on sklearn IF scores); airport trips: 68.9\% $\to$ 6.7\% (Newark), 40.2\% $\to$ 3.1\% (JFK) \\ \hline
-\textbf{H6:} Context-aware thresholds maintain FPR below 5\% over 26 months with IEC recalibration & \checkmark SUPPORTED & FPR drift 4.2\% $\to$ 4.9\% (16.7\% increase) vs 4.2\% $\to$ 11.2\% (166.7\%) without IEC \\ \hline
+\textbf{H1:} Online Autoencoder + Memory Module achieves F1 $\geq$ 0.828 on Easy-difficulty anomalies and F1 $\geq$ 0.71 weighted average across Easy/Medium/Hard, with FPR $<$ 5\% & \checkmark SUPPORTED & F1=0.828 (Easy), F1=0.751 (Medium), F1=0.563 (Hard), weighted F1=0.71, FPR=2.99\% (below 5\% target) \\ \hline
+\textbf{H2:} 4D context-aware thresholds reduce FPR compared to sklearn IF with global thresholds while maintaining Recall $\geq$ 0.80 & \checkmark SUPPORTED & FPR 4.94\% $\to$ 4.2\% (1.18$\times$ reduction); F1 0.64 $\to$ 0.87 (+35.9\%); airport trips: 68.9\% $\to$ 6.7\% (Newark), 51.2\% $\to$ 5.1\% (JFK) \\ \hline
 \end{longtable}
 
-Statistical significance: Primary metrics (RQ2 F1 comparison, RQ5 FPR comparison) were evaluated using the Wilcoxon signed-rank test ($n=5$ seeds, Holm-Bonferroni corrected, $\alpha=0.05$) and the chi-square test ($n=3.08$M records). Effect sizes are reported using Cohen's $d$ for paired comparisons and Cram\'mer's $V$ for categorical comparisons. Detailed statistical results including exact $p$-values, confidence intervals, and raw seed-level measurements are provided in the Supplementary Materials appendix.
+Statistical significance: Primary metrics were evaluated using the Wilcoxon signed-rank test ($n=5$ seeds, Holm-Bonferroni corrected, $\alpha=0.05$) and the chi-square test ($n=3.08$M records). Effect sizes are reported using Cohen's $d$ for paired comparisons and Cram\'er's $V$ for categorical comparisons. Detailed statistical results are provided in Appendix B.
 
 % ================================================
 % 6.3 Limitations

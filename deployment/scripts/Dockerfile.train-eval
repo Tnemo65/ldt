@@ -1,0 +1,31 @@
+# ============================================================
+# CA-DQStream Training + Evaluation Docker Image (GPU)
+# ============================================================
+# Build: docker build -t ldt-train-eval-gpu -f deployment/scripts/Dockerfile.train-eval ..
+# Run:   docker run --gpus '"device=0"' --rm -v c:/proj/ldt/data:/data -v c:/proj/ldt/scripts:/out \
+#            --network host ldt-train-eval-gpu --train /data/prod/train_oct2024.parquet ...
+# ============================================================
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+# Install Python + system deps
+RUN apt-get update && apt-get install -y \
+    python3.10 python3-pip liblzma-dev libbz2-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.10 /usr/bin/python3
+
+# PyTorch + deps (CUDA 11.8)
+RUN pip3 install --no-cache-dir \
+    torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html \
+    "numpy>=1.24.0" \
+    "pyarrow>=12.0.0" \
+    "scikit-learn>=1.3.0" \
+    "pandas>=2.0.0" \
+    "boto3>=1.34.0"
+
+# Copy script
+COPY scripts/train_eval_prod.py /app/train_eval_prod.py
+
+ENTRYPOINT ["python3", "/app/train_eval_prod.py"]

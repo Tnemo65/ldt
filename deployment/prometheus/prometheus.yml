@@ -86,19 +86,14 @@ scrape_configs:
         target_label: instance
         replacement: 'minio'
 
-  # Cadqstream Pipeline Application Metrics
-  # Custom ML service metrics (inference latency, request counts, model load time)
+  # ── ML Service ─────────────────────────────────────────────────────────────
+  # Custom ML inference metrics (inference latency, request counts, model status)
+  # /metrics endpoint is public (no auth required)
   - job_name: 'ml-service'
     static_configs:
       - targets: ['ldt-ml-service:8000']
     metrics_path: /metrics
     scrape_interval: 30s
-    scrape_timeout: 15s
-    bearer_token: 'changeme-metrics-api-key!!'
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'ml-service'
 
   # Cadqstream Pipeline Application Metrics (custom cadqstream_* metrics)
   # Scraped from cadqstream-metrics service (port 9250) which aggregates
