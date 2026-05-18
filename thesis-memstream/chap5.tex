@@ -70,19 +70,55 @@ CA-DQStream is deployed and benchmarked on a single AMD Threadripper 64-core ser
 % ================================================
 \subsection{Experimental Infrastructure}
 
-Figure~\ref{fig:infra_overview} shows the five core infrastructure components of CA-DQStream: Kafka Streams API processor topology, Kafka cluster with ZooKeeper coordination, Flink consumer groups and partition assignment, Flink time-based windowing, and Prometheus alerting pipeline.
+Figures~\ref{fig:infra_a}--\ref{fig:infra_g} show the seven core infrastructure components of CA-DQStream: Kafka CLI topic creation and partition configuration, Kafka consumer group offsets for exactly-once processing, Prometheus metrics dashboard for Kafka and Flink, Docker container orchestration for the full stack, Flink JobManager UI for job monitoring, and Grafana dashboards for real-time DQ monitoring.
 
 \begin{figure}[H]
 \centering
-\begin{minipage}{\textwidth}
-\subfloat[Kafka Streams API Processor Topology.]{\fbox{\includegraphics[width=0.18\linewidth]{figs/Thesis_Figures/kafka1.png}}}\hfill
-\subfloat[Kafka Cluster Architecture.]{\fbox{\includegraphics[width=0.18\linewidth]{figs/Thesis_Figures/kafka2.png}}}\hfill
-\subfloat[Kafka Consumer Groups and Partition Assignment.]{\fbox{\includegraphics[width=0.18\linewidth]{figs/Thesis_Figures/flink2.png}}}\hfill
-\subfloat[Flink Time-Based Windowing.]{\fbox{\includegraphics[width=0.18\linewidth]{figs/Thesis_Figures/flink3.png}}}\hfill
-\subfloat[Prometheus Alerting and Metrics Scraping.]{\fbox{\includegraphics[width=0.18\linewidth]{figs/Thesis_Figures/prometheus.png}}}
-\end{minipage}
-\caption{CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow; (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each); (c) Kafka consumer group offsets for exactly-once processing; (d) Flink time-based windows with watermarks for late-arriving events; (e) Prometheus alerting with Alertmanager routing.}
-\label{fig:infra_overview}
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/kafka1.PNG}}
+\caption{CA-DQStream Infrastructure: (a) Kafka CLI --- topic creation, partition configuration, and producer-consumer test.}
+\label{fig:infra_a}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/kafka2.PNG}}
+\caption{CA-DQStream Infrastructure: (b) Kafka consumer group offsets for exactly-once processing.}
+\label{fig:infra_b}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/prometheus.PNG}}
+\caption{CA-DQStream Infrastructure: (c) Prometheus metrics dashboard for Kafka and Flink.}
+\label{fig:infra_c}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/flink2.PNG}}
+\caption{CA-DQStream Infrastructure: (d) Docker container orchestration for Kafka (zookeeper, kafka1--3) and infrastructure services.}
+\label{fig:infra_d}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/flink3.PNG}}
+\caption{CA-DQStream Infrastructure: (e) Flink JobManager UI --- submitted jobs and runtime metrics.}
+\label{fig:infra_e}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/grafana1.PNG}}
+\caption{CA-DQStream Infrastructure: (f) Grafana dashboard --- FPR, anomaly rate, and violation rate monitoring.}
+\label{fig:infra_f}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.88\textwidth]{figs/Thesis_Figures/grafana2.PNG}}
+\caption{CA-DQStream Infrastructure: (g) Grafana dashboard --- anomaly score distribution and $\Delta$\_Score divergence monitoring.}
+\label{fig:infra_g}
 \end{figure}
 
 % ================================================
@@ -138,7 +174,7 @@ B4: + 4D context thresholds & 0.68 & 0.84 & 0.74 & 3.37\% & 26.9 \\ \hline
 \textbf{Proposed -- Online AE + Memory Module} & \textbf{0.66} & \textbf{0.79} & \textbf{0.71} & \textbf{2.99\%} & 26.8 \\ \hline
 \end{longtable}
 
-Ratio features (B1$\to$B2) contribute the largest F1 gain (+9.4\%); K-Means (B2$\to$B3) adds +4.3\%; 4D thresholds (B3$\to$B4) add +1.4\%. The proposed model achieves the lowest FPR (2.99\%) among all variants---below the 5\% production target. The proposed shows marginally lower F1 than B4 (0.71 vs 0.74) but lower FPR (2.99\% vs 3.37\%): in production DQ monitoring, lower FPR is critical to avoid alert fatigue.
+Ratio features (B1$\to$B2) contribute the largest F1 gain (+9.4\%); K-Means (B2$\to$B3) adds +4.3\%; 4D thresholds (B3$\to$B4) add +1.4\%.
 
 \textbf{b) Comparison with Alternative ML Algorithms:} All sklearn models use 15D raw features with global 95th percentile threshold.
 
@@ -210,53 +246,6 @@ Ex. IF        & 0.659 \pm 0.014  & 889     \\
 % ================================================
 % Context-Aware vs Global Thresholds
 % ================================================
-\subsection{Context-Aware vs Global Thresholds}
-
-\textbf{Objective:} Compare FPR and Recall of 4D context-aware thresholds vs global thresholds on identical dataset.
-
-\textbf{Method:}
-\begin{enumerate}
-    \item \textbf{Baseline (Global):} Single threshold $T_{\text{global}} = \mu + 2\sigma$ computed over entire training set
-    \item \textbf{CA-DQStream (4D Context-Aware):} 588-cell threshold matrix $T[i,j,k,\ell] = \mu_{\text{cell}} + 2\sigma_{\text{cell}}$ as an empirical threshold heuristic on the training score distribution, with intelligent fallback for sparse cells
-        \item Apply both thresholding strategies to Online Autoencoder with Memory Module anomaly scores
-    \item Measure FPR, Recall, F1 on July 2024 validation set with 50K synthetic anomalies
-\end{enumerate}
-
-\textbf{Results:}
-
-\begin{longtable}{|m{5cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|}
-\hline
-\textbf{Thresholding Strategy} & \textbf{FPR} & \textbf{Recall} & \textbf{F1} & \textbf{FPR Ratio} \\ \hline
-sklearn IF (raw, global threshold) & 4.94\% & 0.79 & 0.64 & --- \\ \hline
-Global Threshold (rule-based on raw fare) & 38.7\% & 0.91 & 0.74 & --- \\ \hline
-4D Context-Aware Thresholds & 4.2\% & 0.86 & \textbf{0.87} & 1.18$\times$ (vs sklearn IF) \\ \hline
-\textbf{Improvement} & \textbf{1.18$\times$ (vs sklearn IF)} & -8.9\% (acceptable) & \textbf{+35.9\%} & --- \\ \hline
-\end{longtable}
-
-The sklearn IF baseline in row 1 uses the same sklearn IF configuration as the ablation study (B1): \texttt{n\_estimators=200, max\_samples=256, contamination=0.05} on 15D raw features with a global anomaly score threshold. This is the correct apples-to-apples comparison for the thresholding contribution, separate from the ML algorithm choice. The Global Threshold in row 2 applies a simple $\mu+2\sigma$ rule on raw fare values (not anomaly scores) and is included to illustrate the extreme case of no context awareness at all.
-
-\textbf{Breakdown by Trip Type and Cell Coverage:}
-
-\begin{longtable}{|m{3cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|m{2.5cm}|}
-\hline
-\textbf{Trip Type} & \textbf{FPR (Global)} & \textbf{FPR (4D)} & \textbf{Improvement} & \textbf{\% of Dataset} \\ \hline
-Standard (RatecodeID=1) & 12.4\% & 2.8\% & 4.4$\times$ & 90.4\% \\ \hline
-JFK Airport (RatecodeID=2) & 51.2\% & 5.1\% & 10.0$\times$ & 4.0\% \\ \hline
-Newark Airport (RatecodeID=3) & 68.9\% & 6.7\% & 10.3$\times$ & 0.3\% \\ \hline
-Negotiated (RatecodeID=4) & 42.1\% & 4.9\% & 8.6$\times$ & 2.8\% \\ \hline
-\end{longtable}
-
-The 4D threshold matrix has 588 cells ($7 \times 4 \times 3 \times 7$). Of these, 82\% (482/588) have sufficient training samples ($\geq 100$) to compute reliable context-specific thresholds; the remaining 18\% (106/588) fall back to the global threshold due to data sparsity. For non-fallback cells ($\sim$90\% of records), 4D thresholds achieve FPR = 4.2\%. The Global Threshold comparison (38.7\% vs 4.2\%) illustrates the worst-case failure mode of no context awareness.
-
-\textbf{Key Findings:} (1) 4D context-aware thresholds reduce FPR to 4.2\% vs sklearn IF baseline 4.94\% (1.18$\times$ reduction); (2) Replacing sklearn's global threshold with 4D thresholds improves F1 from 0.64 to 0.87 (+35.9\%) on sklearn IF anomaly scores; (3) Rule-based $\mu+2\sigma$ on raw features fails catastrophically (FPR = 38.7\%); (4) The 4D approach sacrifices Recall (0.86 vs 0.91 for rule-based) but precision improvement justifies this in production. Statistical details in Appendix B.
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.95\textwidth]{figs/generated/F11_fpr.png}}
-\caption{FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds.}
-\label{fig:exp5a_fpr_comparison}
-\end{figure}
-
 \subsection{Temporal Validation}
 
 \textbf{Objective:} Validate that 4D context-aware thresholds remain effective over 26 months without recalibration.
@@ -277,8 +266,6 @@ Months 19--26 & 8.4\% $\to$ 11.2\% & 4.7\% $\to$ 4.9\% \\ \hline
 
 Static thresholds degrade 2.7$\times$ over 26 months (4.2\% $\to$ 11.2\% FPR). IEC-triggered threshold updates maintain FPR at 4.9\% (16.7\% increase vs 166.7\% for static). IEC triggers 12 recalibration events (average 1 every 2.2 months); 83\% use Tier 2 threshold recomputation (no model retraining).
 
-\textbf{Validation of H2:} \checkmark \textbf{SUPPORTED.} 4D context-aware thresholds applied to sklearn IF scores improve F1 from 0.64 to 0.87 (+35.9\%) and reduce FPR from 4.94\% to 4.2\% (1.18$\times$ reduction) compared to sklearn IF's default global threshold. The primary validation criterion for H2 is the F1 improvement (isolating the thresholding contribution) and the FPR reduction. Recall = 0.86 is maintained above the 0.80 threshold. Note: the ablation-weighted F1 of 0.71 (across Easy/Medium/Hard with Online Autoencoder + Memory Module) measures overall system performance and is not directly comparable to the threshold-comparison F1 of 0.87.
-
 % ================================================
 % Grafana Dashboard
 % ================================================
@@ -295,19 +282,7 @@ Static thresholds degrade 2.7$\times$ over 26 months (4.2\% $\to$ 11.2\% FPR). I
     \item \textbf{Most Useful Panel:} $\Delta$\_Score monitoring (Canary-Complex divergence) identified as highest-value signal for drift detection
 \end{itemize}
 
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.9\linewidth]{figs/Thesis_Figures/grafana1.PNG}}
-\caption{Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time.}
-\label{fig:grafana_dashboard_1}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\fbox{\includegraphics[width=0.9\linewidth]{figs/Thesis_Figures/grafana2.PNG}}
-\caption{Grafana Dashboard Panel: $\Delta$\_Score Divergence and Drift Detection Alerts.}
-\label{fig:grafana_dashboard_2}
-\end{figure}
+Figure~\ref{fig:infra_f} and Figure~\ref{fig:infra_g} show the Grafana panels for FPR monitoring and $\Delta$\_Score divergence respectively.
 
 % ================================================
 % 4.3 Chapter Summary
@@ -321,7 +296,6 @@ This chapter validated the two core innovations through experiments spanning 72M
 \begin{enumerate}
 \item \textbf{RQ1 (Online Autoencoder + Memory Module):} \checkmark VALIDATED. Proposed achieves F1=0.828 on Easy-difficulty anomalies (F1=0.751 Medium, F1=0.563 Hard) and F1=0.71 weighted average across Easy/Medium/Hard, with FPR=2.99\% (below 5\% target), meeting all production requirements.
 
-\item \textbf{RQ2 (4D Context-Aware Thresholds):} \checkmark VALIDATED. Reduces FPR significantly compared to global thresholds, with substantial improvement on airport trips.
 \end{enumerate}
 
 All research questions are supported by experimental evidence. Primary metrics were evaluated using the Wilcoxon signed-rank test ($n=5$ seeds, Holm-Bonferroni corrected, $\alpha=0.05$) and the chi-square test ($n=3.08$M records). Effect sizes are reported using Cohen's $d$ for paired comparisons and Cram\'er's $V$ for categorical comparisons. Detailed statistical results are provided in Appendix B. The next chapter concludes the thesis.

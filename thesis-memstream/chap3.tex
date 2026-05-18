@@ -105,6 +105,13 @@ Empirical evidence of concept drift accumulates over the 26-month observation wi
 \label{fig:eda_monthly_volume}
 \end{figure}
 
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=0.9\linewidth]{figs/eda/drift.png}}
+\caption{Drift Detection Mechanism: ADWIN maintains an adaptive window that dynamically adjusts as new data arrives. When the statistical divergence between the reference window (older stable data) and the current window (recent data) exceeds a threshold, a drift alarm is raised, triggering the IEC to recompute thresholds or retrain the model.}
+\label{fig:drift_mechanism}
+\end{figure}
+
 \subsection{Injected Data}
 
 To evaluate detection performance, several synthetic anomaly types are injected into the dataset. Here is a breakdown of these anomalies:
@@ -815,6 +822,77 @@ The Action Replay Worker (\texttt{src/workers/action\_play\_worker.py}) is a Kaf
 \subsubsubsection{Verification Feedback Loop (Phase 4 Reserved)}
 
 The \texttt{VerificationFeedbackLoop} class (\texttt{src/iec/verification\_feedback.py}) is implemented in the codebase but reserved for Phase 4 integration. Its algorithm compares post-retrain metrics against pre-retrain baselines over a 3-window verification period. If consecutive adaptations fail to improve the anomaly rate, the loop escalates (after 3 failures) and ultimately triggers rollback (after 5 failures). Phase 3 uses the circuit breaker as the primary protection against adaptation storms, deferring verification-based rollback to future work.
+
+\subsection{Fault Tolerance}
+
+CA-DQStream achieves end-to-end exactly-once processing semantics through a layered fault tolerance architecture that spans Apache Flink's checkpointing mechanism, Kafka's transactional delivery guarantees, and application-level idempotency patterns. This section details each mechanism, the tradeoffs involved, and the state management strategies that keep the system operational under partial failures.
+
+\subsubsection{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}
+
+Apache Flink implements the Chandy-Lamport distributed snapshot algorithm \citep{chandy_lamport_1985} to provide consistent fault recovery across the processing pipeline. Periodically, the Flink JobManager initiates a checkpoint barrier that propagates through the operator DAG, coordinating a consistent snapshot of all operator state without halting processing.
+
+CA-DQStream configures checkpoint intervals at 45 seconds, a balance between recovery time objective (RTO) and checkpoint storage overhead. Each checkpoint captures three categories of state:
+
+\begin{itemize}
+    \item \textbf{KeyedState (RocksDB):} The deduplication operator's 7-day TTL bitmap, storing Boolean flags keyed by the composite deduplication key. At 45-second intervals, this state is snapshotted to MinIO S3.
+    \item \textbf{Operator State:} The MetaAggregator's window accumulators, the Canary stage's violation counters, and the memory buffer pointers for the FIFO circular buffer.
+    \item \textbf{Kafka Offsets:} The consumer group offsets for each of the six Kafka topics, which serve as the source-of-truth position marker for record replay.
+\end{itemize}
+
+On failure, the Flink JobManager rewinds all operators to the timestamp of the most recent successful checkpoint and replays Kafka records from the captured offsets. This combination ensures that every record is processed exactly once or not at all: records processed before the checkpoint are reflected in the snapshot; records after the checkpoint are replayed from Kafka; records whose processing was in-flight at checkpoint time are recovered by replaying from the offset before the in-flight batch. The exactly-once guarantee applies to all Flink state updates and all Kafka sink writes within the checkpoint barrier window.
+
+The MinIO S3 backend provides the checkpoint storage target, chosen for its S3-compatible API and low-latency PUT operations compared to HDFS. Checkpoint artifacts are retained for 12 hours and automatically pruned by Flink's cleanup policy to bound storage consumption.
+
+\subsubsection{Kafka Transactions and Exactly-Once Semantics}
+
+Kafka's transactional API enables CA-DQStream to achieve exactly-once delivery between the Flink pipeline and downstream Kafka sinks. Each micro-batch of processed records is written to the output topics (e.g., \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}) within a single Kafka transaction identified by a transaction ID scoped to the Flink checkpoint.
+
+The transaction timeout is configured at \texttt{transaction.timeout.ms = 10 minutes}, ensuring that in-flight transactions do not block the broker's transaction log during long-running checkpoints or network partitions. Upon checkpoint recovery, Flink aborts any transactions whose timeout has elapsed without a commit, effectively discarding partial writes. The idempotent producer configuration (\texttt{enable.idempotence = true}) prevents duplicate delivery of records within a single transaction retry cycle.
+
+The combination of Flink checkpointing (which captures Kafka consumer offsets) and Kafka transactions (which guarantees atomic writes to output topics) yields end-to-end exactly-once semantics: records are guaranteed to appear in downstream topics either exactly once or not at all, even under TaskManager failures, JobManager restarts, or broker failures.
+
+\subsubsection{Dead Letter Queue (DLQ) Pattern}
+
+CA-DQStream employs the Dead Letter Queue (DLQ) pattern for records that fail validation at any processing stage \citep{confluent_dead_letter_queue}. Rather than blocking the pipeline on a malformed record, the record is diverted to a quarantine Kafka topic (\texttt{dq-dlq}) with the error reason and operator ID attached as message headers. This design preserves pipeline throughput under noisy input streams.
+
+However, the DLQ pattern introduces a critical tradeoff that practitioners must manage carefully. The DLQ creates an \textit{incomplete} rather than an \textit{error-free} stream. Records removed from the main pipeline are permanently excluded from downstream processing and analytics; they are not automatically corrected, reprocessed, or reconciled. Without active monitoring, the DLQ introduces \textbf{silent data loss}: operators may remain unaware that a fraction of records never reached the anomaly detection or meta-aggregation stages, leading to understated violation rates and biased quality metrics.
+
+CA-DQStream addresses this risk through two countermeasures. First, the DLQ volume is tracked as a quality metric with alerting configured at a 2\% threshold relative to the input volume. Second, a scheduled reconciliation job periodically compares the input topic record count against the sum of the clean output, violation output, and DLQ output, emitting an alert if the reconciliation gap exceeds 0.1\%. These safeguards ensure that DLQ diversion is observable rather than silent.
+
+CA-DQStream does not use DLQ for records flagged as anomalies by the ML model. Anomalous records (high anomaly scores) remain in the main pipeline and are emitted to the \texttt{dq-if-anomalies} topic for downstream analysis, preserving complete throughput metrics.
+
+\subsubsection{Two-Phase Commit (2PC) for Cross-System Atomicity}
+
+When the anomaly detection pipeline must write results to both Kafka and an external database (e.g., a PostgreSQL materialized view for dashboard queries), CA-DQStream employs a two-phase commit (2PC) coordinator embedded in the Flink SinkFunction. The 2PC protocol proceeds in two phases:
+
+\begin{enumerate}
+    \item \textbf{Prepare Phase:} The SinkFunction sends a prepare message to the external database transaction coordinator, which locks the relevant rows and writes a prepare log entry. Simultaneously, the Kafka producer opens a transaction and writes all records with a prepare commit marker.
+    \item \textbf{Commit Phase:} Upon receiving acknowledgment from both participants, the coordinator issues commit messages. The Kafka transaction is committed atomically; the database transaction is committed, releasing the row locks.
+\end{enumerate}
+
+If either participant fails to acknowledge the prepare message within the transaction timeout (10 minutes), the coordinator issues an abort message to both participants, rolling back any partial writes. This protocol guarantees atomicity across heterogeneous systems but introduces coordination overhead and latency proportional to the network round-trip time between the coordinator, the Kafka broker, and the external database. CA-DQStream uses 2PC only for the dashboard write path; the core anomaly detection and meta-aggregation paths rely on the at-least-once Kafka transaction guarantee, which is sufficient for metric computation.
+
+\subsubsection{Idempotent Operations}
+
+CA-DQStream ensures that reprocessing after failures does not create duplicate records or corrupt state through idempotent operations at every sink stage. The Kafka sink is configured with \texttt{processingGuarantee = EXACTLY\_ONCE}, which combines Kafka transactions with Flink checkpointing as described above. For the MinIO Parquet sinks, CA-DQStream uses an upsert pattern with a composite unique key (record UUID + processing timestamp), enabling downstream consumers to deduplicate on read without requiring application-level dedup logic.
+
+The deduplication operator in Layer 1 is itself idempotent: the Boolean flag in KeyedState records whether a given trip ID has been seen, and re-processing the same record during recovery sets the flag to the same value. The memory buffer update is also idempotent: inserting an identical encoded vector into the FIFO buffer twice produces the same buffer state (since FIFO insertion is order-preserving and the buffer has fixed capacity).
+
+\subsubsection{State Size Management}
+
+Efficient state management is critical for the MetaAggregator and deduplication operators, which maintain state proportional to the window size and the deduplication key cardinality. The deduplication operator's state size and Bloom filter optimization are detailed in Section 3.3.3.2.
+
+For the MetaAggregator's window state, CA-DQStream uses the Flink \texttt{AggregateFunction} pattern rather than \texttt{WindowFunction}. The \texttt{AggregateFunction} maintains an accumulating state object that is incrementally updated as each record arrives, rather than storing all records in the window. This prevents out-of-memory errors on large windows (e.g., 1-hour windows with tens of thousands of records) and reduces checkpoint snapshot size proportionally.
+
+The 4D context threshold matrix (588 cells) is stored as broadcast state rather than keyed state, meaning it is replicated in full to every TaskManager slot but is not checkpointed per-key. This design choice reduces keyed state size from $O(\text{keys} \times \text{threshold\_size})$ to $O(1)$ per key, at the cost of replicating the full matrix across all slots. The broadcast state update path is gated through the IEC's model update mechanism, ensuring that threshold changes are propagated atomically with the checkpoint barrier.
+
+\subsubsection{Model Distribution and GC Overhead}
+
+PyFlink executes Python UDFs for the autoencoder inference in separate Python worker processes spawned per TaskManager slot. The model weights and memory buffer are distributed to all workers via Flink's Broadcast State mechanism, which guarantees that all slots receive the same model version before the model swap.
+
+On a 4-node cluster with 4 TaskManager slots per node (16 total slots), a single model update generates approximately 768 MB of aggregate network traffic ($16 \times 48$ MB per model artifact). The receiving TaskManager processes the incoming broadcast state in a dedicated thread pool, deserializing the model artifact and loading it into the Python worker process heap. This operation triggers garbage collection in the JVM; with G1GC configured on a 4 GB heap, each model update produces a 150--200 ms GC pause per TaskManager.
+
+With an update frequency of 2--3 model updates per day (driven by the IEC's Tier 3 triggers), the total daily GC overhead is approximately $3 \times 4 \times 200\text{ ms} = 2.4$ seconds, representing less than 0.01\% of daily uptime (86,400 seconds). The pipeline continues processing during these GC pauses due to Flink's operator chaining and the async checkpointing mechanism, which overlaps checkpoint uploads with ongoing processing.
 
 \subsection{Fault Tolerance}
 

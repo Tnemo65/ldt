@@ -1,0 +1,1379 @@
+================================================================================
+PHAN 1: MO TA HOAN TOAN FLOW (END-TO-END DATA FLOW)
+================================================================================
+
+1. TONG QUAN HE THONG
+
+CA-DQStream la he thong monitoring data quality (DQ) cho streaming data, xay dung
+tren Apache Flink, Apache Kafka, MinIO, Prometheus, va Grafana.
+
+Dieu di: Thay vi kiem tra DQ batch (nhu Great Expectations, Soda Core, AWS Deequ),
+CA-DQStream kiem tra DQ theo thoi gian thuc tren data stream, dong thoi tu dong
+thich ung voi concept drift (su thay doi phan phoi du lieu theo thoi gian).
+
+Output: F1=0.828 (Easy), FPR=2.99%, AUC-PR=0.959, drift detection trung binh 21h.
+
+2. CAU TRUC 4 LAYER (TU TREN XUONG DUOI)
+
+NYC Taxi Records
+       |
+       v
+LAYER 1: Schema Validation + Deduplication + Canary (6 rules)
+       |_________________________|
+       |                         |
+   DLQ (violations)       Valid records
+   (Kafka topic)               |
+   dq-schema-violations        v
+                         LAYER 2: Sequential Processing
+                         (Canary 7 rules -> MemStream AE+Memory)
+                                  |
+                         Layer 2A: Canary (7 rules, <5ms/record)
+                         Layer 2B: Complex (AE + Memory, <50ms/record)
+                                  |
+                                  v
+                         LAYER 3: MetaAggregator
+                         (1-min tumbling window, per neighborhood, 6 metrics)
+                                  |
+                                  v
+                         LAYER 4: IEC (Intelligent Evolution Controller)
+                         (ADWIN drift detection -> do_nothing / quick_retrain)
+                                  |
+                    ______________|_______________
+                    |              |              |
+              MinIO Storage  Kafka Topics    Prometheus Metrics
+
+3. FLOW CHI TIET QUA TUNG LAYER
+
+=== LAYER 1: Ingestion & Validation ===
+
+Kafka Topic: taxi-nyc-raw-v2
+       |
+       v
+SafeParseJsonFunction
+       |- Parse JSON thanh dict
+       |- Neu parse loi -> emit_to_dlq() -> Kafka topic dq-stream-unified, category PARSE_ERROR
+       |- Tra ve sentinel dict {_dlq: True, ...} (KHONG None de tranh crash Flink)
+       |
+       v
+WatermarkAssigner (Event-Time)
+       |- Trich xuat pickup_datetime tu 6 format khac nhau
+       |- Tao WatermarkStrategy voi boundedOutOfOrderness=5 giay
+       |- Su dung event-time de dam bao xu ly dung thu tu thoi gian
+       |
+       v
+AddTripIdFunction
+       |- Tao composite trip_id: f"{pickup_datetime}_{PULocationID}_{fare_amount}_{passenger_count}"
+       |- trip_id dung lam key cho deduplication
+       |
+       v
+DeduplicatorFunction (Keyed by trip_id)
+       |- Su dung Flink KeyedState voi 7-day TTL (604800 giay)
+       |- Bloom filter pre-check (1% FPR, ~1.2MB) de giam 90% I/O RocksDB
+       |- Moi record moi -> danh dau da thay, tra ve True
+       |- Duplicate -> tra ve False, bo qua
+       |- Max state size: ~56MB per TaskManager slot
+       |
+       v
+SchemaValidator (FilterFunction)
+       |- Kiem tra 5 required fields: trip_distance, fare_amount, PULocationID, DOLocationID, passenger_count
+       |- Kiem tra PULocationID trong khoang 1-263
+       |- ValidFilter -> Kafka topic dq-stream-unified (valid stream)
+       |- InvalidFilter -> Kafka topic dq-stream-unified, category SCHEMA_ERROR
+       |
+       v
+CHIA NHANH:
+
+   valid_stream ----> CanaryRulesValidator (7 rules)
+                            |
+                            v
+              +-------------+-------------+
+              |                           |
+         Violation?                   Clean?
+              |                           |
+              v                           v
+         emit to Kafka             Layer 2
+    dq-stream-unified (CANARY_VIOLATION)
+    topic dq-hard-rule-violations
+
+
+=== LAYER 2: Sequential Processing ===
+
+Sau Canary, tat ca cac record (bao gom ca canary violation) deu di qua
+MemStreamScoringOperator. Record nao co canary_violation=True se co
+anomaly_score cao hon do da bi danh gia la vi pham.
+
+CHIA NHANH CANARY:
+
+   canary_stream (has_violation=True)
+       -> MetaAggregator (voi anomaly_score mac dinh cao)
+       -> IEC
+
+   clean_stream (has_violation=False)
+       -> ExtractNeighborhoodFunction
+       -> MemStreamScoringOperator (AE + Memory scoring)
+       -> MetaAggregator
+
+MemStreamScoringOperator (MapFunction, moi record goi 1 lan):
+
+   STEP 1: 34D Feature Extraction (MemStreamVectorizer.transform)
+       Record dict -> numpy array 34 chieu:
+       - 6 raw: trip_distance, dur_min, fare_amount, passenger_count, total_amount, speed_mph
+       - 3 derived: fare_per_mile, fare_per_min, fare_per_pax
+       - 3 temporal: pickup_hour, pickup_dow, is_weekend
+       - 4 spatial: PU_Grid_X/Y, DO_Grid_X/Y (16x17 grid)
+       - 4 normalized: fare_per_mile_norm(/2.5), fare_per_min_norm(/0.67), speed_norm(/12), pax_per_mile
+       - 5 cyclic: hour_sin, hour_cos, dow_sin, dow_cos, dist_squared
+       - 5 one-hot: ratecode_1...ratecode_5
+       - 4 misc: is_night, log_fare, log_distance, inter_borough
+
+   STEP 2: Normalize (StandardScaler fitted during warmup)
+       x_norm = (x - mean) / (std + 1e-8)
+       mean/std duoc tinh tu ultra-clean training data, frozen sau warmup
+
+   STEP 3: AE Encoding
+       z = ae.encode(x_norm)  # [34] -> [68] -> [34] (AE output, NOT hidden layer)
+       PyTorch: z = ReLU(Linear(x_norm, 34, 68))
+
+   STEP 4: kNN Scoring on Memory Buffer
+       Memory buffer: FIFO circular, 50,000 vectors x 34 chieu = ~6.8MB per neighborhood
+       Tim K=10 neighbors gan nhat trong memory (L1 distance):
+         dist_i = sum(|z - memory[i]|) for i in 0..N-1
+         top_k = 10 khoang cach nho nhat
+       Score = sum(top_k_distances)  # voi gamma=0.0, chi lay neighbor gan nhat
+
+   STEP 5: ContextBeta Ratio Scoring
+       Tra cuu threshold theo 4 chieu:
+         - neighborhood (10 gia tri)
+         - time_window (4: night/morning/afternoon/evening)
+         - day_type (3: weekday/weekend/holiday)
+         - trip_type (7: ratecode categories)
+       Cell ID = (is_special << 2) | (is_night << 1) | is_weekend
+       Tra cuu threshold[neighborhood][cell_id] -> beta
+       Normalized_score = raw_score / beta
+
+   STEP 6: Anomaly Decision
+       Neu normalized_score >= 1.0 -> is_anomaly = True
+       Neu < 1.0 -> is_anomaly = False
+
+   STEP 7: Conditional Memory Update
+       Neu is_anomaly = False (score < beta):
+         z_detach = z.detach()  # Cat gradient
+         memory.update(z_detach)  # Insert vao FIFO buffer
+       Neu is_anomaly = True:
+         KHONG update memory (tranh contamination)
+
+   STEP 8: Retrain Signal Polling (Polling Interval = 60 records)
+       - Poll MinIO cadqstream-drift/iec/retrain/{nb}/
+       - Neu co signal moi (timestamp > last_checked):
+         + Reset memory buffer for affected neighborhood
+         + Clear warmup buffer
+         + Re-trigger warmup sequence
+       - HMAC verification (SHA256) tren moi signal
+
+   STEP 9: Beta Polling (Cache TTL = 1.1s)
+       - Poll MinIO cadqstream-drift/iec/betas/{nb}/
+       - Neu co beta moi -> cap nhat local ContextBeta
+       - HMAC verification
+
+   STEP 10: Append to record
+       record['anomaly_score'] = normalized_score
+       record['is_anomaly'] = is_anomaly
+       record['neighborhood'] = neighborhood_name
+       record['score_components'] = {...}
+
+SequentialFinalDecisionFunction (MapFunction):
+   - Neu has_violation=True (canary) -> final_decision = 'CANARY_VIOLATION'
+   - Neu is_anomaly=True (ML) -> final_decision = 'ANOMALY'
+   - Con lai -> final_decision = 'PASS'
+
+
+=== LAYER 3: Meta-Aggregation ===
+
+Nhan output tu LAYER 2, tinh 6 meta-metrics moi 1 phut, moi neighborhood.
+
+KEYING: records duoc key theo neighborhood (10 neighborhoods)
+         -> 10 parallel window streams
+
+1-MINUTE TUMBLING WINDOW (ProcessingTime):
+
+MetaAggregateFunction (AggregateFunction, incremental):
+   Moi record den:
+   - records_total += 1
+   - anomaly_count += 1 neu is_anomaly
+   - violation_count += 1 neu has_violation
+   - anomaly_scores_sum += anomaly_score
+   - Kiem tra NULL fields -> null_count += 1
+
+   Window emit (khi window ket thuc 1 phut):
+   - null_rate = null_count / records_total
+   - violation_rate = violation_count / records_total
+   - anomaly_rate = anomaly_count / records_total
+   - volume = records_total
+   - avg_anomaly_score = anomaly_scores_sum / anomaly_count (neu > 0)
+   - delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + 1e-6)
+
+MetaWindowProcessFunction (ProcessWindowFunction):
+   - Them window metadata (start, end, watermark)
+   - Emit 1 record per neighborhood per window
+   -> Kafka topic dq-meta-stream
+
+Output moi window (1 record):
+   {
+     neighborhood: 'manhattan',
+     window_start: '2026-05-18T12:00:00',
+     window_end: '2026-05-18T12:01:00',
+     volume: 1500,
+     null_rate: 0.02,
+     violation_rate: 0.05,
+     anomaly_rate: 0.03,
+     avg_anomaly_score: 0.15,
+     delta_score: 0.10,
+   }
+
+
+=== LAYER 4: Intelligent Evolution Controller ===
+
+Nhan meta-metrics tu Layer 3, monitor drift, quyet dinh adaptation strategy.
+
+IECOperator (MapFunction, moi meta-record goi 1 lan):
+
+   STEP 1: Update 60 ADWIN Instances
+       MultiInstanceADWIN: 10 neighborhoods x 6 metrics = 60 instances
+       Moi instance nhan 1 gia tri meta-metric:
+         ADWIN instance.update(value) -> drift_detected (True/False)
+       ADWIN logic:
+         - Duy tri sliding window W
+         - Tach W thanh W0 (cu) va W1 (moi)
+         - Tinh diff = |mean(W0) - mean(W1)|
+         - Tinh threshold = sqrt((1/2m) * ln(4n/delta))
+         - Neu diff > threshold -> DRIFT DETECTED
+           + Cat nua cu cua W (W0)
+           + W = W1
+           + Tra ve True
+
+   STEP 2: DriftAggregator
+       - add_drift(neighborhood, metric) cho moi drift event
+       - assess_drift_severity() -> NONE/LOW/MODERATE/HIGH
+         NONE: 0 drifts trong rolling window 10
+         LOW: 1-2 drifts
+         MODERATE: 3-5 drifts
+         HIGH: 6+ drifts
+       - predict_strategy(severity):
+         NONE/LOW/MODERATE -> do_nothing
+         HIGH -> quick_retrain
+
+   STEP 3: Check 3 Hard Triggers (bat buoc quick_retrain bat ke severity)
+       Trigger A (ADWIN Drift Days):
+         - Neu ADWIN drift 7+ consecutive days -> quick_retrain
+       Trigger B (Anomaly Rate):
+         - Neu anomaly_rate > 15% trong 3+ consecutive days -> quick_retrain
+       Trigger C (kNN Distance):
+         - Neu avg_knn_distance > 2x baseline -> quick_retrain
+         - Baseline = mean of first 50 post-retrain kNN distances
+
+   STEP 4: CircuitBreaker Gate
+       - should_allow_action() -> True/False
+         CLOSED: cho phep action
+         OPEN: neu > 10 consecutive actions -> block 5 phut
+         HALF_OPEN: sau cooldown, cho phep 3 actions de test
+       - Neu circuit OPEN -> tra ve do_nothing (coi nhu binh thuong)
+
+   STEP 5: Execute Strategy
+       do_nothing:
+         - Khong lam gi ca
+         - Khong increment circuit breaker counter
+
+       quick_retrain:
+         - Ghi retrain signal to MinIO:
+           Path: s3://cadqstream-drift/iec/retrain/{neighborhood}/{timestamp}.json
+           Signal: {neighborhood, severity, triggers, timestamp, hmac}
+         - HMAC-SHA256 signed (MEMSTREAM_MODEL_SIGNING_KEY)
+         - record_action() -> tang counter
+         - on_action_success() -> reset counter, reset kNN baseline
+         - on_action_failure() -> tang counter, co the trip()
+
+   STEP 6: Emit Metrics to Prometheus (cadqstream-metrics:9250)
+       - iec_decisions_total{strategy=...}
+       - iec_drift_detected_total
+       - iec_confidence_score
+       - iec_circuit_breaker_state
+
+   STEP 7: Append to record
+       record['drifts_detected'] = [...drift events...]
+       record['iec_strategy'] = 'do_nothing' hoac 'quick_retrain'
+       record['iec_confidence'] = 0.0 - 1.0
+       record['severity'] = severity_level
+
+
+=== OUTPUT ROUTING ===
+
+MinIO Storage:
+  cadqstream-raw/taxi_trips_raw/          - Layer 1 valid records (Parquet)
+  cadqstream-violations/schema/            - Schema validation failures
+  cadqstream-violations/canary/            - Canary rule violations
+  cadqstream-anomalies/scores/             - MemStream anomaly scores
+  cadqstream-metrics/meta/                 - MetaAggregator metrics (1-min windows)
+  cadqstream-drift/iec/                    - IEC decisions + alerts
+
+Kafka Topics:
+  taxi-nyc-raw-v2              - Input raw data
+  dq-stream-unified            - Unified output (tat ca event types)
+  dq-schema-violations         - Schema failures
+  dq-hard-rule-violations      - Canary violations
+  dq-meta-stream               - MetaAggregator output
+  iec-action-replay            - IEC retrain signals (consumer: Action Replay Worker)
+  iec-action-dlq               - IEC DLQ (sau 10 retries that bai)
+
+Prometheus Metrics (scrape targets):
+  Flink JobManager:9249  - Flink system metrics
+  Flink TaskManager:9250 - Flink task metrics
+  cadqstream-metrics:9250 - Custom DQ metrics
+  Kafka Exporter:9308    - Kafka consumer lag, throughput
+  Node Exporter:9100     - CPU, memory, disk
+
+Grafana Dashboards:
+  Pipeline Overview       - Tong quan 4 layers
+  Data Quality            - Violation rates, anomaly rates
+  Kafka Overview          - Consumer lag, throughput
+  Infrastructure          - Flink jobs, TaskManagers
+
+
+================================================================================
+PHAN 2: FEATURE ENGINEERING
+================================================================================
+
+1. TAI SAO CAN FEATURE ENGINEERING?
+
+Raw data NYC Taxi co nhieu van de:
+- 5 columns cung NULL 4,091,232 records (9.94%) -> systematic failure
+- Negative fares (1.78%), zero distance (1.89%), impossible speeds (max 5M mph)
+- Ratecode variance: Standard $15.42, JFK $52.18, Newark $68.44
+- Bimodal fare distribution (mode $8-12 in-borough, $50-60 airport)
+
+Feature engineering giai quyet 3 van de:
+a) SCALE: $50 fare la binh thuong cho JFK nhung bat thuong cho 0.5-mile trip
+   -> Ratio features (fare_per_mile, fare_per_min) normalize for scale
+b) CONTEXT: Fare distribution khac nhau theo thoi gian, dia diem, ratecode
+   -> Temporal, spatial, cyclic features capture context
+c) ANOMALY SIGNALS: Mot so fraud chi phat hien duoc khi xet nhieu features cung luc
+   -> multivariate analysis qua AE
+
+2. 34D FEATURE VECTOR (chi tiet)
+
+| # | Feature | Category | Cong thuc / Gia tri |
+|---|---------|----------|---------------------|
+| 0 | trip_distance | Raw | Trip distance (miles) |
+| 1 | dur_min | Raw | (dropoff - pickup).seconds / 60 |
+| 2 | fare_amount | Raw | Base fare ($) |
+| 3 | passenger_count | Raw | So khach (1-9) |
+| 4 | total_amount | Raw | fare + extras + taxes + tips + tolls |
+| 5 | speed_mph | Raw | trip_distance / (dur_min/60), clip upper=60 |
+| 6 | fare_per_mile | Derived | fare_amount / trip_distance |
+| 7 | fare_per_min | Derived | fare_amount / dur_min |
+| 8 | fare_per_pax | Derived | fare_amount / passenger_count |
+| 9 | pickup_hour | Temporal | Hour (0-23) |
+| 10 | pickup_dow | Temporal | Day of week (0=Mon) |
+| 11 | is_weekend | Temporal | 1 if dow >= 5, else 0 |
+| 12 | PU_Grid_X | Spatial | (PULocationID-1) % 16 |
+| 13 | PU_Grid_Y | Spatial | (PULocationID-1) // 16 |
+| 14 | DO_Grid_X | Spatial | (DOLocationID-1) % 16 |
+| 15 | DO_Grid_Y | Spatial | (DOLocationID-1) // 16 |
+| 16 | fare_per_mile_norm | Normalized | min(fare_per_mile / 2.5, 20) |
+| 17 | fare_per_min_norm | Normalized | min(fare_per_min / 0.67, 20) |
+| 18 | speed_norm | Normalized | min(speed_mph / 12.0, 20) |
+| 19 | pax_per_mile | Normalized | passenger_count / trip_distance |
+| 20 | hour_sin | Cyclic | sin(2pi * hour / 24) |
+| 21 | hour_cos | Cyclic | cos(2pi * hour / 24) |
+| 22 | dow_sin | Cyclic | sin(2pi * dow / 7) |
+| 23 | dow_cos | Cyclic | cos(2pi * dow / 7) |
+| 24 | dist_squared | Nonlinear | trip_distance^2 |
+| 25 | ratecode_1 | One-hot | 1 if RatecodeID=1 (Standard), else 0 |
+| 26 | ratecode_2 | One-hot | 1 if RatecodeID=2 (JFK), else 0 |
+| 27 | ratecode_3 | One-hot | 1 if RatecodeID=3 (Newark), else 0 |
+| 28 | ratecode_4 | One-hot | 1 if RatecodeID=4 (Negotiated), else 0 |
+| 29 | ratecode_5 | One-hot | 1 if RatecodeID=5 (Special), else 0 |
+| 30 | is_night | Misc | 1 if hour >= 20 or hour <= 6 |
+| 31 | log_fare | Misc | log(1 + fare_amount) |
+| 32 | log_distance | Misc | log(1 + trip_distance) |
+| 33 | inter_borough | Misc | |PU_Grid_Y - DO_Grid_Y| |
+
+3. TAI SAO TUNG FEATURE CU THE?
+
+**Ratio features (6,7,8):** Giam coefficient of variation 10-100 lan.
+   $50 fare cho 0.5-mile trip co fare/mile = $100/mile -> bat thuong
+   $50 fare cho 10-mile trip co fare/mile = $5/mile -> binh thuong
+   Ratio features doc lap voi gia tri tuyet doi cua fare.
+
+**Normalized features (16,17,18):** Chia cho empirical median de reduce variance.
+   Denominator 2.5 = median NYC fare/mile
+   Denominator 0.67 = median NYC fare/minute
+   Denominator 12.0 = median NYC speed (mph)
+
+**Cyclic features (20-24):** Bao toan proximity:
+   Hour 23 va hour 0 cach nhau 1 hour nhung Euclidean distance = 1.0
+   Cyclic encoding: sin/cos(2pi*hour/24) cho khoang cach = 0.26 (gan nhau hon)
+   Quay 23h -> 0h la transition binh thuong, khong phai anomaly.
+
+**One-hot ratecode (25-29):** JFK co dinh $52, Newark co dinh $68.
+   Mot $55 fare la binh thuong cho JFK nhung bat thuong cho Standard.
+   One-hot cho phep model phan biet context.
+
+**Log transforms (31,32):** Compress high-fare range, giam outlier influence.
+   Fare $335,544 co log(1+335544) = 12.72, gần voi $100 (log=4.62)
+   Khong log: $335,544 >> $100, se dominate gradient.
+
+4. SPATIAL GRID (16x17 = 272 cells)
+
+263 TLC zones map vao 16 cot x 17 hang grid.
+Grid cho phep spatial similarity: 2 zones gan nhau co grid coords gan nhau.
+PU_Grid_X = (zone_id - 1) % 16  -> 0-15
+PU_Grid_Y = (zone_id - 1) // 16 -> 0-16
+
+5. NEIGHBORHOOD MAPPING (10 neighborhoods)
+
+Cong tac 263 TLC zones thanh 10 neighborhoods:
+
+| Index | Name | Zone Range | Dac diem |
+|-------|------|------------|----------|
+| 0 | manhattan | 1-43 | Cuc hot, variance cao |
+| 1 | brooklyn | 44-103 | Trung binh |
+| 2 | queens_lower | 104-127 | Trung binh |
+| 3 | queens_upper | 128-148 | Yên tuong |
+| 4 | bronx | 149-161 | Thap volume |
+| 5 | staten_island | 162-263 | Rat it trips |
+| 6 | ewr | Newark Airport | Ratecode 3 |
+| 7 | jfk | JFK Airport | Ratecode 2 |
+| 8 | nalp | Not-a-location | Water/speical |
+| 9 | unknown | Fallback | Khong ro zone |
+
+MUC DICH: Threshold khac nhau cho tung neighborhood.
+Airport zones co threshold thap ($18.3) vi clustering chặt.
+Residential zones co threshold cao ($62.7) vi variance cao.
+Global threshold ($45.46) se false positive nhieu o airports,
+false negative nhieu o residential.
+
+6. CONTEXT CELL (8 cells)
+
+Cell ID = (is_special << 2) | (is_night << 1) | is_weekend
+
+| Cell ID | Name | is_special | is_night | is_weekend |
+|---------|------|------------|----------|------------|
+| 0 | std_day_weekday | 0 | 0 | 0 |
+| 1 | std_night_weekday | 0 | 1 | 0 |
+| 2 | std_day_weekend | 0 | 0 | 1 |
+| 3 | std_night_weekend | 0 | 1 | 1 |
+| 4 | sp_day_weekday | 1 | 0 | 0 |
+| 5 | sp_night_weekday | 1 | 1 | 0 |
+| 6 | sp_day_weekend | 1 | 0 | 1 |
+| 7 | sp_night_weekend | 1 | 1 | 1 |
+
+is_special = ratecode > 1 (JFK, Newark, Negotiated, Special)
+is_night = hour >= 20 or hour <= 6 (NOT >= 18)
+is_weekend = dow >= 5
+
+7. 4D THRESHOLD MATRIX
+
+Tong so cells: 10 neighborhoods x 8 context cells = 80 cells
+Nhung thuc te ~588 cells hoat dong (trip_type 7 x time 4 x day 3 x nb 10)
+
+Moi cell co 1 threshold = 95th percentile cua anomaly scores
+trong training data thuoc cell do.
+
+Cell nao co < 11 training samples -> fallback to global 95th = $45.46
+
+
+================================================================================
+PHAN 3: ADWIN VA METER HOAT DONG THE NAO
+================================================================================
+
+1. ADWIN (ADAPTIVE WINDOWING)
+
+**Muc dich:** Phat hien concept drift trong streaming data.
+
+Motivation: Neu phan phoi du lieu thay doi (drift), model hoc tu qua khu se
+khong con chinh xac nua. Can phat hien drift de trigger retraining.
+
+**Thuật toán ADWIN (chi tiet mathematical):**
+
+ADWIN duy tri mot sliding window W chua nhung gia tri gan nhat.
+
+Khi mot gia tri moi x den:
+1. Append x vao cuoi W
+2. Neu len(W) > max_window (500): trim oldest entries
+3. Tach W thanh 2 sub-windows: W0 (older) va W1 (newer)
+   - recent_size = min(n//4, 100)
+   - W1 = W[-recent_size:] (100 phan tu cuoi)
+   - W0 = W[:-recent_size] (tat ca truoc do)
+4. Tinh means:
+   - mean_W0 = sum(W0) / len(W0)
+   - mean_W1 = sum(W1) / len(W1)
+5. Tinh diff = |mean_W1 - mean_W0|
+6. Tinh threshold:
+   - Hoeffding bound: epsilon = sqrt((1/(2*m)) * ln(2n/delta))
+   - m = 2*|W0|*|W1| / (|W0|+|W1|) (harmonic mean)
+   - n = len(W)
+   - delta = 0.002 (confidence parameter, configurable per metric)
+7. Neu diff > epsilon:
+   - DRIFT DETECTED = True
+   - Cat W0 ra khoi W: W = W1 (reset to newer sub-window)
+   - Tra ve True
+8. Neu khong: tra ve False
+
+**Thuc te trong CA-DQStream:**
+
+60 ADWIN instances (10 neighborhoods x 6 metrics):
+- volume ADWIN (delta=0.005, 5-min window)
+- null_rate ADWIN (delta=0.001, 1-min window)  <- NHAT SENSITIVE
+- violation_rate ADWIN (delta=0.002, 1-min window)
+- anomaly_rate ADWIN (delta=0.001, 1-min window) <- SENSITIVE
+- avg_anomaly_score ADWIN (delta=0.001, 1-min window)
+- delta_score ADWIN (delta=0.001, 5-min window)
+
+Vi du: null_rate ADWIN co delta=0.001 (rat sensitive), chi can
+2.9% diff la phat hien drift. Violation_rate co delta=0.002, can 4.1% diff.
+
+Neu 1 neighborhood co drift tren 7+ consecutive days -> Trigger A fire.
+
+
+2. METER (MULTI-INSTANTIATED ADWIN)
+
+**Muc dich:** Theo doi nhieu metrics cung luc, tai nhieu locations cung luc.
+
+METER la extended ADWIN co nhieu instances hoat dong song song.
+
+**Cau truc trong CA-DQStream:**
+
+MultiInstanceADWIN class quan ly 60 instances:
+- 10 neighborhoods * 6 metrics = 60 SimpleADWIN objects
+- Moi instance co independent window, independent state
+- Drift trong Manhattan khong anh huong Brooklyn
+
+**ADWIN-U (Unsupervised Extension):**
+
+ADWIN goc chi hoat dong voi supervised data (co labels).
+ADWIN-U mo rong cho unsupervised setting:
+
+a) Higher-order statistics:
+   - Skewness (gamma_1): phat hien asymmetric shifts
+     gamma_1 = E[(X-mu)^3] / sigma^3
+   - Kurtosis (gamma_2): phat hien tail-mass changes
+     gamma_2 = E[(X-mu)^4] / sigma^4 - 3
+
+b) Jensen-Shannon divergence:
+   D_JS(P0 || P1) thay the mean comparison
+   cho distributional-level drift detection
+
+Trong CA-DQStream, ADWIN-U chu y:
+- 6 meta-metrics la scalar summaries (da tinh tu raw data)
+- ADWIN operate tren scalar metrics, khong operate tren raw features
+- Delta_score = |violation_rate - anomaly_rate| / (...) la 1 meta-metric dac biet
+  the hien disagreement giua Canary va Complex stage
+
+**Tại sao dung meta-metrics thay vi raw data?**
+
+1. Interpretability: drift tren null_rate co nghia ro rang (upstream failure)
+   drift tren raw fare chi la "co thay doi" nhung khong ro gi
+2. Dimensionality: Raw la 34D, meta-metrics la 6D -> 6 ADWIN instances thay vi 34
+3. Statistical power: Meta-metrics la aggregate, variance thap hon raw data
+4. Noise robustness: Meta-metrics loc noise, chua signal drift thuc su
+
+
+================================================================================
+PHAN 4: PRETRAIN, QUICK RETRAIN, ADWIN THRESHOLD RECOMPUTE
+================================================================================
+
+1. OFFLINE PRETRAIN (truoc khi deploy)
+
+**Muc dich:** Hoc weight cua Autoencoder va compute 4D threshold matrix
+tu ultra-clean training data.
+
+**Training data preparation (3-stage funnel):**
+
+INPUT: 3,000,000 records (January 2024)
+
+Stage 1: Physical Violation Filter
+- Loai bo: negative fare, zero distance, impossible timestamps,
+  GPS outliers (lat not in [40.4, 41.0]), ratecode-zone inconsistencies
+- Con lai: 2,923,500 records (loai bo 76,500 = 2.55%)
+
+Stage 2: IQR Outlier Removal
+- Ap dung IQR 1.5x method tren fare, distance, speed, duration
+- [Q1 - 1.5*IQR, Q3 + 1.5*IQR] lai acceptable
+- Con lai: 2,896,900 records (loai bo 26,600 = 0.89%)
+
+Stage 3: Verification
+- Loai bo suspicious patterns (short trip + high fare)
+- Con lai: 2,860,000 records (loai bo 36,900 = 1.23%)
+
+OUTPUT: 2,860,000 ultra-clean records (95.52% of input)
+
+**Autoencoder Training:**
+
+Data split:
+- 10% dau tien (286,000): tinh mean/std cho normalization
+- 80% giua (2,288,000): train AE
+- 10% cuoi (286,000): memory initialization
+
+Training config:
+- Architecture: 34D -> 68D -> 34D (ReLU throughout, tied weights W2=W1^T)
+- Corruption: x_noise = x + epsilon, epsilon ~ N(0, 0.1^2)
+- Loss: MSE(x, x_hat)
+- Optimizer: Adam, lr=1e-3
+- Batch size: 256
+- Early stopping: patience=20 epochs
+- Target: ~50 epochs convergence
+
+**4D Threshold Matrix Computation:**
+
+Sau khi train AE xong:
+1. Encode all 2,860,000 records -> Z (2,860,000 x 34)
+2. Voi moi record, tinh anomaly_score = L1 kNN distance (K=10) trong
+   memory buffer (khoi tao tu 10% cuoi data)
+3. Gom nhom theo (neighborhood, cell_id)
+4. Voi moi cell co >10 samples: threshold = 95th percentile(scores)
+5. Cell nao co <=10 samples: threshold = global 95th = $45.46
+
+Memory initialization:
+- Dung 10% cuoi data (286,000 records), sequential (KHONG shuffle)
+- Insert vao FIFO buffer 50,000 vectors
+- Buffer representation: normal patterns gan nhat
+
+Output artifacts:
+- ae_weights.pt: PyTorch state dict cua AE
+- context_thresholds_v2.json: 4D threshold matrix (80 values)
+- normalization_params.json: {mean: [34], std: [34]}
+- neighborhood_mapping.json: zone -> neighborhood index
+
+
+2. QUICK RETRAIN (khi drift phat hien)
+
+**Trigger conditions (bat buoc, boi qua severity):**
+
+Trigger A: ADWIN drift 7+ consecutive days
+Trigger B: anomaly_rate > 15% trong 3+ consecutive days
+Trigger C: kNN distance > 2x baseline
+
+Khi bat ky trigger nao fire:
+1. IECController ghi signal to MinIO:
+   s3://cadqstream-drift/iec/retrain/{neighborhood}/{timestamp}.json
+   Signal bao gom: neighborhood, severity, triggers, hmac_signature
+
+2. Action Replay Worker (Kafka consumer) nhan signal:
+   a. Verify HMAC (tranh fake signals)
+   b. Call ML service /api/strategy/quick_retrain
+   c. Exponential backoff neu that bai (2^k seconds, jitter)
+
+3. ML service thuc hien quick_retrain:
+   a. Reset memory buffer for affected neighborhood
+   b. Clear warmup buffer
+   c. Bat dau gather next 8,192 normal records (score < current beta)
+   d. Incremental AE training tren new data (optional, lightweight)
+   e. Recompute thresholds for affected neighborhood only
+   f. Save updated model to MinIO
+   g. Broadcast new model to all Flink workers
+
+4. MemStreamScoringOperator (Flink operator):
+   - Poll MinIO every 60 records
+   - Khi phat hien retrain signal (timestamp > last_checked):
+     * Reset local memory buffer
+     * Clear warmup state
+     * Reload new model weights
+     * Reload new thresholds
+     * Reset warmup tracking
+
+**Quick retrain vs full retrain:**
+
+Quick retrain:
+- Chi recompute thresholds, khong retrain AE weights
+- Memory buffer reset, nhung AE weights giu nguyen
+- Chi can 8,192 samples moi (~1-2 hours stream)
+- Chi tinh lai threshold cho affected neighborhood
+
+Full retrain (reserved for future):
+- Retrain AE weights from scratch
+- Can 2,860,000 clean records
+- Chi khi drift cuc ki nang hoac AE weights corruption
+
+
+3. ADWIN THRESHOLD RECOMPUTE (khi drift detected)
+
+**Co che ADWIN threshold recompute:**
+
+Khi ADWIN phat hien drift tren 1 metric:
+1. Drift event duoc emit
+2. DriftAggregator nhan, assess severity
+3. Neu severity = HIGH (6+ drifts) -> quick_retrain
+4. Action Replay Worker thuc hien retrain
+5. Memory buffer reset
+6. New thresholds duoc compute
+7. New thresholds written to MinIO
+8. All Flink operators poll and reload
+
+**ADWIN instances reset:**
+
+Khi drift detected, SimpleADWIN tra ve True:
+- Window W bi cat: W = W1 (chi giu nua moi)
+- Reset total sum
+- Khong reset threshold (threshold lai tu MemStream, khong tu ADWIN)
+
+ADWIN reset hoan toan (reset_all()) chi xay ra:
+- Khi operator restart
+- Khi manual reset duoc goi
+
+
+================================================================================
+PHAN 5: MODEL AE + KNN HOAT DONG THE NAO
+================================================================================
+
+1. AUTOENCODER (DENOISING AUTOENCODER)
+
+**Kien truc:**
+
+Encoder: x (34D) -> Linear(34, 68) -> ReLU -> h (68D)
+Decoder: h (68D) -> Linear(68, 34) -> ReLU -> x_hat (34D)
+
+Tied weights: W_decoder = W_encoder^T (giup giam 50% parameters)
+
+**Training:**
+
+Input: x (34D) duoc corrupt voi noise:
+  x_corrupt = x + epsilon, epsilon ~ N(0, 0.1^2)
+
+Loss: L = MSE(x, x_hat) = sum((x_i - x_hat_i)^2)
+
+Optimizer: Adam, lr=1e-3
+Batch size: 256
+Early stopping: 20 epochs patience
+
+**Tai sao Denoising?**
+
+Neu AE chi hoc identity mapping (x_hat = x), latent space vo nghia.
+Noise buoc AE hoc feature extraction that su, khong chỉ copy.
+
+Example:
+- Normal trip: x gần với manifold -> sau denoising van gần x_hat
+- Anomaly: x xa manifold -> sau denoising van xa x_hat (high loss)
+
+**Inference (chi dung Encoder, KHONG dung Decoder):**
+
+Test time: z = encoder(x_norm)  # [34] -> [68] -> [34]
+
+Decoder chi can cho training. Inference chi can encoder output z.
+
+**Tai sao dung AE output (34D), khong phai hidden layer (68D)?**
+
+MemStream paper (Bhatia et al., 2022) Proposition 2:
+- Neu dùng hidden layer z (68D), ton tai "null-space anomalies"
+  (vectors far from origin but close to hyperplane) -> false negatives
+- AE output z_hat (34D) khong co null-space, an toan hon
+
+
+2. L1 K-NN SCORING
+
+**Memory Module:**
+
+FIFO circular buffer:
+- Capacity: 50,000 vectors
+- Moi vector: 34D float32 = 136 bytes
+- Total: 50,000 * 136 = 6.8 MB per neighborhood
+
+Insert: Them z_detach vào vi tri hien tai, tang pointer mod N
+Read: Lay tat ca vectors tu buffer
+
+**kNN Scoring Algorithm:**
+
+Input: z (34D encoded vector moi)
+Memory: M (N x 34D, N = 50,000)
+
+Step 1: Tinh L1 distance toi tat ca N vectors:
+  dist_i = sum(|z[j] - M[i,j]|) for j=0..33, i=0..N-1
+  [NumPy broadcasting: z[None,:] - M = (N, 34), sum axis=1 = (N,)]
+
+Step 2: Tim K=10 khoang cach nho nhat:
+  top_k_indices = argpartition(dist, K)[:K]  # O(N) partition
+  top_k_distances = dist[top_k_indices]
+  top_k_distances.sort()
+
+Step 3: Tinh anomaly score:
+  score = sum(gamma^i * top_k_distances[i]) for i=0..K-1
+
+  Voi gamma = 0.0:
+  score = top_k_distances[0]  # Chi lay gan nhat
+
+**Tai sao gamma = 0.0?**
+
+MemStream paper: Gamma decay de truong hop neighbor i xa cung contribute,
+nhung gap nguy co "memory poisoning" (anomaly xa nhung van contribute).
+
+gamma = 0.0 la "fresh anomaly dominates": chi neighbor gan nhat count.
+Thiet ke co y: pattern moi nhat la indicator manh nhat cua current concept.
+
+**Tai sao dung L1 (Manhattan), khong phai L2 (Euclidean)?**
+
+1. Outlier robustness: L2 penalizes quadratically (a^2), L1 linearly (a)
+   Mot coordinate lon trong L2 se dominate, trong L1 thi khong
+2. High-D: L2/E[L1] ~ sqrt(d) for random vectors, L1 preserve interpretability
+3. BLAS: L1 = sum(|a-b|) la 34 additions + 34 comparisons, L2 = sum((a-b)^2)
+   thi 34 multiplications + 34 additions, L1 nhanh hon
+
+
+3. SCORING PIPELINE (end-to-end)
+
+Record dict
+    |
+    v
+34D Vectorizer.transform(record)
+    |
+    v
+[34] numpy array
+    |
+    v
+Normalize: (x - mean) / (std + 1e-8)
+    |
+    v
+[34] normalized
+    |
+    v
+AE.encode(x_norm) -> [34] encoded
+    |
+    v
+L1 kNN: dist = sum(|z - memory[i]|) for all i
+    |
+    v
+top-10 distances -> score = sum(top_10)
+    |
+    v
+Get neighborhood + cell_id -> beta from ContextBeta
+    |
+    v
+normalized_score = score / beta
+    |
+    v
+if normalized_score >= 1.0: ANOMALY
+else: NORMAL
+
+
+================================================================================
+PHAN 6: FLOW THICH UNG VOI DRIFT
+================================================================================
+
+1. DRIFT LA GI?
+
+Concept drift = su thay doi phan phoi P(X, y) theo thoi gian.
+
+Trong NYC Taxi:
+- NULL rate tang tu 4.73% (Jan 2024) len 13.31% (Sep 2024) -> upstream failure
+- Fare distribution shift theo mua (holiday pricing)
+- Violation rate tang tu 10% len 30% theo thang
+- Mot so ngay co drift bat thuong (blizzard Jan 2024: 14.2% spike trong 24h)
+
+Neu khong thich ung:
+- Model hoc tu Jan 2024 khong con accurate cho Sep 2024
+- Anomaly scores se cao bat thuong (false positives)
+- Hoac thap bat thuong (false negatives)
+
+2. DRIFT DETECTION (ADWIN)
+
+Per neighborhood, per metric:
+
+MetaAggregator emit 1-min window:
+  {volume: 1500, null_rate: 0.02, violation_rate: 0.05,
+   anomaly_rate: 0.03, avg_anomaly_score: 0.15, delta_score: 0.10}
+
+MultiInstanceADWIN update moi metric:
+  adwin.update(value) -> drift_detected (True/False)
+
+DriftDetector (ADWIN) logic:
+  W = sliding window
+  W0 = older half, W1 = newer half
+  Neu |mean(W0) - mean(W1)| > Hoeffding_threshold:
+    -> DRIFT DETECTED
+    -> W = W1 (reset window)
+
+Example: null_rate ADWIN
+  - Jan 2024: mean(null_rate) = 0.05
+  - Sep 2024: mean(null_rate) = 0.13
+  - diff = 0.08 >> threshold ~ 0.03
+  -> DRIFT DETECTED
+
+3. DRIFT AGGREGATION (DriftAggregator)
+
+60 ADWIN instances (10 nb x 6 metrics)
+Moi drift event: {neighborhood: 'manhattan', metric: 'null_rate', ...}
+
+Rolling window: 10 drift events (deque maxlen=10)
+
+Severity assessment:
+  - NONE: 0 drifts
+  - LOW: 1-2 drifts
+  - MODERATE: 3-5 drifts
+  - HIGH: 6+ drifts
+
+Example: 7 neighborhoods cung drift tren null_rate
+  -> 7 drift events trong rolling window
+  -> Severity = HIGH
+  -> Strategy = quick_retrain
+
+4. THREE RETRAIN TRIGGERS
+
+Trigger A: ADWIN Drift Days >= 7
+  - Track consecutive days co drift tren neighborhood
+  - Gap 1-2 ngay khong drift van tich luy (gap <= 2 days OK)
+  - 7+ days -> force quick_retrain
+
+Trigger B: Anomaly Rate > 15% for 3+ days
+  - Track history cua anomaly_rate per neighborhood
+  - Neu 3 consecutive days > 15% -> force quick_retrain
+  - Gap 1-2 days below threshold -> reset counter
+
+Trigger C: kNN Distance > 2x Baseline
+  - Baseline = mean of first 50 post-retrain kNN distances
+  - Neu current avg kNN distance > 2 * baseline
+  - -> Memory buffer khong con dai dien cho current concept
+  - -> Force quick_retrain
+
+5. MEMORY RESET ON DRIFT
+
+Khi retrain triggered:
+1. Memory buffer reset: clear all 50,000 entries
+2. Memory pointer reset to 0
+3. New normal records bat dau duoc insert
+4. First 50,000 normal records fill buffer
+5. kNN baseline reset de recalculate
+
+ADWIN instances cung reset:
+- Window cleared
+- Total sum reset
+- Statistics reset to current concept
+
+6. GRACEFUL DEGRADATION
+
+Neu retrain dang chay:
+- Pipeline van xu ly binh thuong
+- Old thresholds van duoc su dung
+- Old memory van duoc su dung (co the outdated)
+
+Sau khi retrain xong:
+- New thresholds broadcast to all workers
+- New memory distributed
+- Pipeline tu dong su dung artifacts moi
+
+Circuit breaker protection:
+- Neu > 10 consecutive retrain actions -> OPEN (block 5 min)
+- Prevents action storms
+- Cho phep system ong dinh truoc khi tiep tuc adaptations
+
+
+================================================================================
+PHAN 7: FLOW DETECT ANOMALY
+================================================================================
+
+1. ANOMALY TYPES
+
+**Type 1: Schema Violations (Layer 1)**
+- NULL required fields
+- Out-of-range values (zone > 263)
+- Type mismatches
+- Detection: SchemaValidator (hard filter, no ML)
+
+**Type 2: Canary Violations (Layer 1-2)**
+- fare_amount < 0
+- trip_distance = 0 (nhung co fare > 0)
+- speed_mph > 100
+- fare_amount > 500
+- dropoff < pickup
+- payment_type != 1 nhung tip > 0
+- Detection: CanaryRulesValidator (7 rules, <5ms each)
+
+**Type 3: Multivariate Anomalies (Layer 2)**
+- Meter tampering: High fare + short distance (tat ca features deu "valid" don le)
+- Short-trip fraud: inflated fare cho very short distance
+- Traffic manipulation: prolonged duration cho short distance
+- Payment inflation: tip chiếm % lon cua total
+- Detection: AE + Memory + kNN (Layer 2 Complex)
+
+2. MULTIVARIATE ANOMALY DETECTION FLOW
+
+**Step-by-step:**
+
+Record: {trip_distance: 0.1, dur_min: 1.0, fare_amount: 85.0,
+         passenger_count: 1, total_amount: 92.0, PULocationID: 132,
+         DOLocationID: 1, RatecodeID: 1, ...}
+
+Step 1: Feature Extraction (34D)
+  [0.1, 1.0, 85.0, 1, 92.0, 6.0,  # raw
+   850.0, 85.0, 85.0,              # derived (fare_per_mile=850!)
+   14, 3, 0,                        # temporal
+   4, 7, 0, 0,                      # spatial grid
+   340.0, 126.9, 0.5, 10.0,        # normalized (ratios muy cao!)
+   sin(14), cos(14), sin(3), cos(3), 0.01,  # cyclic
+   1,0,0,0,0,                       # ratecode=Standard
+   0, 4.45, -2.21, 7]              # misc (log_fare=4.45)
+
+Step 2: Normalize
+  x_norm = (x - train_mean) / (train_std + 1e-8)
+
+Step 3: AE Encode
+  z = encoder(x_norm)  # [34D]
+
+Step 4: kNN in Memory
+  - Normal 0.1-mile Manhattan trip co z_norm gan [0.1, 1, 10, ...]
+  - Fraud trip (fare $85, distance 0.1) co z hoan toan khac
+  - L1 distance = 127.4 (rat lon)
+  - Score = 127.4 (chi lay gan nhat, gamma=0)
+
+Step 5: ContextBeta Lookup
+  - PULocationID=132 -> queens_lower (neighborhood index 2)
+  - hour=14, dow=3, ratecode=1 -> cell_id = (0<<2)|(0<<1)|0 = 0 (std_day_weekday)
+  - threshold[2][0] = 35.2 (Queens lower, weekday daytime)
+  - Beta = 35.2
+
+Step 6: Normalized Score
+  normalized_score = 127.4 / 35.2 = 3.62
+  -> 3.62 >= 1.0 -> ANOMALY
+
+Step 7: Memory Decision
+  score (127.4) >= beta (35.2) -> is_anomaly = True
+  -> KHONG update memory (vi la anomaly)
+
+3. VI DU CAC LOAI ANOMALY
+
+**Example 1: Meter Tampering (Easy)**
+Record: distance=0.5, duration=2, fare=$30, total=$35
+  fare_per_mile = 60 (normal: $2-5)
+  fare_per_min = 15 (normal: $0.5-1)
+  -> Score rat cao -> ANOMALY
+  Canary: tat ca rules pass (fare>0, distance>0, speed<100)
+  -> Chi phat hien duoc boi ML
+
+**Example 2: Payment Inflation (Hard)**
+Record: fare=$15, tip=$12, total=$27 (tip=44% of total)
+  Raw features: tat ca binh thuong
+  Rate: tip/total = 0.44 (normal: 0.15-0.20)
+  -> fare_per_pax, log transforms deu bi anh huong nhung khong ro rang
+  -> Score > beta -> ANOMALY (nho hieu ung tren nhieu features)
+
+**Example 3: Short-Trip Fraud (Medium)**
+Record: distance=0.2, duration=1, fare=$45, zone JFK (ratecode=2)
+  ratecode=2 (JFK) co mean $52.18
+  nhung distance=0.2-mile voi $45 -> fare_per_mile=225 (JFK binh thuong ~$3)
+  -> Score rat cao -> ANOMALY
+
+4. FALSE POSITIVE REDUCTION (ContextBeta)
+
+Neu KHONG co ContextBeta (global threshold $45.46):
+- JFK trip ($52, 12 miles) -> score=8, threshold=$45.46 -> ANOMALY (FALSE!)
+- JFK co clustering chặt: tat ca trips deu gan $52 +/- $5
+- Score=8 chi gap 17% cua threshold, rat thap
+- Nhung global threshold $45.46 -> 8 < 45.46 -> binh thuong (OK)
+
+Neu co ContextBeta:
+- JFK threshold = $18.3 (rat thap vi clustering)
+- Same trip: score=8, threshold=$18.3 -> 8 < 18.3 -> PASS
+
+Cong cuong: FPR giam 4.9x (38.7% -> 4.2%) voi 4D thresholds
+
+5. DELTA SCORE (Canary vs ML disagreement)
+
+delta_score = |violation_rate - anomaly_rate| / (violation_rate + anomaly_rate + eps)
+
+- Neu delta_score cao: Canary va ML disagree nhieu
+  -> Co the co drift hoac emerging anomaly type
+- Neu delta_score thap: hai stage dong nhat
+  -> System on dinh
+
+Example:
+- Canary: 5% violation (7 rules)
+- ML: 8% anomaly
+- delta_score = |0.05 - 0.08| / (0.05 + 0.08) = 0.23 (rat cao)
+-> IEC nen monitor ky hon
+
+6. COMPLETE PIPELINE DECISION
+
+Record -> Layer 1 (Schema) -> Layer 2 (Canary) -> Layer 2 (AE+Memory)
+
+Decision matrix:
+
+| has_schema_error | has_canary_violation | is_ml_anomaly | Final Decision |
+|------------------|---------------------|---------------|----------------|
+| True | * | * | SCHEMA_ERROR (DLQ) |
+| False | True | * | CANARY_VIOLATION (rule-based) |
+| False | False | True | ANOMALY (ML-detected) |
+| False | False | False | PASS (clean record) |
+
+Luu y: Canary violation van di qua ML scoring,
+nhung ML se danh gia lai voi anomaly_score cao hon.
+
+
+================================================================================
+PHAN 8: CAC SO LIỆU KEY VA THAM SO
+================================================================================
+
+Feature Engineering:
+  - Input dimensions: 34
+  - Hidden dimensions: 68 (2x input)
+  - Output dimensions: 34
+  - Neighborhoods: 10
+  - Context cells: 8 (3 bits)
+  - 4D threshold matrix: 80 cells
+  - Training data: 2,860,000 records (sau 3-stage cleaning)
+  - Warmup minimum: 8,192 records
+
+Memory Module:
+  - Buffer size: 50,000 vectors
+  - Vector dimension: 34D
+  - k-NN neighbors: 10
+  - Gamma decay: 0.0
+  - Memory footprint: ~6.8 MB per neighborhood
+
+ADWIN:
+  - Max window: 500
+  - Default delta: 0.002
+  - Critical metric delta: 0.001
+  - Low-sensitivity metric delta: 0.005
+  - Hoeffding threshold: sqrt((1/2m) * ln(4n/delta))
+
+IEC:
+  - Circuit breaker cooldown: 300s (5 min)
+  - Max consecutive actions: 10
+  - Half-open max actions: 3
+  - Rolling window: 10 drift events
+  - Trigger A: 7 consecutive drift days
+  - Trigger B: anomaly_rate > 15% for 3 days
+  - Trigger C: kNN distance > 2x baseline
+
+Thresholds:
+  - Global 95th percentile: $45.46
+  - JFK/Airport threshold: ~$18.3
+  - Residential threshold: ~$62.7
+  - Anomaly decision: normalized_score >= 1.0
+
+Performance:
+  - Flink checkpoint interval: 45s
+  - Dedup TTL: 7 days (604,800s)
+  - Bloom filter FPR: 1%
+  - State size per TM: ~56MB
+  - PyFlink batch size: 500
+  - Canary latency: <5ms/record
+  - ML latency: <50ms/record
+
+Kafka Topics:
+  - taxi-nyc-raw-v2 (input)
+  - dq-stream-unified (output)
+  - dq-schema-violations
+  - dq-hard-rule-violations
+  - dq-meta-stream
+  - iec-action-replay
+  - iec-action-dlq
+
+MinIO Buckets:
+  - cadqstream-raw
+  - cadqstream-violations
+  - cadqstream-anomalies
+  - cadqstream-metrics
+  - cadqstream-drift
+
+Docker Services:
+  - 16 services total
+  - Kafka (bootstrap:9092)
+  - Schema Registry (8081)
+  - Flink JobManager (8081)
+  - Flink TaskManager
+  - MinIO (9000/9001)
+  - Prometheus (9090)
+  - Grafana (3000)
+  - cadqstream-metrics (9250)
+  - MLflow (5000)
+
+
+================================================================================
+PHAN 9: FILE STRUCTURE VA CODE ORGANIZATION
+================================================================================
+
+c:\proj\ldt\
+|
+|-- src/
+|   |-- flink_job_complete.py          # Main Flink job (855 lines)
+|   |-- operators/
+|   |   |-- watermark_assigner.py       # Event-time watermarking
+|   |   |-- key_generator.py            # Trip ID generation
+|   |   |-- deduplicator.py             # KeyedState dedup + Bloom filter
+|   |   |-- consecutive_records_filter.py # Consecutive dedup
+|   |   |-- schema_validator.py         # Required field + zone range
+|   |   |-- canary_rules_operator.py    # 7 rules (<5ms each)
+|   |   |-- memstream_scoring_operator.py # AE+Memory scoring (1099 lines)
+|   |   |-- neighborhood_mapping.py     # 10 neighborhood zones
+|   |   |-- meta_aggregator.py          # 6 meta-metrics, 1-min window
+|   |   |-- iec_operator.py             # IEC wrapper for Flink
+|   |   |-- rendezvous_operator.py      # Dual branch merge
+|   |   |-- dlq.py                      # Dead Letter Queue
+|   |-- ml/
+|   |   |-- memstream_core.py           # AE + Memory + ContextBeta (1685 lines)
+|   |   |-- memstream_context_beta.py   # 4D threshold matrix
+|   |   |-- memstream_memory.py         # Memory module variants
+|   |   |-- memstream_config.py         # Hyperparameter configs
+|   |   |-- train_memstream.py         # Offline training script
+|   |   |-- train_ocsvm.py             # OC-SVM baseline
+|   |   |-- train_gaussian.py           # Gaussian baseline
+|   |   |-- train_meter.py             # METER trainer
+|   |   |-- evaluate_memstream.py       # Evaluation
+|   |-- features/
+|   |   |-- memstream_vectorizer.py    # 34D feature extraction (586 lines)
+|   |-- iec/
+|   |   |-- iec_controller.py          # Main IEC logic
+|   |   |-- adwin_multi_instance.py    # 60 ADWIN instances
+|   |   |-- drift_aggregator.py        # Severity assessment
+|   |   |-- circuit_breaker.py        # Action storm prevention
+|   |   |-- verification_feedback.py   # Phase 4 reserved
+|   |-- workers/
+|   |   |-- action_replay_worker.py    # Kafka consumer for retrain
+|   |-- sinks/
+|   |   |-- minio_sink.py             # MinIO Parquet sinks
+|   |-- api/
+|       |-- ml_service.py             # FastAPI for IEC strategies
+|
+|-- deployment/
+|   |-- docker-compose.yml             # 865-line production compose
+|   |-- docker-compose-minimal.yml    # Minimal variant
+|   |-- prometheus/prometheus.yml      # Scrape config
+|   |-- grafana/provisioning/         # Dashboard provisioning
+|   |-- kafka/init-scripts/           # Topic creation
+|   |-- flink/flink-conf.yml          # RocksDB, checkpoints
+|   |-- cadqstream-metrics/            # Prometheus metrics
+|   |-- ml-service/                   # FastAPI service
+|   |-- action-replay-worker/         # Retrain worker
+|
+|-- thesis-memstream/
+|   |-- thesis.tex                     # Main thesis (252 lines)
+|   |-- chap3.tex                     # System design chapter
+|   |-- citation.bib                   # Bibliography
+|
+|-- results/v3-v10/                   # Experiment results
+|-- models/                           # Trained model artifacts
+
+
+================================================================================
+PHAN 10: FAULT TOLERANCE VA EXACTLY-ONCE
+================================================================================
+
+1. FLINK CHECKPOINTING
+
+- Interval: 45 seconds
+- Mode: EXACTLY_ONCE
+- Backend: RocksDB (incremental checkpoints)
+- Storage: MinIO S3
+- Retention: 12 hours
+
+Checkpoint captures:
+- KeyedState: deduplication bitmap (7-day TTL)
+- OperatorState: window accumulators, memory pointers
+- Kafka Offsets: consumer position for each topic
+
+On failure:
+- Rewind to last successful checkpoint
+- Replay Kafka records from saved offsets
+- Exactly-once: moi record duoc xu ly dung 1 lan hoac khong
+
+2. KAFKA TRANSACTIONS
+
+- Transaction timeout: 10 minutes
+- enable.idempotence = true
+- Acks: all (cho tat ca partitions)
+
+Output topics:
+- dq-stream-unified (unified output)
+- dq-meta-stream (meta metrics)
+- iec-action-replay (retrain signals)
+
+3. CIRCUIT BREAKER
+
+CLOCK ngat retrain storms:
+- > 10 consecutive retrain actions -> OPEN (block 5 min)
+- OPEN -> HALF_OPEN (test 3 actions)
+- HALF_OPEN success -> CLOSED
+- HALF_OPEN failure -> OPEN
+
+4. DEAD LETTER QUEUE
+
+Records that fail:
+- PARSE_ERROR: JSON parse failed
+- SCHEMA_ERROR: missing/invalid fields
+- ALGORITHM_ERROR: ML inference failed
+- VALIDATION_ERROR: data validation failed
+
+DLQ routing:
+- Kafka topic: iec-action-dlq (cho IEC retrain)
+- Khong co DLQ cho ML anomalies (van con trong main pipeline)
+
+5. IDEMPOTENCY
+
+- Deduplication operator: idempotent
+- Memory buffer update: idempotent (same vector -> same buffer)
+- MinIO Parquet: upsert with UUID + timestamp key
+- IEC retrain signals: idempotency via bounded set (10,000 entries)
+
+
+================================================================================
+PHAN 11: KEY INSIGHTS VA DESIGN DECISIONS
+================================================================================
+
+1. TAI SAO SEQUENTIAL, KHONG DUAL BRANCH?
+
+Dual branch (Phase 2): canary va ML chay song song, vote
+Sequential (Phase 3): ML chi chay sau khi canary pass
+
+Trade-off:
+- Sequential: faster (ML chi chay tren clean records)
+- Dual: more robust (co backup neu ML fail)
+- Production chon Sequential vi throughput quan trong hon marginal robustness
+
+2. TAI SAO AE OUTPUT (34D), KHONG PHAI HIDDEN (68D)?
+
+MemStream Proposition 2: Hidden layer co "null-space anomalies"
+(Vectors far from origin but near separating hyperplane)
+AE output khong co null-space -> an toan hon
+
+3. TAI SAO GAMMA = 0.0?
+
+gamma > 0: older neighbors contribute, co the "memory poisoning"
+gamma = 0.0: chi neighbor gan nhat contribute
+-> "Fresh anomaly dominates" design choice
+-> Memory khong bi contamination tu anomaly nho
+
+4. TAI SAO 4D THRESHOLDS, KHONG GLOBAL?
+
+Global threshold ($45.46):
+- JFK (tight clustering) -> high false positives
+- Residential (high variance) -> high false negatives
+- 4D: FPR giam 4.9x (38.7% -> 4.2%)
+
+5. TAI SAO META-METRICS, KHONG RAW FEATURES?
+
+Meta-metrics (6D) thay vi raw features (34D):
+- Interpretable: drift tren null_rate = upstream failure
+- Statistical: aggregate = lower variance
+- Practical: 60 ADWIN instances thay vi 34*10=340
+- Robust: filter noise, chi signal drift thuc su
+
+6. TAI SAO CIRCUIT BREAKER?
+
+Retrain actions co side effects:
+- Reset memory buffer -> 50,000 entries mat
+- Model broadcast -> 768MB network per update
+- GC pauses -> 150-200ms per TaskManager
+
+Neu 10+ retrains trong 1 tieng -> system instability
+Circuit breaker prevents action storms.
+
+7. TAI SAO HMAC SIGNING?
+
+Retrain signals tu IEC trigger expensive operations:
+- Reset memory
+- Reload model
+- Broadcast to 16 workers
+
+Neu attacker inject fake retrain signals:
+- Memory reset liên tuc
+- System crash
+
+HMAC-SHA256: chi signals co valid HMAC moi duoc execute

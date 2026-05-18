@@ -31,7 +31,6 @@ import numpy as np
 
 from .adwin_multi_instance import MultiInstanceADWIN
 from .drift_aggregator import DriftAggregator, SeverityLevel, EvolutionStrategy
-from .circuit_breaker import CircuitBreaker, CircuitState
 
 LOGGER = logging.getLogger('memstream-iec')
 
@@ -150,7 +149,6 @@ class IECController:
     Components:
     - MultiInstanceADWIN: drift detection per neighborhood x metric
     - DriftAggregator: severity assessment
-    - CircuitBreaker: prevents action storms
 
     Strategies:
     - do_nothing: no drift or minor drift
@@ -188,13 +186,6 @@ class IECController:
         self._strategy_counts: Dict[str, int] = {
             s: 0 for s in EvolutionStrategy.ALL_STRATEGIES
         }
-
-        # Circuit breaker
-        self._circuit_breaker = CircuitBreaker(
-            cooldown_seconds=300.0,
-            max_consecutive=10,
-            half_open_max_actions=3,
-        )
 
         # MinIO client for retrain signal writes
         self.minio_client = minio_client
@@ -345,8 +336,6 @@ class IECController:
             'affected_metrics': self._aggregator.get_affected_metrics(),
             'drift_events': drift_events,
             'meta_metrics': meta_metrics,
-            'circuit_state': self._circuit_breaker.state,
-            'circuit_allow': self._circuit_breaker.should_allow_action(),
             'retrain_triggers': retrain_triggers,
             'timestamp': current_time,
         }
@@ -481,16 +470,6 @@ class IECController:
         if decision is None:
             return {'status': 'error', 'message': 'No decision available'}
 
-        # Circuit breaker check
-        if not self._circuit_breaker.should_allow_action():
-            return {
-                'action': decision.get('strategy', EvolutionStrategy.DO_NOTHING),
-                'status': 'circuit_open',
-                'message': f"Circuit breaker {self._circuit_breaker.state} - action blocked",
-                'circuit_state': self._circuit_breaker.state,
-                'consecutive_actions': self._circuit_breaker.consecutive_actions,
-            }
-
         strategy = decision['strategy']
 
         if strategy == EvolutionStrategy.DO_NOTHING:
@@ -503,22 +482,13 @@ class IECController:
         elif strategy == EvolutionStrategy.QUICK_RETRAIN:
             result = self._execute_quick_retrain(decision)
 
-            # Record action in circuit breaker — ONLY for actual adaptations (quick_retrain)
-            # NOT for do_nothing (which runs on every MetaAggregator window and would
-            # cause the circuit to trip after ~10 windows of normal operation)
-            self._circuit_breaker.record_action()
-            if result.get('status') == 'success':
-                self._circuit_breaker.on_action_success()
-                # Reset kNN tracking so baseline recalculates from new memory state after retrain
+            # Reset kNN tracking so baseline recalculates from new memory state after retrain
+            if result.get('status') in ('ok', 'partial'):
                 for nb in decision.get('affected_neighborhoods', []):
                     if nb in self._retrain_tracking:
                         self._retrain_tracking[nb]['knn_history'] = []
                         self._retrain_tracking[nb]['knn_baseline'] = None
-            else:
-                self._circuit_breaker.on_action_failure()
 
-            result['circuit_state'] = self._circuit_breaker.state
-            result['consecutive_actions'] = self._circuit_breaker.consecutive_actions
             return result
 
         else:
@@ -663,7 +633,7 @@ class IECController:
             'adwin_total_drifts': self._adwin.get_total_drifts(),
             'aggregator': self._aggregator.get_stats(),
             'strategy_counts': self._strategy_counts.copy(),
-            'circuit_breaker': self._circuit_breaker.get_status(),
+            'circuit_breaker': None,
             'retrain_tracking': {
                 nb: {
                     'adwin_drift_days': t.get('adwin_drift_days', 0),
@@ -675,14 +645,13 @@ class IECController:
         }
 
     def get_circuit_status(self) -> Dict:
-        """Get circuit breaker status."""
-        return self._circuit_breaker.get_status()
+        """Get circuit breaker status (deprecated - always returns empty dict)."""
+        return {}
 
     def reset(self) -> None:
         """Reset all IEC state."""
         self._adwin.reset()
         self._aggregator.reset()
-        self._circuit_breaker.reset()
         self._last_decision = None
         self._n_processed = 0
         self._strategy_counts = {s: 0 for s in EvolutionStrategy.ALL_STRATEGIES}
@@ -754,8 +723,6 @@ __all__ = [
     'IECConfig',
     'IECController',
     'create_iec_controller',
-    'CircuitBreaker',
-    'CircuitState',
     'verify_retrain_signal',
     'IEC_SIGNING_KEY_ENV',
 ]

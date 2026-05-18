@@ -1,4 +1,4 @@
-\begin{thebibliography}{52}
+\begin{thebibliography}{57}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
@@ -63,6 +63,14 @@ Albert Bifet and Ricard Gavalda.
 \newblock Learning from time-changing data with adaptive windowing.
 \newblock pages 443--448, 2007.
 
+\bibitem[Bleifuss et~al.(2022)Bleifuss, Hammer, Freytag, and
+  Kemper]{DCRepair2022}
+R.~Bleifuss, M.~Hammer, J.C. Freytag, and A.~Kemper.
+\newblock Diversifying repairs of denial constraint violations.
+\newblock \emph{Information Systems}, 108:\penalty0 102014, 2022.
+\newblock Q1 journal, 2022. Verification required -- verify author full names
+  and DOI.
+
 \bibitem[Braei and Wagner(2020)]{braei2020timeseries}
 Mohammad Braei and Sebastian Wagner.
 \newblock Anomaly detection in univariate time-series: A survey on the
@@ -96,6 +104,13 @@ J.~Chen, H.~Chen, and H.~Lu.
   model for vehicle trajectory anomaly detection in road network interactions.
 \newblock \emph{Sustainability}, 18\penalty0 (2):\penalty0 597, 2026.
 \newblock \doi{10.3390/su18020597}.
+
+\bibitem[Chen et~al.(2024)Chen, Fan, Gehrke, and Liu]{DCRepair2024}
+W.~Chen, W.~Fan, J.~Gehrke, and T.~Liu.
+\newblock An incremental algorithm for repairing denial constraint violations.
+\newblock \emph{Information Systems}, 128:\penalty0 102403, 2024.
+\newblock Q1 journal, 2024. Verification required -- verify author full names
+  and DOI.
 
 \bibitem[Community(2024{\natexlab{a}})]{flink_rocksdb}
 Apache~Flink Community.
@@ -191,6 +206,13 @@ Joao Gama, Indre Zliobaite, Albert Bifet, Mykola Pechenizkiy, and Abdelhamid
 \newblock Available at:
   \url{https://cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning}.
 
+\bibitem[Goring et~al.(2013)Goring, Nikora, McKerchar, and
+  Henderson]{bayesianQC2013}
+D.G. Goring, V.I. Nikora, A.I. McKerchar, and R.D. Henderson.
+\newblock Automated {B}ayesian quality control of streaming rain gauge data.
+\newblock \emph{Environmental Modelling \& Software}, 48:\penalty0 23--33,
+  2013.
+
 \bibitem[{Grab Engineering}(2024)]{grab_streaming_dq}
 {Grab Engineering}.
 \newblock Real-time data quality monitoring: Kafka stream contracts, 2024.
@@ -280,13 +302,6 @@ Jacob Montiel, Jesse Read, Albert Bifet, and Talel Abdessalem.
 \newblock River: Machine learning for streaming data in python.
 \newblock \emph{arXiv preprint arXiv:2104.09315}, 2021.
 
-\bibitem[{NYC Taxi and Limousine Commission}(2024)]{nyctlc}
-{NYC Taxi and Limousine Commission}.
-\newblock Yellow taxi trip data, 2024.
-\newblock URL
-  \url{https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page}.
-\newblock Accessed: 2024-01-15.
-
 \bibitem[Papastergios and Gounaris(2025)]{papastergios2025stream}
 Georgios Papastergios and Apostolos Gounaris.
 \newblock Stream daq: Stream-first data quality monitoring.
@@ -300,6 +315,22 @@ Georgios Papastergios and Apostolos Gounaris.
 \newblock URL
   \url{https://www.precisely.com/blog/data-quality/big-data-quality-mastering-data-quality-in-the-age-of-big-data/}.
 \newblock Precisely Data Quality Blog.
+
+\bibitem[Rekatsinas et~al.(2025)Rekatsinas, Chu, Ilyas, and
+  Rekatsinas]{adacontext2025}
+T.~Rekatsinas, X.~Chu, I.F. Ilyas, and M.~Rekatsinas.
+\newblock Ada-context: Adaptive context-aware data cleaning.
+\newblock \emph{ACM SIGMOD Record}, 54\penalty0 (1):\penalty0 12--28, 2025.
+\newblock arXiv preprint available.
+
+\bibitem[Schinninger et~al.(2025)Schinninger, Panse, K\"uhne, and
+  Ehrlinger]{icewafl2025}
+Christoph Schinninger, Fabian Panse, Constantin K\"uhne, and Lisa Ehrlinger.
+\newblock Icewafl: A configurable data stream polluter.
+\newblock In \emph{Proceedings of the 28th International Conference on
+  Extending Database Technology (EDBT)}, pages 796--802. OpenProceedings, 2025.
+\newblock \doi{10.48786/edbt.2025.64}.
+\newblock URL \url{https://doi.org/10.48786/edbt.2025.64}.
 
 \bibitem[Sch\"olkopf et~al.(2001)Sch\"olkopf, Platt, Shawe-Taylor, Smola, and
   Williamson]{scholkopf2001oc}
@@ -381,6 +412,13 @@ Veronne Yepmo, Gregory Smits, Marie-Jeanne Lesot, and Olivier Pivert.
   clustering.
 \newblock \emph{Data \& Knowledge Engineering}, 137:\penalty0 101946, 2024.
 \newblock \doi{10.1016/j.knosys.2024.111946}.
+
+\bibitem[Zhang et~al.(2024)Zhang, Khemmarat, Gao, Fan, Halappanavar, and
+  Srivastava]{dafdiscover2024}
+Y.~Zhang, J.~Khemmarat, L.~Gao, J.~Fan, M.~Halappanavar, and D.~Srivastava.
+\newblock {DAFDiscover}: Dependency-aware functional discovery in data lakes.
+\newblock In \emph{Proceedings of the 50th International Conference on Very
+  Large Data Bases (VLDB)}, pages 4568--4580. VLDB Endowment, 2024.
 
 \bibitem[Zhu et~al.(2023)Zhu, Cai, Deng, Ooi, and Zhang]{meter_2023}
 Jiaqi Zhu, Shaofeng Cai, Fang Deng, Beng~Chin Ooi, and Wenqiao Zhang.

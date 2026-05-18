@@ -4,15 +4,12 @@
 \addvspace {10\p@ }
 \contentsline {table}{\numberline {3.1}{\ignorespaces Qualitative comparison of CA-DQStream against existing DQ frameworks.}}{15}{table.3.1}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {4.1}{\ignorespaces 34D Feature Vector for Online Autoencoder (verified against \texttt {src/features/memstream\_vectorizer.py} and \texttt {src/ml/memstream\_core.py}).}}{24}{table.4.1}%
-\contentsline {table}{\numberline {4.2}{\ignorespaces AUC vs Memory Buffer Size.}}{30}{table.caption.20}%
-\contentsline {table}{\numberline {4.3}{\ignorespaces ADWIN Confidence Parameters for Meta-Metrics.}}{34}{table.4.3}%
+\contentsline {table}{\numberline {4.1}{\ignorespaces Completeness Violations in NYC Yellow Taxi Raw Data (2024, 41.2M records).}}{19}{table.caption.8}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Validity Violations: Negative Financial Values (2024, 41.2M records).}}{20}{table.caption.9}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Monthly NULL Rate Trend in passenger\_count (Schema Evolution).}}{20}{table.caption.10}%
+\contentsline {table}{\numberline {4.4}{\ignorespaces 34D Feature Vector for Online Autoencoder (verified against \texttt {src/features/memstream\_vectorizer.py} and \texttt {src/ml/memstream\_core.py}).}}{25}{table.4.4}%
+\contentsline {table}{\numberline {4.5}{\ignorespaces AUC vs Memory Buffer Size.}}{31}{table.caption.24}%
+\contentsline {table}{\numberline {4.6}{\ignorespaces ADWIN Confidence Parameters for Meta-Metrics.}}{35}{table.4.6}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {5.6}{\ignorespaces AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods.}}{43}{table.caption.35}%
+\contentsline {table}{\numberline {5.6}{\ignorespaces AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods.}}{50}{table.caption.50}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {6.1}{\ignorespaces Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds.}}{51}{table.6.1}%
-\contentsline {table}{\numberline {6.2}{\ignorespaces Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model.}}{52}{table.6.2}%
-\contentsline {table}{\numberline {6.3}{\ignorespaces Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method).}}{52}{table.6.3}%
-\contentsline {table}{\numberline {6.4}{\ignorespaces McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$).}}{52}{table.6.4}%
-\contentsline {table}{\numberline {6.5}{\ignorespaces Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR.}}{53}{table.6.5}%
-\contentsline {table}{\numberline {6.6}{\ignorespaces Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method.}}{53}{table.6.6}%

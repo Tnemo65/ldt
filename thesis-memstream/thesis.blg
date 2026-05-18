@@ -23,45 +23,45 @@ Warning--empty journal in read2020
 Warning--empty journal in papastergios2025stream
 Warning--empty journal in contextdq2022
 Warning--empty journal in ververica2024
-You've used 52 entries,
+You've used 57 entries,
             2773 wiz_defined-function locations,
-            892 strings with 15615 characters,
-and the built_in function-call counts, 23784 in all, are:
-= -- 2145
-> -- 1379
-< -- 38
-+ -- 479
-- -- 423
-* -- 1797
-:= -- 3694
-add.period$ -- 210
-call.type$ -- 52
-change.case$ -- 291
-chr.to.int$ -- 48
-cite$ -- 120
-duplicate$ -- 1081
-empty$ -- 1912
-format.name$ -- 491
-if$ -- 4990
+            931 strings with 16902 characters,
+and the built_in function-call counts, 27172 in all, are:
+= -- 2454
+> -- 1621
+< -- 39
++ -- 559
+- -- 498
+* -- 2105
+:= -- 4206
+add.period$ -- 231
+call.type$ -- 57
+change.case$ -- 331
+chr.to.int$ -- 53
+cite$ -- 130
+duplicate$ -- 1218
+empty$ -- 2146
+format.name$ -- 571
+if$ -- 5707
 int.to.chr$ -- 5
 int.to.str$ -- 1
-missing$ -- 42
-newline$ -- 319
-num.names$ -- 208
-pop$ -- 618
+missing$ -- 48
+newline$ -- 348
+num.names$ -- 228
+pop$ -- 685
 preamble$ -- 1
-purify$ -- 239
+purify$ -- 274
 quote$ -- 0
-skip$ -- 857
+skip$ -- 969
 stack$ -- 0
-substring$ -- 686
-swap$ -- 116
-text.length$ -- 8
+substring$ -- 842
+swap$ -- 143
+text.length$ -- 10
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 572
+type$ -- 627
 warning$ -- 16
-while$ -- 203
+while$ -- 230
 width$ -- 0
-write$ -- 743
+write$ -- 819
 (There were 18 warnings)

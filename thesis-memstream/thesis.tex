@@ -49,9 +49,10 @@
 \newcounter{indentDepth}
 \def\Statep{\stepcounter{indentDepth}\ifnum\value{indentDepth}>1 \hspace*{1.5em}\fi}
 \def\Comment#1{{\fontsize{8.5pt}{10pt}\selectfont$\triangleright$ #1}}
+\def\Return{\Statep\textbf{return}\ }
 \makeatother
 
-\graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/}}
+\graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/},{./figs/eda/}}
 
 \begin{document}
 % Title page
@@ -237,12 +238,6 @@ UUID & Universal Unique Identifier \\ \hline
 % Chapter 6: Conclusion and Future Work
 \input{chap7}
 
-% Statistical Appendix
-\input{appendix_statistical}
-
-% ================================================
-% REFERENCES
-% ================================================
 \backmatter
 \addcontentsline{toc}{chapter}{REFERENCES}
 \bibliographystyle{plainnat}

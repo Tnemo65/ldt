@@ -147,163 +147,197 @@
 \@writefile{toc}{\contentsline {section}{\numberline {4.1}Approach Direction}{19}{section.4.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {4.2}Data Exploration}{19}{section.4.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2.1}Raw Data EDA}{19}{subsection.4.2.1}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces Fare Distribution of NYC Yellow Taxi Trips.}}{20}{figure.caption.8}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4.1}{\ignorespaces Completeness Violations in NYC Yellow Taxi Raw Data (2024, 41.2M records).}}{19}{table.caption.8}\protected@file@percent }
 \providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
-\newlabel{fig:eda_fare_dist}{{4.1}{20}{Fare Distribution of NYC Yellow Taxi Trips}{figure.caption.8}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces Hourly Record Volume Pattern by Weekday and Weekend.}}{20}{figure.caption.9}\protected@file@percent }
-\newlabel{fig:eda_hourly_pattern}{{4.2}{20}{Hourly Record Volume Pattern by Weekday and Weekend}{figure.caption.9}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.3}{\ignorespaces Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}}{20}{figure.caption.10}\protected@file@percent }
-\newlabel{fig:eda_violations_heatmap}{{4.3}{20}{Violation Rate Heatmap by Hour-of-Day and Day-of-Week}{figure.caption.10}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{21}{subsection.4.2.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {4.4}{\ignorespaces Monthly Record Volume and Violation Rate Over 26 Months.}}{21}{figure.caption.11}\protected@file@percent }
-\newlabel{fig:eda_monthly_volume}{{4.4}{21}{Monthly Record Volume and Violation Rate Over 26 Months}{figure.caption.11}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.3}Injected Data}{21}{subsection.4.2.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.3}Proposed Method}{21}{section.4.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.1}Overview}{21}{subsection.4.3.1}\protected@file@percent }
+\newlabel{tab:eda_null}{{4.1}{19}{Completeness Violations in NYC Yellow Taxi Raw Data (2024, 41.2M records)}{table.caption.8}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.2}{\ignorespaces Validity Violations: Negative Financial Values (2024, 41.2M records).}}{20}{table.caption.9}\protected@file@percent }
+\newlabel{tab:eda_neg}{{4.2}{20}{Validity Violations: Negative Financial Values (2024, 41.2M records)}{table.caption.9}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.3}{\ignorespaces Monthly NULL Rate Trend in passenger\_count (Schema Evolution).}}{20}{table.caption.10}\protected@file@percent }
+\newlabel{tab:eda_monthly_null}{{4.3}{20}{Monthly NULL Rate Trend in passenger\_count (Schema Evolution)}{table.caption.10}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.1}{\ignorespaces Fare Distribution of NYC Yellow Taxi Trips.}}{21}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:eda_fare_dist}{{4.1}{21}{Fare Distribution of NYC Yellow Taxi Trips}{figure.caption.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.2}{\ignorespaces Hourly Record Volume Pattern by Weekday and Weekend.}}{21}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:eda_hourly_pattern}{{4.2}{21}{Hourly Record Volume Pattern by Weekday and Weekend}{figure.caption.12}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.3}{\ignorespaces Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}}{21}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:eda_violations_heatmap}{{4.3}{21}{Violation Rate Heatmap by Hour-of-Day and Day-of-Week}{figure.caption.13}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{22}{subsection.4.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.4}{\ignorespaces Monthly Record Volume and Violation Rate Over 26 Months.}}{22}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:eda_monthly_volume}{{4.4}{22}{Monthly Record Volume and Violation Rate Over 26 Months}{figure.caption.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.5}{\ignorespaces Drift Detection Mechanism: ADWIN maintains an adaptive window that dynamically adjusts as new data arrives. When the statistical divergence between the reference window (older stable data) and the current window (recent data) exceeds a threshold, a drift alarm is raised, triggering the IEC to recompute thresholds or retrain the model.}}{22}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:drift_mechanism}{{4.5}{22}{Drift Detection Mechanism: ADWIN maintains an adaptive window that dynamically adjusts as new data arrives. When the statistical divergence between the reference window (older stable data) and the current window (recent data) exceeds a threshold, a drift alarm is raised, triggering the IEC to recompute thresholds or retrain the model}{figure.caption.15}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2.3}Injected Data}{23}{subsection.4.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.3}Proposed Method}{23}{section.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.1}Overview}{23}{subsection.4.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4.6}{\ignorespaces CA-DQStream System Architecture.}}{23}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:system_architecture}{{4.6}{23}{CA-DQStream System Architecture}{figure.caption.16}{}}
 \gdef \LT@iii {\LT@entry 
     {1}{35.56227pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{183.11652pt}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.5}{\ignorespaces CA-DQStream System Architecture.}}{22}{figure.caption.12}\protected@file@percent }
-\newlabel{fig:system_architecture}{{4.5}{22}{CA-DQStream System Architecture}{figure.caption.12}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{22}{subsection.4.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{24}{subsection.4.3.2}\protected@file@percent }
 \citation{dama2017dmbok}
 \citation{confluent_dq_patterns}
+\@writefile{lot}{\contentsline {table}{\numberline {4.4}{\ignorespaces 34D Feature Vector for Online Autoencoder (verified against \texttt  {src/features/memstream\_vectorizer.py} and \texttt  {src/ml/memstream\_core.py}).}}{25}{table.4.4}\protected@file@percent }
+\newlabel{tab:feature_vector}{{4.4}{25}{34D Feature Vector for Online Autoencoder (verified against \texttt {src/features/memstream\_vectorizer.py} and \texttt {src/ml/memstream\_core.py})}{table.4.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{25}{subsection.4.3.3}\protected@file@percent }
 \citation{confluent_schema_registry}
 \citation{confluent_schema_registry}
 \citation{confluent_dq_patterns}
 \citation{grab_streaming_dq}
-\@writefile{lot}{\contentsline {table}{\numberline {4.1}{\ignorespaces 34D Feature Vector for Online Autoencoder (verified against \texttt  {src/features/memstream\_vectorizer.py} and \texttt  {src/ml/memstream\_core.py}).}}{24}{table.4.1}\protected@file@percent }
-\newlabel{tab:feature_vector}{{4.1}{24}{34D Feature Vector for Online Autoencoder (verified against \texttt {src/features/memstream\_vectorizer.py} and \texttt {src/ml/memstream\_core.py})}{table.4.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{24}{subsection.4.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Schema Validation}{24}{subsubsection*.13}\protected@file@percent }
 \citation{confluent_dead_letter_queue}
+\@writefile{toc}{\contentsline {subsubsection}{Schema Validation}{26}{subsubsection*.17}\protected@file@percent }
+\newlabel{eq:cel_passenger}{{4.1}{26}{Schema Validation}{equation.4.1}{}}
+\newlabel{eq:cel_ratecode}{{4.2}{26}{Schema Validation}{equation.4.2}{}}
+\newlabel{eq:cel_vendor}{{4.3}{26}{Schema Validation}{equation.4.3}{}}
+\newlabel{eq:cel_fare}{{4.4}{26}{Schema Validation}{equation.4.4}{}}
+\newlabel{eq:cel_distance}{{4.5}{26}{Schema Validation}{equation.4.5}{}}
+\newlabel{eq:cel_temporal}{{4.6}{26}{Schema Validation}{equation.4.6}{}}
+\newlabel{eq:cel_nullcheck}{{4.7}{26}{Schema Validation}{equation.4.7}{}}
 \citation{flink_rocksdb}
-\newlabel{eq:cel_passenger}{{4.1}{25}{Schema Validation}{equation.4.1}{}}
-\newlabel{eq:cel_ratecode}{{4.2}{25}{Schema Validation}{equation.4.2}{}}
-\newlabel{eq:cel_vendor}{{4.3}{25}{Schema Validation}{equation.4.3}{}}
-\newlabel{eq:cel_fare}{{4.4}{25}{Schema Validation}{equation.4.4}{}}
-\newlabel{eq:cel_distance}{{4.5}{25}{Schema Validation}{equation.4.5}{}}
-\newlabel{eq:cel_temporal}{{4.6}{25}{Schema Validation}{equation.4.6}{}}
-\newlabel{eq:cel_nullcheck}{{4.7}{25}{Schema Validation}{equation.4.7}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Flink KeyedState Deduplication}{25}{subsubsection*.14}\protected@file@percent }
-\newlabel{eq:dedup_key}{{4.8}{25}{Flink KeyedState Deduplication}{equation.4.8}{}}
-\newlabel{eq:ttl_window}{{4.9}{25}{Flink KeyedState Deduplication}{equation.4.9}{}}
 \citation{flink_rocksdb_bloom}
-\newlabel{eq:state_count}{{4.10}{26}{Flink KeyedState Deduplication}{equation.4.10}{}}
-\newlabel{eq:key_size}{{4.11}{26}{Flink KeyedState Deduplication}{equation.4.11}{}}
-\newlabel{eq:value_size}{{4.12}{26}{Flink KeyedState Deduplication}{equation.4.12}{}}
-\newlabel{eq:rocksdb_overhead}{{4.13}{26}{Flink KeyedState Deduplication}{equation.4.13}{}}
-\newlabel{eq:state_size_calc}{{4.14}{26}{Flink KeyedState Deduplication}{equation.4.14}{}}
-\newlabel{eq:bloom_fpr}{{4.15}{26}{Flink KeyedState Deduplication}{equation.4.15}{}}
-\newlabel{eq:bloom_bits}{{4.16}{26}{Flink KeyedState Deduplication}{equation.4.16}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.6}{\ignorespaces Flatten KeyedState Deduplication with Bloom Filter.}}{26}{figure.caption.15}\protected@file@percent }
-\newlabel{alg:dedup}{{4.6}{26}{Flatten KeyedState Deduplication with Bloom Filter}{figure.caption.15}{}}
-\newlabel{eq:dedup_rate}{{4.17}{26}{Flink KeyedState Deduplication}{equation.4.17}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{26}{subsubsection*.16}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Flink KeyedState Deduplication}{27}{subsubsection*.18}\protected@file@percent }
+\newlabel{eq:dedup_key}{{4.8}{27}{Flink KeyedState Deduplication}{equation.4.8}{}}
+\newlabel{eq:ttl_window}{{4.9}{27}{Flink KeyedState Deduplication}{equation.4.9}{}}
+\newlabel{eq:state_count}{{4.10}{27}{Flink KeyedState Deduplication}{equation.4.10}{}}
+\newlabel{eq:key_size}{{4.11}{27}{Flink KeyedState Deduplication}{equation.4.11}{}}
+\newlabel{eq:value_size}{{4.12}{27}{Flink KeyedState Deduplication}{equation.4.12}{}}
+\newlabel{eq:rocksdb_overhead}{{4.13}{27}{Flink KeyedState Deduplication}{equation.4.13}{}}
+\newlabel{eq:state_size_calc}{{4.14}{27}{Flink KeyedState Deduplication}{equation.4.14}{}}
+\newlabel{eq:bloom_fpr}{{4.15}{27}{Flink KeyedState Deduplication}{equation.4.15}{}}
+\newlabel{eq:bloom_bits}{{4.16}{27}{Flink KeyedState Deduplication}{equation.4.16}{}}
 \citation{grab_streaming_dq}
 \citation{grab_streaming_dq}
-\newlabel{eq:canary_r1}{{4.18}{27}{Canary Pattern: Lightweight Validation}{equation.4.18}{}}
-\newlabel{eq:canary_r2}{{4.19}{27}{Canary Pattern: Lightweight Validation}{equation.4.19}{}}
-\newlabel{eq:canary_r3}{{4.20}{27}{Canary Pattern: Lightweight Validation}{equation.4.20}{}}
-\newlabel{eq:canary_r4}{{4.21}{27}{Canary Pattern: Lightweight Validation}{equation.4.21}{}}
-\newlabel{eq:canary_r5}{{4.22}{27}{Canary Pattern: Lightweight Validation}{equation.4.22}{}}
-\newlabel{eq:canary_r6}{{4.23}{27}{Canary Pattern: Lightweight Validation}{equation.4.23}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Physical Violation Filter (Warmup Phase)}{27}{subsubsection*.17}\protected@file@percent }
-\newlabel{eq:iqr_def}{{4.24}{27}{Physical Violation Filter (Warmup Phase)}{equation.4.24}{}}
-\newlabel{eq:iqr_lower}{{4.25}{27}{Physical Violation Filter (Warmup Phase)}{equation.4.25}{}}
-\newlabel{eq:iqr_upper}{{4.26}{27}{Physical Violation Filter (Warmup Phase)}{equation.4.26}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.7}{\ignorespaces Flatten KeyedState Deduplication with Bloom Filter.}}{28}{figure.caption.19}\protected@file@percent }
+\newlabel{alg:dedup}{{4.7}{28}{Flatten KeyedState Deduplication with Bloom Filter}{figure.caption.19}{}}
+\newlabel{eq:dedup_rate}{{4.17}{28}{Flink KeyedState Deduplication}{equation.4.17}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{28}{subsubsection*.20}\protected@file@percent }
+\newlabel{eq:canary_r1}{{4.18}{28}{Canary Pattern: Lightweight Validation}{equation.4.18}{}}
+\newlabel{eq:canary_r2}{{4.19}{28}{Canary Pattern: Lightweight Validation}{equation.4.19}{}}
+\newlabel{eq:canary_r3}{{4.20}{28}{Canary Pattern: Lightweight Validation}{equation.4.20}{}}
+\newlabel{eq:canary_r4}{{4.21}{28}{Canary Pattern: Lightweight Validation}{equation.4.21}{}}
+\newlabel{eq:canary_r5}{{4.22}{28}{Canary Pattern: Lightweight Validation}{equation.4.22}{}}
+\newlabel{eq:canary_r6}{{4.23}{28}{Canary Pattern: Lightweight Validation}{equation.4.23}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Physical Violation Filter (Warmup Phase)}{29}{subsubsection*.21}\protected@file@percent }
+\newlabel{eq:iqr_def}{{4.24}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.24}{}}
+\newlabel{eq:iqr_lower}{{4.25}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.25}{}}
+\newlabel{eq:iqr_upper}{{4.26}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.26}{}}
+\newlabel{eq:warmup_input}{{4.27}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.27}{}}
+\newlabel{eq:warmup_physical}{{4.28}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.28}{}}
+\newlabel{eq:warmup_iqr}{{4.29}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.29}{}}
+\newlabel{eq:warmup_final}{{4.30}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.30}{}}
+\newlabel{eq:warmup_total}{{4.31}{29}{Physical Violation Filter (Warmup Phase)}{equation.4.31}{}}
 \citation{vincent2010stacked}
-\newlabel{eq:warmup_input}{{4.27}{28}{Physical Violation Filter (Warmup Phase)}{equation.4.27}{}}
-\newlabel{eq:warmup_physical}{{4.28}{28}{Physical Violation Filter (Warmup Phase)}{equation.4.28}{}}
-\newlabel{eq:warmup_iqr}{{4.29}{28}{Physical Violation Filter (Warmup Phase)}{equation.4.29}{}}
-\newlabel{eq:warmup_final}{{4.30}{28}{Physical Violation Filter (Warmup Phase)}{equation.4.30}{}}
-\newlabel{eq:warmup_total}{{4.31}{28}{Physical Violation Filter (Warmup Phase)}{equation.4.31}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{28}{subsection.4.3.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Denoising Autoencoder Architecture}{28}{subsubsection*.18}\protected@file@percent }
-\newlabel{eq:encoder}{{4.32}{28}{Denoising Autoencoder Architecture}{equation.4.32}{}}
-\newlabel{eq:decoder}{{4.33}{28}{Denoising Autoencoder Architecture}{equation.4.33}{}}
 \citation{bhatia2022dense}
-\newlabel{eq:dae_loss}{{4.34}{29}{Denoising Autoencoder Architecture}{equation.4.34}{}}
-\@writefile{toc}{\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{29}{subsubsection*.19}\protected@file@percent }
-\newlabel{eq:memory_buffer}{{4.35}{29}{L1 k-NN Scoring on Memory Module}{equation.4.35}{}}
-\newlabel{eq:l1_distance}{{4.36}{29}{L1 k-NN Scoring on Memory Module}{equation.4.36}{}}
-\newlabel{eq:anomaly_score_v2}{{4.37}{29}{L1 k-NN Scoring on Memory Module}{equation.4.37}{}}
-\newlabel{eq:anomaly_decision}{{4.38}{29}{L1 k-NN Scoring on Memory Module}{equation.4.38}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4.2}{\ignorespaces AUC vs Memory Buffer Size.}}{30}{table.caption.20}\protected@file@percent }
-\newlabel{tab:memory_size_ablation}{{4.2}{30}{AUC vs Memory Buffer Size}{table.caption.20}{}}
-\@writefile{toc}{\contentsline {subsubsection}{Online Memory Update Policy}{30}{subsubsection*.21}\protected@file@percent }
-\newlabel{eq:conditional_insert}{{4.39}{30}{Online Memory Update Policy}{equation.4.39}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.7}{\ignorespaces Online Memory Update Policy.}}{30}{figure.caption.22}\protected@file@percent }
-\newlabel{alg:memory_update}{{4.7}{30}{Online Memory Update Policy}{figure.caption.22}{}}
-\@writefile{toc}{\contentsline {subsubsection}{4D Context-Aware Thresholding}{30}{subsubsection*.23}\protected@file@percent }
-\newlabel{eq:4d_matrix}{{4.40}{31}{4D Context-Aware Thresholding}{equation.4.40}{}}
-\newlabel{eq:threshold_p95}{{4.41}{31}{4D Context-Aware Thresholding}{equation.4.41}{}}
-\newlabel{eq:threshold_global}{{4.42}{31}{4D Context-Aware Thresholding}{equation.4.42}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.8}{\ignorespaces 4D Context-Aware Threshold Matrix.}}{31}{figure.caption.24}\protected@file@percent }
-\newlabel{fig:4d_threshold_heatmap}{{4.8}{31}{4D Context-Aware Threshold Matrix}{figure.caption.24}{}}
-\newlabel{eq:normalized_score}{{4.43}{31}{4D Context-Aware Thresholding}{equation.4.43}{}}
-\@writefile{toc}{\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{31}{subsubsection*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{30}{subsection.4.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Denoising Autoencoder Architecture}{30}{subsubsection*.22}\protected@file@percent }
+\newlabel{eq:encoder}{{4.32}{30}{Denoising Autoencoder Architecture}{equation.4.32}{}}
+\newlabel{eq:decoder}{{4.33}{30}{Denoising Autoencoder Architecture}{equation.4.33}{}}
+\newlabel{eq:dae_loss}{{4.34}{30}{Denoising Autoencoder Architecture}{equation.4.34}{}}
+\@writefile{toc}{\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{30}{subsubsection*.23}\protected@file@percent }
+\newlabel{eq:memory_buffer}{{4.35}{30}{L1 k-NN Scoring on Memory Module}{equation.4.35}{}}
+\newlabel{eq:l1_distance}{{4.36}{30}{L1 k-NN Scoring on Memory Module}{equation.4.36}{}}
+\newlabel{eq:anomaly_score_v2}{{4.37}{31}{L1 k-NN Scoring on Memory Module}{equation.4.37}{}}
+\newlabel{eq:anomaly_decision}{{4.38}{31}{L1 k-NN Scoring on Memory Module}{equation.4.38}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.5}{\ignorespaces AUC vs Memory Buffer Size.}}{31}{table.caption.24}\protected@file@percent }
+\newlabel{tab:memory_size_ablation}{{4.5}{31}{AUC vs Memory Buffer Size}{table.caption.24}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Online Memory Update Policy}{31}{subsubsection*.25}\protected@file@percent }
+\newlabel{eq:conditional_insert}{{4.39}{31}{Online Memory Update Policy}{equation.4.39}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.8}{\ignorespaces Online Memory Update Policy.}}{32}{figure.caption.26}\protected@file@percent }
+\newlabel{alg:memory_update}{{4.8}{32}{Online Memory Update Policy}{figure.caption.26}{}}
+\@writefile{toc}{\contentsline {subsubsection}{4D Context-Aware Thresholding}{32}{subsubsection*.27}\protected@file@percent }
+\newlabel{eq:4d_matrix}{{4.40}{32}{4D Context-Aware Thresholding}{equation.4.40}{}}
+\newlabel{eq:threshold_p95}{{4.41}{32}{4D Context-Aware Thresholding}{equation.4.41}{}}
+\newlabel{eq:threshold_global}{{4.42}{32}{4D Context-Aware Thresholding}{equation.4.42}{}}
 \citation{adwin2025}
 \citation{bifet2007learning}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.9}{\ignorespaces 4D Context-Aware Threshold Matrix.}}{33}{figure.caption.28}\protected@file@percent }
+\newlabel{fig:4d_threshold_heatmap}{{4.9}{33}{4D Context-Aware Threshold Matrix}{figure.caption.28}{}}
+\newlabel{eq:normalized_score}{{4.43}{33}{4D Context-Aware Thresholding}{equation.4.43}{}}
+\@writefile{toc}{\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{33}{subsubsection*.29}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{33}{subsection.4.3.5}\protected@file@percent }
 \citation{adwin2025}
 \citation{adwin2025}
 \citation{adwin2025}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{32}{subsection.4.3.5}\protected@file@percent }
-\newlabel{eq:adwin_drift_l4}{{4.44}{32}{Layer 3: Meta-Aggregation}{equation.4.44}{}}
-\newlabel{eq:skewness}{{4.45}{32}{Layer 3: Meta-Aggregation}{equation.4.45}{}}
 \citation{dtd2026}
+\newlabel{eq:adwin_drift_l4}{{4.44}{34}{Layer 3: Meta-Aggregation}{equation.4.44}{}}
+\newlabel{eq:skewness}{{4.45}{34}{Layer 3: Meta-Aggregation}{equation.4.45}{}}
+\newlabel{eq:kurtosis}{{4.46}{34}{Layer 3: Meta-Aggregation}{equation.4.46}{}}
 \gdef \LT@iv {\LT@entry 
     {1}{75.39595pt}\LT@entry 
     {1}{57.92458pt}\LT@entry 
     {1}{63.61504pt}\LT@entry 
     {1}{183.11652pt}}
-\newlabel{eq:kurtosis}{{4.46}{33}{Layer 3: Meta-Aggregation}{equation.4.46}{}}
-\newlabel{eq:null_rate_v2}{{4.47}{33}{Layer 3: Meta-Aggregation}{equation.4.47}{}}
-\newlabel{eq:violation_rate_v2}{{4.48}{33}{Layer 3: Meta-Aggregation}{equation.4.48}{}}
-\newlabel{eq:anomaly_rate_v2}{{4.49}{33}{Layer 3: Meta-Aggregation}{equation.4.49}{}}
-\newlabel{eq:volume_v2}{{4.50}{33}{Layer 3: Meta-Aggregation}{equation.4.50}{}}
-\newlabel{eq:avg_anomaly_score_v2}{{4.51}{33}{Layer 3: Meta-Aggregation}{equation.4.51}{}}
-\newlabel{eq:delta_score_v2}{{4.52}{33}{Layer 3: Meta-Aggregation}{equation.4.52}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {4.3}{\ignorespaces ADWIN Confidence Parameters for Meta-Metrics.}}{34}{table.4.3}\protected@file@percent }
-\newlabel{tab:adwin_params_v2}{{4.3}{34}{ADWIN Confidence Parameters for Meta-Metrics}{table.4.3}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{34}{subsection.4.3.6}\protected@file@percent }
-\newlabel{eq:adwin_drift_iec}{{4.53}{35}{Layer 4: Intelligent Evolution Controller}{equation.4.53}{}}
+\newlabel{eq:null_rate_v2}{{4.47}{35}{Layer 3: Meta-Aggregation}{equation.4.47}{}}
+\newlabel{eq:violation_rate_v2}{{4.48}{35}{Layer 3: Meta-Aggregation}{equation.4.48}{}}
+\newlabel{eq:anomaly_rate_v2}{{4.49}{35}{Layer 3: Meta-Aggregation}{equation.4.49}{}}
+\newlabel{eq:volume_v2}{{4.50}{35}{Layer 3: Meta-Aggregation}{equation.4.50}{}}
+\newlabel{eq:avg_anomaly_score_v2}{{4.51}{35}{Layer 3: Meta-Aggregation}{equation.4.51}{}}
+\newlabel{eq:delta_score_v2}{{4.52}{35}{Layer 3: Meta-Aggregation}{equation.4.52}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4.6}{\ignorespaces ADWIN Confidence Parameters for Meta-Metrics.}}{35}{table.4.6}\protected@file@percent }
+\newlabel{tab:adwin_params_v2}{{4.6}{35}{ADWIN Confidence Parameters for Meta-Metrics}{table.4.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{35}{subsection.4.3.6}\protected@file@percent }
+\newlabel{eq:adwin_drift_iec}{{4.53}{37}{Layer 4: Intelligent Evolution Controller}{equation.4.53}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4.10}{\ignorespaces IEC Drift Detection and Adaptation.}}{37}{figure.caption.30}\protected@file@percent }
+\newlabel{fig:adwin_mechanism}{{4.10}{37}{IEC Drift Detection and Adaptation}{figure.caption.30}{}}
 \citation{chandy_lamport_1985}
-\@writefile{lof}{\contentsline {figure}{\numberline {4.9}{\ignorespaces IEC Drift Detection and Adaptation.}}{36}{figure.caption.26}\protected@file@percent }
-\newlabel{fig:adwin_mechanism}{{4.9}{36}{IEC Drift Detection and Adaptation}{figure.caption.26}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{36}{subsection.4.3.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{36}{subsubsection*.27}\protected@file@percent }
 \citation{confluent_dead_letter_queue}
-\@writefile{toc}{\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{37}{subsubsection*.28}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{37}{subsubsection*.29}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{37}{subsubsection*.30}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Idempotent Operations}{38}{subsubsection*.31}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{State Size Management}{38}{subsubsection*.32}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{Model Distribution and GC Overhead}{38}{subsubsection*.33}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4.4}Chapter Summary}{38}{section.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{38}{subsection.4.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{38}{subsubsection*.31}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{38}{subsubsection*.32}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{38}{subsubsection*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{39}{subsubsection*.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Idempotent Operations}{39}{subsubsection*.35}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{State Size Management}{39}{subsubsection*.36}\protected@file@percent }
+\citation{chandy_lamport_1985}
+\@writefile{toc}{\contentsline {subsubsection}{Model Distribution and GC Overhead}{40}{subsubsection*.37}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3.8}Fault Tolerance}{40}{subsection.4.3.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{40}{subsubsection*.38}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{40}{subsubsection*.39}\protected@file@percent }
+\citation{confluent_dead_letter_queue}
+\@writefile{toc}{\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{41}{subsubsection*.40}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{41}{subsubsection*.41}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Idempotent Operations}{41}{subsubsection*.42}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{State Size Management}{42}{subsubsection*.43}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Model Distribution and GC Overhead}{42}{subsubsection*.44}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4.4}Chapter Summary}{42}{section.4.4}\protected@file@percent }
 \gdef \LT@v {\LT@entry 
     {1}{98.15825pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{83.53188pt}}
-\@writefile{toc}{\contentsline {chapter}{\numberline {5}EXPERIMENTS}{40}{chapter.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {5}EXPERIMENTS}{44}{chapter.5}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {5.1}Implementation Setup}{40}{section.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{41}{subsection.5.1.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{41}{subsection.5.1.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow; (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each); (c) Kafka consumer group offsets for exactly-once processing; (d) Flink time-based windows with watermarks for late-arriving events; (e) Prometheus alerting with Alertmanager routing.}}{41}{figure.caption.34}\protected@file@percent }
-\newlabel{fig:infra_overview}{{5.1}{41}{CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow; (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each); (c) Kafka consumer group offsets for exactly-once processing; (d) Flink time-based windows with watermarks for late-arriving events; (e) Prometheus alerting with Alertmanager routing}{figure.caption.34}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.2}Results}{41}{section.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5.1}Implementation Setup}{44}{section.5.1}\protected@file@percent }
+\citation{DCRepair2024}
+\citation{DCRepair2022}
+\citation{bayesianQC2013}
+\citation{icewafl2025}
+\citation{adacontext2025}
+\citation{dafdiscover2024}
+\citation{DCRepair2022,icewafl2025,dafdiscover2024}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{45}{subsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{45}{subsection.5.1.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5.1}{\ignorespaces CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow.}}{46}{figure.caption.45}\protected@file@percent }
+\newlabel{fig:infra_a}{{5.1}{46}{CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow}{figure.caption.45}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.2}{\ignorespaces CA-DQStream Infrastructure: (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each).}}{46}{figure.caption.46}\protected@file@percent }
+\newlabel{fig:infra_b}{{5.2}{46}{CA-DQStream Infrastructure: (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each)}{figure.caption.46}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.3}{\ignorespaces CA-DQStream Infrastructure: (c) Kafka consumer group offsets for exactly-once processing.}}{47}{figure.caption.47}\protected@file@percent }
+\newlabel{fig:infra_c}{{5.3}{47}{CA-DQStream Infrastructure: (c) Kafka consumer group offsets for exactly-once processing}{figure.caption.47}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.4}{\ignorespaces CA-DQStream Infrastructure: (d) Flink time-based windows with watermarks for late-arriving events.}}{47}{figure.caption.48}\protected@file@percent }
+\newlabel{fig:infra_d}{{5.4}{47}{CA-DQStream Infrastructure: (d) Flink time-based windows with watermarks for late-arriving events}{figure.caption.48}{}}
 \gdef \LT@vi {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}\LT@entry 
     {1}{69.3055pt}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.5}{\ignorespaces CA-DQStream Infrastructure: (e) Prometheus alerting with Alertmanager routing.}}{48}{figure.caption.49}\protected@file@percent }
+\newlabel{fig:infra_e}{{5.5}{48}{CA-DQStream Infrastructure: (e) Prometheus alerting with Alertmanager routing}{figure.caption.49}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.2}Results}{48}{section.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.1}Online Autoencoder Anomaly Detection}{48}{subsection.5.2.1}\protected@file@percent }
 \gdef \LT@vii {\LT@entry 
     {1}{140.83739pt}\LT@entry 
     {1}{55.07912pt}\LT@entry 
@@ -326,98 +360,49 @@
     {1}{46.54321pt}\LT@entry 
     {1}{46.54321pt}\LT@entry 
     {1}{46.54321pt}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.1}Online Autoencoder Anomaly Detection}{42}{subsection.5.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.2}Comparison with Existing DQ Tools}{42}{subsection.5.2.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {5.6}{\ignorespaces AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods.}}{43}{table.caption.35}\protected@file@percent }
-\newlabel{tab:method_comparison}{{5.6}{43}{AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods}{table.caption.35}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.3}Context-Aware vs Global Thresholds}{43}{subsection.5.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.2}Comparison with Existing DQ Tools}{49}{subsection.5.2.2}\protected@file@percent }
 \gdef \LT@x {\LT@entry 
     {1}{155.06377pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}}
+\@writefile{lot}{\contentsline {table}{\numberline {5.6}{\ignorespaces AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods.}}{50}{table.caption.50}\protected@file@percent }
+\newlabel{tab:method_comparison}{{5.6}{50}{AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods}{table.caption.50}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.3}Context-Aware vs Global Thresholds}{50}{subsection.5.2.3}\protected@file@percent }
 \gdef \LT@xi {\LT@entry 
     {1}{98.15825pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}\LT@entry 
     {1}{83.53188pt}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.6}{\ignorespaces FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds.}}{51}{figure.caption.51}\protected@file@percent }
+\newlabel{fig:exp5a_fpr_comparison}{{5.6}{51}{FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds}{figure.caption.51}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.4}Temporal Validation}{51}{subsection.5.2.4}\protected@file@percent }
 \gdef \LT@xii {\LT@entry 
     {1}{126.61101pt}\LT@entry 
     {1}{97.75826pt}\LT@entry 
     {1}{97.75826pt}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.2}{\ignorespaces FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds.}}{45}{figure.caption.36}\protected@file@percent }
-\newlabel{fig:exp5a_fpr_comparison}{{5.2}{45}{FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds}{figure.caption.36}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.4}Temporal Validation}{45}{subsection.5.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.5}Grafana Dashboard}{45}{subsection.5.2.5}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {5.3}{\ignorespaces Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time.}}{46}{figure.caption.37}\protected@file@percent }
-\newlabel{fig:grafana_dashboard_1}{{5.3}{46}{Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time}{figure.caption.37}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {5.4}{\ignorespaces Grafana Dashboard Panel: $\Delta $\_Score Divergence and Drift Detection Alerts.}}{46}{figure.caption.38}\protected@file@percent }
-\newlabel{fig:grafana_dashboard_2}{{5.4}{46}{Grafana Dashboard Panel: $\Delta $\_Score Divergence and Drift Detection Alerts}{figure.caption.38}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {5.3}Chapter Summary}{46}{section.5.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{48}{chapter.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2.5}Grafana Dashboard}{52}{subsection.5.2.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5.7}{\ignorespaces Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time.}}{52}{figure.caption.52}\protected@file@percent }
+\newlabel{fig:grafana_dashboard_1}{{5.7}{52}{Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time}{figure.caption.52}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5.8}{\ignorespaces Grafana Dashboard Panel: $\Delta $\_Score Divergence and Drift Detection Alerts.}}{53}{figure.caption.53}\protected@file@percent }
+\newlabel{fig:grafana_dashboard_2}{{5.8}{53}{Grafana Dashboard Panel: $\Delta $\_Score Divergence and Drift Detection Alerts}{figure.caption.53}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5.3}Chapter Summary}{53}{section.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{54}{chapter.6}\protected@file@percent }
 \@writefile{lof}{\addvspace {10\p@ }}
 \@writefile{lot}{\addvspace {10\p@ }}
-\@writefile{toc}{\contentsline {section}{\numberline {6.1}Conclusions}{48}{section.6.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.2}Limitations}{48}{section.6.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{49}{subsection.6.2.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{49}{subsection.6.2.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{49}{subsection.6.2.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{49}{subsection.6.2.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6.3}Future Work}{49}{section.6.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{49}{subsection.6.3.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{49}{subsection.6.3.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{49}{subsection.6.3.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{50}{subsection.6.3.4}\protected@file@percent }
-\gdef \LT@xiii {\LT@entry 
-    {1}{126.61101pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{83.53188pt}}
-\gdef \LT@xiv {\LT@entry 
-    {1}{140.83739pt}\LT@entry 
-    {1}{55.07912pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{83.53188pt}}
-\@writefile{toc}{\contentsline {chapter}{Appendix B: Statistical Appendix}{51}{chapter*.39}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {6.1}{\ignorespaces Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds.}}{51}{table.6.1}\protected@file@percent }
-\newlabel{tab:wilcoxon_easy}{{6.1}{51}{Wilcoxon signed-rank test results: Proposed Online AE + Memory Module vs sklearn baselines. Holm-Bonferroni corrected $p$-values. $W=0$ indicates proposed was better on all 5 seeds}{table.6.1}{}}
-\gdef \LT@xv {\LT@entry 
-    {1}{112.38463pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{111.98463pt}\LT@entry 
-    {1}{83.53188pt}}
-\gdef \LT@xvi {\LT@entry 
-    {1}{126.61101pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{111.98463pt}\LT@entry 
-    {1}{97.75826pt}}
-\gdef \LT@xvii {\LT@entry 
-    {1}{69.70549pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{83.53188pt}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.2}{\ignorespaces Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model.}}{52}{table.6.2}\protected@file@percent }
-\newlabel{tab:wilcoxon_ablation}{{6.2}{52}{Ablation chain statistical significance (Wilcoxon, Holm-Bonferroni). Each row compares the current model to the previous model}{table.6.2}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.3}{\ignorespaces Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method).}}{52}{table.6.3}\protected@file@percent }
-\newlabel{tab:bootstrap_ci}{{6.3}{52}{Block bootstrap 95\% confidence intervals (1000 replicates, 1-hour block size, block bootstrap percentile method)}{table.6.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.4}{\ignorespaces McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$).}}{52}{table.6.4}\protected@file@percent }
-\newlabel{tab:mcnemar}{{6.4}{52}{McNemar's test: disagreement counts on actual anomalies. $b$: proposed correct, baseline error. $c$: proposed error, baseline correct. All comparisons significant at $\alpha =0.05$ (Bonferroni-corrected for 5 comparisons, critical $\chi ^2=9.49$)}{table.6.4}{}}
-\gdef \LT@xviii {\LT@entry 
-    {1}{140.83739pt}\LT@entry 
-    {1}{69.3055pt}\LT@entry 
-    {1}{83.53188pt}\LT@entry 
-    {1}{97.75826pt}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.5}{\ignorespaces Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR.}}{53}{table.6.5}\protected@file@percent }
-\newlabel{tab:seed_level}{{6.5}{53}{Per-seed measurements (5 seeds, Easy-difficulty anomalies). Proposed outperforms sklearn IF on all seeds for both F1 and FPR}{table.6.5}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6.6}{\ignorespaces Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method.}}{53}{table.6.6}\protected@file@percent }
-\newlabel{tab:cohen_d}{{6.6}{53}{Cohen's $d$ effect sizes for key comparisons. Negative $d$ for FPR comparisons indicates lower (better) FPR for the proposed method}{table.6.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6.1}Conclusions}{54}{section.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.2}Limitations}{54}{section.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{55}{subsection.6.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{55}{subsection.6.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{55}{subsection.6.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{55}{subsection.6.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6.3}Future Work}{55}{section.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{55}{subsection.6.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{55}{subsection.6.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{55}{subsection.6.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{56}{subsection.6.3.4}\protected@file@percent }
 \bibstyle{plainnat}
 \bibdata{citation}
 \bibcite{alibaba_flink2024}{{1}{2024}{{Alibaba Cloud}}{{}}}
@@ -428,49 +413,54 @@
 \bibcite{baier2020switching}{{6}{2020}{{Baier et~al.}}{{Baier, Kellner, K\"uhl, and Satzger}}}
 \bibcite{bhatia2022dense}{{7}{2022}{{Bhatia et~al.}}{{}}}
 \bibcite{bifet2007learning}{{8}{2007}{{Bifet and Gavalda}}{{}}}
-\bibcite{braei2020timeseries}{{9}{2020}{{Braei and Wagner}}{{}}}
-\bibcite{breunig2000lof}{{10}{2000}{{Breunig et~al.}}{{Breunig, Kriegel, Ng, and Sander}}}
-\bibcite{chandy_lamport_1985}{{11}{1985}{{Chandy and Lamport}}{{}}}
-\bibcite{taps2021}{{12}{2021}{{Chen et~al.}}{{}}}
-\bibcite{mtri2026}{{13}{2026}{{Chen et~al.}}{{Chen, Chen, and Lu}}}
-\bibcite{flink_rocksdb}{{14}{2024{}}{{Community}}{{}}}
-\bibcite{flink_rocksdb_bloom}{{15}{2024{}}{{Community}}{{}}}
-\bibcite{confluent_dead_letter_queue}{{16}{2024{}}{{Confluent}}{{}}}
-\bibcite{confluent_dq_patterns}{{17}{2024{}}{{Confluent}}{{}}}
-\bibcite{confluent_schema_registry}{{18}{2024{}}{{Confluent}}{{}}}
-\@writefile{toc}{\contentsline {chapter}{REFERENCES}{55}{table.6.6}\protected@file@percent }
-\bibcite{confluent_2025_streaming_report}{{19}{2025}{{Confluent}}{{}}}
-\bibcite{siemens_confluent2024}{{20}{2024}{{Confluent Inc.}}{{}}}
-\bibcite{confluent_2025}{{21}{2025}{{Confluent Inc.}}{{}}}
-\bibcite{dama2017dmbok}{{22}{2017}{{Data Management Association}}{{}}}
-\bibcite{dey2001understanding}{{23}{2001}{{Dey}}{{}}}
-\bibcite{gama2014survey}{{24}{2014}{{Gama et~al.}}{{Gama, Zliobaite, Bifet, Pechenizkiy, and Bouchachia}}}
-\bibcite{googlemlops2024}{{25}{2024}{{Google Cloud}}{{}}}
-\bibcite{grab_streaming_dq}{{26}{2024}{{Grab Engineering}}{{}}}
-\bibcite{grab_coban2025}{{27}{2025}{{Grab Engineering}}{{}}}
-\bibcite{adbench2022}{{28}{2022}{{Han et~al.}}{{Han, Li, et~al.}}}
-\bibcite{hojjati2025selfsupervised}{{29}{2025}{{Hojjati et~al.}}{{Hojjati, Ho, and Armanfard}}}
-\bibcite{ibm_dq2024}{{30}{2024}{{IBM}}{{}}}
-\bibcite{karczmarek2020kmeans}{{31}{2020}{{Karczmarek et~al.}}{{Karczmarek, Kiersztyn, Pedrycz, and Al}}}
-\bibcite{nab2020}{{32}{2020}{{Lavine et~al.}}{{Lavine, Lamb, and Ahmad}}}
-\bibcite{liu2008isolation}{{33}{2008}{{Liu et~al.}}{{Liu, Ting, and Zhou}}}
-\bibcite{lu2018learning}{{34}{2018}{{Lu et~al.}}{{Lu, Liu, Dong, Pei, Guruler, and Savachkin}}}
-\bibcite{dtd2026}{{35}{2026}{{Lu et~al.}}{{Lu, Lu, Liu, Yu, and Zhang}}}
-\bibcite{read2020}{{36}{2020}{{Luo et~al.}}{{Luo, Meng, Wu, Zhang, Li, and Zheng}}}
-\bibcite{scar2025benchmark}{{37}{2025}{{Ma et~al.}}{{Ma, Zhang, et~al.}}}
-\bibcite{montiel2021river}{{38}{2021}{{Montiel et~al.}}{{Montiel, Read, Bifet, and Abdessalem}}}
-\bibcite{nyctlc}{{39}{2024}{{NYC Taxi and Limousine Commission}}{{}}}
-\bibcite{papastergios2025stream}{{40}{2025}{{Papastergios and Gounaris}}{{}}}
-\bibcite{precisely2024}{{41}{2024}{{Precisely}}{{}}}
-\bibcite{scholkopf2001oc}{{42}{2001}{{Sch\"olkopf et~al.}}{{Sch\"olkopf, Platt, Shawe-Taylor, Smola, and Williamson}}}
-\bibcite{contextdq2022}{{43}{2022}{{Serra et~al.}}{{Serra, Peralta, Marotta, and Marcel}}}
-\bibcite{icad2025}{{44}{2025}{{Siampou et~al.}}{{}}}
-\bibcite{siddiqui2019mstream}{{45}{2019}{{Siddiqui et~al.}}{{Siddiqui, Paul, Schulz, Rundensteiner, Faghri, Roy, Rashidi, Ravindra, Krishnan, and Abel}}}
-\bibcite{togbe2020iforestasd}{{46}{2020}{{Togbe et~al.}}{{Togbe, Barry, Boly, Chabchoub, Chiky, Montiel, and Tran}}}
-\bibcite{ververica2024}{{47}{2024}{{Ververica}}{{}}}
-\bibcite{vincent2010stacked}{{48}{2010}{{Vincent et~al.}}{{Vincent, Larochelle, Lajoie, Bengio, and Manzagol}}}
-\bibcite{bestad2025}{{49}{2025}{{Xie et~al.}}{{Xie, Kim, Chiang, Zhao, and Shafique}}}
-\bibcite{adt2025}{{50}{2025}{{Yang et~al.}}{{}}}
-\bibcite{yepmo2024rififi}{{51}{2024}{{Yepmo et~al.}}{{Yepmo, Smits, Lesot, and Pivert}}}
-\bibcite{meter_2023}{{52}{2023}{{Zhu et~al.}}{{Zhu, Cai, Deng, Ooi, and Zhang}}}
-\gdef \@abspage@last{67}
+\bibcite{DCRepair2022}{{9}{2022}{{Bleifuss et~al.}}{{Bleifuss, Hammer, Freytag, and Kemper}}}
+\bibcite{braei2020timeseries}{{10}{2020}{{Braei and Wagner}}{{}}}
+\bibcite{breunig2000lof}{{11}{2000}{{Breunig et~al.}}{{Breunig, Kriegel, Ng, and Sander}}}
+\bibcite{chandy_lamport_1985}{{12}{1985}{{Chandy and Lamport}}{{}}}
+\bibcite{taps2021}{{13}{2021}{{Chen et~al.}}{{}}}
+\bibcite{mtri2026}{{14}{2026}{{Chen et~al.}}{{Chen, Chen, and Lu}}}
+\bibcite{DCRepair2024}{{15}{2024}{{Chen et~al.}}{{Chen, Fan, Gehrke, and Liu}}}
+\bibcite{flink_rocksdb}{{16}{2024{}}{{Community}}{{}}}
+\bibcite{flink_rocksdb_bloom}{{17}{2024{}}{{Community}}{{}}}
+\bibcite{confluent_dead_letter_queue}{{18}{2024{}}{{Confluent}}{{}}}
+\@writefile{toc}{\contentsline {chapter}{REFERENCES}{57}{subsection.6.3.4}\protected@file@percent }
+\bibcite{confluent_dq_patterns}{{19}{2024{}}{{Confluent}}{{}}}
+\bibcite{confluent_schema_registry}{{20}{2024{}}{{Confluent}}{{}}}
+\bibcite{confluent_2025_streaming_report}{{21}{2025}{{Confluent}}{{}}}
+\bibcite{siemens_confluent2024}{{22}{2024}{{Confluent Inc.}}{{}}}
+\bibcite{confluent_2025}{{23}{2025}{{Confluent Inc.}}{{}}}
+\bibcite{dama2017dmbok}{{24}{2017}{{Data Management Association}}{{}}}
+\bibcite{dey2001understanding}{{25}{2001}{{Dey}}{{}}}
+\bibcite{gama2014survey}{{26}{2014}{{Gama et~al.}}{{Gama, Zliobaite, Bifet, Pechenizkiy, and Bouchachia}}}
+\bibcite{googlemlops2024}{{27}{2024}{{Google Cloud}}{{}}}
+\bibcite{bayesianQC2013}{{28}{2013}{{Goring et~al.}}{{Goring, Nikora, McKerchar, and Henderson}}}
+\bibcite{grab_streaming_dq}{{29}{2024}{{Grab Engineering}}{{}}}
+\bibcite{grab_coban2025}{{30}{2025}{{Grab Engineering}}{{}}}
+\bibcite{adbench2022}{{31}{2022}{{Han et~al.}}{{Han, Li, et~al.}}}
+\bibcite{hojjati2025selfsupervised}{{32}{2025}{{Hojjati et~al.}}{{Hojjati, Ho, and Armanfard}}}
+\bibcite{ibm_dq2024}{{33}{2024}{{IBM}}{{}}}
+\bibcite{karczmarek2020kmeans}{{34}{2020}{{Karczmarek et~al.}}{{Karczmarek, Kiersztyn, Pedrycz, and Al}}}
+\bibcite{nab2020}{{35}{2020}{{Lavine et~al.}}{{Lavine, Lamb, and Ahmad}}}
+\bibcite{liu2008isolation}{{36}{2008}{{Liu et~al.}}{{Liu, Ting, and Zhou}}}
+\bibcite{lu2018learning}{{37}{2018}{{Lu et~al.}}{{Lu, Liu, Dong, Pei, Guruler, and Savachkin}}}
+\bibcite{dtd2026}{{38}{2026}{{Lu et~al.}}{{Lu, Lu, Liu, Yu, and Zhang}}}
+\bibcite{read2020}{{39}{2020}{{Luo et~al.}}{{Luo, Meng, Wu, Zhang, Li, and Zheng}}}
+\bibcite{scar2025benchmark}{{40}{2025}{{Ma et~al.}}{{Ma, Zhang, et~al.}}}
+\bibcite{montiel2021river}{{41}{2021}{{Montiel et~al.}}{{Montiel, Read, Bifet, and Abdessalem}}}
+\bibcite{papastergios2025stream}{{42}{2025}{{Papastergios and Gounaris}}{{}}}
+\bibcite{precisely2024}{{43}{2024}{{Precisely}}{{}}}
+\bibcite{adacontext2025}{{44}{2025}{{Rekatsinas et~al.}}{{Rekatsinas, Chu, Ilyas, and Rekatsinas}}}
+\bibcite{icewafl2025}{{45}{2025}{{Schinninger et~al.}}{{Schinninger, Panse, K\"uhne, and Ehrlinger}}}
+\bibcite{scholkopf2001oc}{{46}{2001}{{Sch\"olkopf et~al.}}{{Sch\"olkopf, Platt, Shawe-Taylor, Smola, and Williamson}}}
+\bibcite{contextdq2022}{{47}{2022}{{Serra et~al.}}{{Serra, Peralta, Marotta, and Marcel}}}
+\bibcite{icad2025}{{48}{2025}{{Siampou et~al.}}{{}}}
+\bibcite{siddiqui2019mstream}{{49}{2019}{{Siddiqui et~al.}}{{Siddiqui, Paul, Schulz, Rundensteiner, Faghri, Roy, Rashidi, Ravindra, Krishnan, and Abel}}}
+\bibcite{togbe2020iforestasd}{{50}{2020}{{Togbe et~al.}}{{Togbe, Barry, Boly, Chabchoub, Chiky, Montiel, and Tran}}}
+\bibcite{ververica2024}{{51}{2024}{{Ververica}}{{}}}
+\bibcite{vincent2010stacked}{{52}{2010}{{Vincent et~al.}}{{Vincent, Larochelle, Lajoie, Bengio, and Manzagol}}}
+\bibcite{bestad2025}{{53}{2025}{{Xie et~al.}}{{Xie, Kim, Chiang, Zhao, and Shafique}}}
+\bibcite{adt2025}{{54}{2025}{{Yang et~al.}}{{}}}
+\bibcite{yepmo2024rififi}{{55}{2024}{{Yepmo et~al.}}{{Yepmo, Smits, Lesot, and Pivert}}}
+\bibcite{dafdiscover2024}{{56}{2024}{{Zhang et~al.}}{{Zhang, Khemmarat, Gao, Fan, Halappanavar, and Srivastava}}}
+\bibcite{meter_2023}{{57}{2023}{{Zhu et~al.}}{{Zhu, Cai, Deng, Ooi, and Zhang}}}
+\gdef \@abspage@last{70}

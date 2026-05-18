@@ -3,18 +3,23 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {4.1}{\ignorespaces Fare Distribution of NYC Yellow Taxi Trips.}}{20}{figure.caption.8}%
-\contentsline {figure}{\numberline {4.2}{\ignorespaces Hourly Record Volume Pattern by Weekday and Weekend.}}{20}{figure.caption.9}%
-\contentsline {figure}{\numberline {4.3}{\ignorespaces Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}}{20}{figure.caption.10}%
-\contentsline {figure}{\numberline {4.4}{\ignorespaces Monthly Record Volume and Violation Rate Over 26 Months.}}{21}{figure.caption.11}%
-\contentsline {figure}{\numberline {4.5}{\ignorespaces CA-DQStream System Architecture.}}{22}{figure.caption.12}%
-\contentsline {figure}{\numberline {4.6}{\ignorespaces Flatten KeyedState Deduplication with Bloom Filter.}}{26}{figure.caption.15}%
-\contentsline {figure}{\numberline {4.7}{\ignorespaces Online Memory Update Policy.}}{30}{figure.caption.22}%
-\contentsline {figure}{\numberline {4.8}{\ignorespaces 4D Context-Aware Threshold Matrix.}}{31}{figure.caption.24}%
-\contentsline {figure}{\numberline {4.9}{\ignorespaces IEC Drift Detection and Adaptation.}}{36}{figure.caption.26}%
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Fare Distribution of NYC Yellow Taxi Trips.}}{21}{figure.caption.11}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Hourly Record Volume Pattern by Weekday and Weekend.}}{21}{figure.caption.12}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}}{21}{figure.caption.13}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Monthly Record Volume and Violation Rate Over 26 Months.}}{22}{figure.caption.14}%
+\contentsline {figure}{\numberline {4.5}{\ignorespaces Drift Detection Mechanism: ADWIN maintains an adaptive window that dynamically adjusts as new data arrives. When the statistical divergence between the reference window (older stable data) and the current window (recent data) exceeds a threshold, a drift alarm is raised, triggering the IEC to recompute thresholds or retrain the model.}}{22}{figure.caption.15}%
+\contentsline {figure}{\numberline {4.6}{\ignorespaces CA-DQStream System Architecture.}}{23}{figure.caption.16}%
+\contentsline {figure}{\numberline {4.7}{\ignorespaces Flatten KeyedState Deduplication with Bloom Filter.}}{28}{figure.caption.19}%
+\contentsline {figure}{\numberline {4.8}{\ignorespaces Online Memory Update Policy.}}{32}{figure.caption.26}%
+\contentsline {figure}{\numberline {4.9}{\ignorespaces 4D Context-Aware Threshold Matrix.}}{33}{figure.caption.28}%
+\contentsline {figure}{\numberline {4.10}{\ignorespaces IEC Drift Detection and Adaptation.}}{37}{figure.caption.30}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow; (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each); (c) Kafka consumer group offsets for exactly-once processing; (d) Flink time-based windows with watermarks for late-arriving events; (e) Prometheus alerting with Alertmanager routing.}}{41}{figure.caption.34}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds.}}{45}{figure.caption.36}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time.}}{46}{figure.caption.37}%
-\contentsline {figure}{\numberline {5.4}{\ignorespaces Grafana Dashboard Panel: $\Delta $\_Score Divergence and Drift Detection Alerts.}}{46}{figure.caption.38}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces CA-DQStream Infrastructure: (a) Kafka Streams API processor topology and dataflow.}}{46}{figure.caption.45}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces CA-DQStream Infrastructure: (b) Kafka cluster with ZooKeeper metadata coordination (7 topics, 12 partitions each).}}{46}{figure.caption.46}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces CA-DQStream Infrastructure: (c) Kafka consumer group offsets for exactly-once processing.}}{47}{figure.caption.47}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces CA-DQStream Infrastructure: (d) Flink time-based windows with watermarks for late-arriving events.}}{47}{figure.caption.48}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces CA-DQStream Infrastructure: (e) Prometheus alerting with Alertmanager routing.}}{48}{figure.caption.49}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces FPR Comparison: sklearn IF vs Global Threshold vs 4D Context-Aware Thresholds.}}{51}{figure.caption.51}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces Grafana Dashboard Panel: FPR and Anomaly Rate Monitoring Over Time.}}{52}{figure.caption.52}%
+\contentsline {figure}{\numberline {5.8}{\ignorespaces Grafana Dashboard Panel: $\Delta $\_Score Divergence and Drift Detection Alerts.}}{53}{figure.caption.53}%
 \addvspace {10\p@ }

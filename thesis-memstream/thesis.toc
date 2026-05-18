@@ -26,55 +26,62 @@
 \contentsline {section}{\numberline {4.1}Approach Direction}{19}{section.4.1}%
 \contentsline {section}{\numberline {4.2}Data Exploration}{19}{section.4.2}%
 \contentsline {subsection}{\numberline {4.2.1}Raw Data EDA}{19}{subsection.4.2.1}%
-\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{21}{subsection.4.2.2}%
-\contentsline {subsection}{\numberline {4.2.3}Injected Data}{21}{subsection.4.2.3}%
-\contentsline {section}{\numberline {4.3}Proposed Method}{21}{section.4.3}%
-\contentsline {subsection}{\numberline {4.3.1}Overview}{21}{subsection.4.3.1}%
-\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{22}{subsection.4.3.2}%
-\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{24}{subsection.4.3.3}%
-\contentsline {subsubsection}{Schema Validation}{24}{subsubsection*.13}%
-\contentsline {subsubsection}{Flink KeyedState Deduplication}{25}{subsubsection*.14}%
-\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{26}{subsubsection*.16}%
-\contentsline {subsubsection}{Physical Violation Filter (Warmup Phase)}{27}{subsubsection*.17}%
-\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{28}{subsection.4.3.4}%
-\contentsline {subsubsection}{Denoising Autoencoder Architecture}{28}{subsubsection*.18}%
-\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{29}{subsubsection*.19}%
-\contentsline {subsubsection}{Online Memory Update Policy}{30}{subsubsection*.21}%
-\contentsline {subsubsection}{4D Context-Aware Thresholding}{30}{subsubsection*.23}%
-\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{31}{subsubsection*.25}%
-\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{32}{subsection.4.3.5}%
-\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{34}{subsection.4.3.6}%
-\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{36}{subsection.4.3.7}%
-\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{36}{subsubsection*.27}%
-\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{37}{subsubsection*.28}%
-\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{37}{subsubsection*.29}%
-\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{37}{subsubsection*.30}%
-\contentsline {subsubsection}{Idempotent Operations}{38}{subsubsection*.31}%
-\contentsline {subsubsection}{State Size Management}{38}{subsubsection*.32}%
-\contentsline {subsubsection}{Model Distribution and GC Overhead}{38}{subsubsection*.33}%
-\contentsline {section}{\numberline {4.4}Chapter Summary}{38}{section.4.4}%
-\contentsline {chapter}{\numberline {5}EXPERIMENTS}{40}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Implementation Setup}{40}{section.5.1}%
-\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{41}{subsection.5.1.1}%
-\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{41}{subsection.5.1.2}%
-\contentsline {section}{\numberline {5.2}Results}{41}{section.5.2}%
-\contentsline {subsection}{\numberline {5.2.1}Online Autoencoder Anomaly Detection}{42}{subsection.5.2.1}%
-\contentsline {subsection}{\numberline {5.2.2}Comparison with Existing DQ Tools}{42}{subsection.5.2.2}%
-\contentsline {subsection}{\numberline {5.2.3}Context-Aware vs Global Thresholds}{43}{subsection.5.2.3}%
-\contentsline {subsection}{\numberline {5.2.4}Temporal Validation}{45}{subsection.5.2.4}%
-\contentsline {subsection}{\numberline {5.2.5}Grafana Dashboard}{45}{subsection.5.2.5}%
-\contentsline {section}{\numberline {5.3}Chapter Summary}{46}{section.5.3}%
-\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{48}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Conclusions}{48}{section.6.1}%
-\contentsline {section}{\numberline {6.2}Limitations}{48}{section.6.2}%
-\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{49}{subsection.6.2.1}%
-\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{49}{subsection.6.2.2}%
-\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{49}{subsection.6.2.3}%
-\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{49}{subsection.6.2.4}%
-\contentsline {section}{\numberline {6.3}Future Work}{49}{section.6.3}%
-\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{49}{subsection.6.3.1}%
-\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{49}{subsection.6.3.2}%
-\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{49}{subsection.6.3.3}%
-\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{50}{subsection.6.3.4}%
-\contentsline {chapter}{Appendix B: Statistical Appendix}{51}{chapter*.39}%
-\contentsline {chapter}{REFERENCES}{55}{table.6.6}%
+\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{22}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}Injected Data}{23}{subsection.4.2.3}%
+\contentsline {section}{\numberline {4.3}Proposed Method}{23}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Overview}{23}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{24}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{25}{subsection.4.3.3}%
+\contentsline {subsubsection}{Schema Validation}{26}{subsubsection*.17}%
+\contentsline {subsubsection}{Flink KeyedState Deduplication}{27}{subsubsection*.18}%
+\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{28}{subsubsection*.20}%
+\contentsline {subsubsection}{Physical Violation Filter (Warmup Phase)}{29}{subsubsection*.21}%
+\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{30}{subsection.4.3.4}%
+\contentsline {subsubsection}{Denoising Autoencoder Architecture}{30}{subsubsection*.22}%
+\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{30}{subsubsection*.23}%
+\contentsline {subsubsection}{Online Memory Update Policy}{31}{subsubsection*.25}%
+\contentsline {subsubsection}{4D Context-Aware Thresholding}{32}{subsubsection*.27}%
+\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{33}{subsubsection*.29}%
+\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{33}{subsection.4.3.5}%
+\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{35}{subsection.4.3.6}%
+\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{38}{subsection.4.3.7}%
+\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{38}{subsubsection*.31}%
+\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{38}{subsubsection*.32}%
+\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{38}{subsubsection*.33}%
+\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{39}{subsubsection*.34}%
+\contentsline {subsubsection}{Idempotent Operations}{39}{subsubsection*.35}%
+\contentsline {subsubsection}{State Size Management}{39}{subsubsection*.36}%
+\contentsline {subsubsection}{Model Distribution and GC Overhead}{40}{subsubsection*.37}%
+\contentsline {subsection}{\numberline {4.3.8}Fault Tolerance}{40}{subsection.4.3.8}%
+\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{40}{subsubsection*.38}%
+\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{40}{subsubsection*.39}%
+\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{41}{subsubsection*.40}%
+\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{41}{subsubsection*.41}%
+\contentsline {subsubsection}{Idempotent Operations}{41}{subsubsection*.42}%
+\contentsline {subsubsection}{State Size Management}{42}{subsubsection*.43}%
+\contentsline {subsubsection}{Model Distribution and GC Overhead}{42}{subsubsection*.44}%
+\contentsline {section}{\numberline {4.4}Chapter Summary}{42}{section.4.4}%
+\contentsline {chapter}{\numberline {5}EXPERIMENTS}{44}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Implementation Setup}{44}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{45}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{45}{subsection.5.1.2}%
+\contentsline {section}{\numberline {5.2}Results}{48}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Online Autoencoder Anomaly Detection}{48}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}Comparison with Existing DQ Tools}{49}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}Context-Aware vs Global Thresholds}{50}{subsection.5.2.3}%
+\contentsline {subsection}{\numberline {5.2.4}Temporal Validation}{51}{subsection.5.2.4}%
+\contentsline {subsection}{\numberline {5.2.5}Grafana Dashboard}{52}{subsection.5.2.5}%
+\contentsline {section}{\numberline {5.3}Chapter Summary}{53}{section.5.3}%
+\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{54}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Conclusions}{54}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Limitations}{54}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Limitation 1: Single-Domain Validation}{55}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Limitation 2: Supervised Ground Truth}{55}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}Limitation 3: No Anomaly Explanation}{55}{subsection.6.2.3}%
+\contentsline {subsection}{\numberline {6.2.4}Limitation 4: Single-Region Deployment}{55}{subsection.6.2.4}%
+\contentsline {section}{\numberline {6.3}Future Work}{55}{section.6.3}%
+\contentsline {subsection}{\numberline {6.3.1}Future Direction 1: Multi-Domain Validation}{55}{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {6.3.2}Future Direction 2: Advanced Deep Learning Integration}{55}{subsection.6.3.2}%
+\contentsline {subsection}{\numberline {6.3.3}Future Direction 3: Memory Module Optimization}{55}{subsection.6.3.3}%
+\contentsline {subsection}{\numberline {6.3.4}Future Direction 4: Anomaly Explanation via Reconstruction Analysis}{56}{subsection.6.3.4}%
+\contentsline {chapter}{REFERENCES}{57}{subsection.6.3.4}%

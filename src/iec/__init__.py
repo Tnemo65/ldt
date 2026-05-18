@@ -4,7 +4,6 @@ IEC (Intelligent Evolution Controller) package for MemStream.
 Phase 3 (Sequential Pipeline): Simplified to 2 strategies.
 
 Components:
-- circuit_breaker.py: Circuit breaker for IEC operations
 - drift_aggregator.py: Severity assessment + 2-strategy prediction
 - adwin_multi_instance.py: Multi-instance ADWIN for drift detection
 - verification_feedback.py: Tracks adaptation effectiveness
@@ -19,7 +18,6 @@ HMAC Security:
 - IEC_SIGNING_KEY environment variable is mandatory
 """
 
-from .circuit_breaker import CircuitBreaker, CircuitState
 from .drift_aggregator import DriftAggregator, SeverityLevel, EvolutionStrategy
 from .adwin_multi_instance import MultiInstanceADWIN
 from .verification_feedback import VerificationFeedbackLoop
@@ -32,9 +30,6 @@ from .iec_controller import (
 )
 
 __all__ = [
-    # Circuit breaker
-    'CircuitBreaker',
-    'CircuitState',
     # Drift aggregation
     'DriftAggregator',
     'SeverityLevel',

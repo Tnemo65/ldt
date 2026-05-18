@@ -33,8 +33,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.iec import (
     IECController,
     IECConfig,
-    CircuitBreaker,
-    CircuitState,
 )
 
 
