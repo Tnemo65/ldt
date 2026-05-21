@@ -1,141 +1,103 @@
 #!/usr/bin/env python3
-"""Continuous Kafka producer using synthetic NYC taxi data."""
+"""Fast Kafka producer: reads parquet, sends JSON to taxi-nyc-raw-v2, async flush."""
+
+import sys
 import json
 import time
-import sys
-import random
-import logging
-from datetime import datetime, timedelta
+import os
+import signal
+
+sys.path.insert(0, r'c:\proj\ldt\.venv\Lib\site-packages')
+sys.path.insert(0, r'c:\proj\ldt\deployment')
+
+import pandas as pd
 from kafka import KafkaProducer
 
-LOGGER = logging.getLogger('cadqstream-producer')
-logging.basicConfig(level=logging.INFO, format='%(asctime)s %(message)s', datefmt='%H:%M:%S')
+BOOTSTRAP = '172.18.0.11:9092'
+TOPIC = os.getenv('TOPIC_RAW', 'taxi-nyc-raw-v2')
+INPUT = r'c:\proj\ldt\deployment\data\demo_trips.parquet'
+DELAY = float(os.getenv('PRODUCE_DELAY', '0.0'))
+FLUSH_EVERY = 5000
 
-VENDOR_IDS = [1, 2]
-RATECODE_IDS = [1, 2, 3, 4, 5, 6, 99]
-STORE_FLAGS = ["N", "Y"]
-PAYMENT_TYPES = [1, 2, 3, 4, 5, 6]
-PULOCS = list(range(1, 266))
-DOLOCS = list(range(1, 266))
-PASSENGER_COUNTS = [1, 2, 3, 4, 5, 6]
-
-# name, d_min, d_max, f_min, f_max, du_min, du_max
-TRIP_PROFILES = [
-    ("short",   0.5,  3.0,   5.0,  20.0,   300, 1800),
-    ("medium",  2.0, 10.0,  15.0,  60.0,   900, 3600),
-    ("long",    8.0, 30.0,  40.0, 200.0,  1800, 5400),
-    ("airport", 15.0, 35.0,  50.0, 150.0,  2400, 5400),
-]
-
-def gen_trip(hour):
-    p = random.choice(TRIP_PROFILES)
-    name = p[0]
-    d_min = p[1]
-    d_max = p[2]
-    f_min = p[3]
-    f_max = p[4]
-    du_min = p[5]
-    du_max = p[6]
-
-    distance = round(random.uniform(d_min, d_max), 2)
-    fare = round(random.uniform(f_min, f_max), 2)
-    dur_sec = random.uniform(du_min, du_max)
-
-    extra = round(random.uniform(0, 3.5), 2)
-    mta_tax = 0.5
-    tip = round(fare * random.uniform(0, 0.25), 2) if random.random() > 0.3 else 0.0
-    tolls = round(random.uniform(0, 20), 2) if random.random() > 0.9 else 0.0
-    imp_surcharge = 1.0
-    cong_surcharge = 2.5
-    airport_fee = 2.5 if name == "airport" else 0.0
-    total = round(fare + extra + mta_tax + tip + tolls + imp_surcharge + cong_surcharge + airport_fee, 2)
-
-    dur_h = dur_sec / 3600.0
-    pu_hour = hour % 24
-    pu_min = random.randint(0, 59)
-    pu_sec = random.randint(0, 59)
-    do_min_total = int(pu_min + dur_sec / 60.0)
-    do_hour = (pu_hour + do_min_total // 60) % 24
-    do_min = do_min_total % 60
-
-    base_date = datetime(2024, 1, 1) + timedelta(hours=hour)
-    pickup_str = base_date.strftime("%Y-%m-%dT%H:%M:%S")
-    dropoff_date = base_date + timedelta(seconds=int(dur_sec))
-    dropoff_str = dropoff_date.strftime("%Y-%m-%dT%H:%M:%S")
-
+def parse_row(row):
+    pickup_str = row.get("tpep_pickup_datetime", "")
+    dropoff_str = row.get("tpep_dropoff_datetime", "")
+    pickup_ts = None
+    dropoff_ts = None
+    if pickup_str:
+        try:
+            pickup_ts = pd.Timestamp(pickup_str)
+        except Exception:
+            pass
+    if dropoff_str:
+        try:
+            dropoff_ts = pd.Timestamp(dropoff_str)
+        except Exception:
+            pass
+    duration_h = 0.0
+    if pickup_ts and dropoff_ts:
+        duration_sec = (dropoff_ts - pickup_ts).total_seconds()
+        duration_h = duration_sec / 3600.0
+    distance = float(row.get("trip_distance") or 0.0)
+    speed_mph = round(distance / duration_h, 6) if duration_h > 0 else 0.0
     return {
-        "VendorID": random.choice(VENDOR_IDS),
-        "tpep_pickup_datetime": pickup_str,
-        "tpep_dropoff_datetime": dropoff_str,
-        "passenger_count": float(random.choice(PASSENGER_COUNTS)),
+        "VendorID": int(row.get("VendorID") or 0),
+        "tpep_pickup_datetime": pickup_ts.strftime("%Y-%m-%dT%H:%M:%S") if pickup_ts else "",
+        "tpep_dropoff_datetime": dropoff_ts.strftime("%Y-%m-%dT%H:%M:%S") if dropoff_ts else "",
+        "passenger_count": float(row.get("passenger_count") or 0.0),
         "trip_distance": distance,
-        "RatecodeID": float(random.choice(RATECODE_IDS)),
-        "store_and_fwd_flag": random.choice(STORE_FLAGS),
-        "PULocationID": float(random.choice(PULOCS)),
-        "DOLocationID": float(random.choice(DOLOCS)),
-        "payment_type": float(random.choice(PAYMENT_TYPES)),
-        "fare_amount": fare,
-        "extra": extra,
-        "mta_tax": mta_tax,
-        "tip_amount": tip,
-        "tolls_amount": tolls,
-        "improvement_surcharge": imp_surcharge,
-        "total_amount": total,
-        "congestion_surcharge": cong_surcharge,
-        "Airport_fee": airport_fee,
-        "trip_duration": dur_h,
-        "speed_mph": round(distance / dur_h, 6) if dur_h > 0 else 0.0,
+        "RatecodeID": float(row.get("RatecodeID") or 1.0),
+        "store_and_fwd_flag": str(row.get("store_and_fwd_flag") or "N"),
+        "PULocationID": float(row.get("PULocationID") or 0.0),
+        "DOLocationID": float(row.get("DOLocationID") or 0.0),
+        "payment_type": float(row.get("payment_type") or 0.0),
+        "fare_amount": float(row.get("fare_amount") or 0.0),
+        "extra": float(row.get("extra") or 0.0),
+        "mta_tax": float(row.get("mta_tax") or 0.0),
+        "tip_amount": float(row.get("tip_amount") or 0.0),
+        "tolls_amount": float(row.get("tolls_amount") or 0.0),
+        "improvement_surcharge": float(row.get("improvement_surcharge") or 0.0),
+        "total_amount": float(row.get("total_amount") or 0.0),
+        "congestion_surcharge": float(row.get("congestion_surcharge") or 0.0),
+        "Airport_fee": float(row.get("Airport_fee") or 0.0),
+        "trip_duration": duration_h,
+        "speed_mph": speed_mph,
     }
 
-if __name__ == "__main__":
-    rate = int(sys.argv[1]) if len(sys.argv) > 1 else 100  # messages per second
-    bootstrap = sys.argv[2] if len(sys.argv) > 2 else "kafka:9092"
-    topic = sys.argv[3] if len(sys.argv) > 3 else "taxi-nyc-raw"
+print(f"Loading {INPUT}...", flush=True)
+df = pd.read_parquet(INPUT)
+total = len(df)
+print(f"Loaded {total} rows", flush=True)
 
-    LOGGER.info("Connecting to Kafka at %s...", bootstrap)
-    try:
-        producer = KafkaProducer(
-            bootstrap_servers=[bootstrap],
-            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-            acks="all",
-            retries=3,
-            max_in_flight_requests_per_connection=5,
-            compression_type="gzip",
-            linger_ms=5,
-            batch_size=65536,
-        )
-    except Exception as e:
-        LOGGER.error("Error connecting: %s", e)
-        sys.exit(1)
+# Connect via Docker host network - find Kafka IP
+producer = KafkaProducer(
+    bootstrap_servers=BOOTSTRAP,
+    value_serializer=lambda v: json.dumps(v, default=str).encode('utf-8'),
+    acks=1,  # leader acks only - faster
+    retries=3,
+    max_in_flight_requests_per_connection=5,
+    compression_type='lz4',
+    linger_ms=50,
+    batch_size=65536,
+    buffer_memory=134217728,
+)
+print("Producer connected", flush=True)
 
-    interval = 1.0 / rate if rate > 0 else 0.01
-    LOGGER.info("Starting continuous producer at ~%d msg/sec to topic '%s'...", rate, topic)
-    
-    hour = 0
-    sent = 0
-    start = time.time()
-    last_log = start
-    
-    try:
-        while True:
-            trip = gen_trip(hour)
-            producer.send(topic, trip)
-            sent += 1
-            
-            # Log every 10 seconds
-            now = time.time()
-            if now - last_log >= 10:
-                elapsed = now - start
-                actual_rate = sent / elapsed
-                LOGGER.info("Sent %d messages total, avg rate: %.0f/sec", sent, actual_rate)
-                last_log = now
-            
-            hour += 1
-            time.sleep(interval)
-    except KeyboardInterrupt:
-        LOGGER.info("Shutting down...")
-    finally:
+sent = 0
+start = time.time()
+for i, row in df.iterrows():
+    record = parse_row(row)
+    future = producer.send(TOPIC, record)
+    sent += 1
+    if DELAY > 0:
+        time.sleep(DELAY)
+    if sent % FLUSH_EVERY == 0:
         producer.flush()
-        producer.close()
         elapsed = time.time() - start
-        LOGGER.info("DONE: %d messages sent in %.1fs (%.0f/sec avg)", sent, elapsed, sent / max(elapsed, 0.1))
+        rate = sent / elapsed if elapsed > 0 else 0
+        print(f"Sent {sent}/{total} ({sent/total*100:.1f}%) - rate={rate:.0f}/sec", flush=True)
+
+producer.flush()
+elapsed = time.time() - start
+print(f"ALL DONE: {sent} records in {elapsed:.1f}s ({sent/elapsed:.0f}/sec avg)", flush=True)
+producer.close()

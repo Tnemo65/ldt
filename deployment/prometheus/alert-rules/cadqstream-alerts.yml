@@ -143,17 +143,18 @@ groups:
           summary: "Flink checkpoint alignment is slow"
           description: "P99 checkpoint alignment duration is {{ $value }}s for job {{ $labels.job_name }}."
 
-      # Flink TaskManager Down
-      - alert: FlinkTaskManagerDown
-        expr: up{job="flink-taskmanager"} == 0
-        for: 2m
-        labels:
-          severity: critical
-          service: flink
-          component: taskmanager
-        annotations:
-          summary: "Flink TaskManager is down"
-          description: "Flink TaskManager {{ $labels.instance }} has been unreachable for 2 minutes."
+      # Flink TaskManager Down (disabled - TM is Python-only, no /metrics endpoint)
+      # The cadqstream-metrics:9250 / cadqstream-app target is the correct health check.
+      # - alert: FlinkTaskManagerDown
+      #   expr: up{job="cadqstream-app"} == 0
+      #   for: 2m
+      #   labels:
+      #     severity: critical
+      #     service: flink
+      #     component: taskmanager
+      #   annotations:
+      #     summary: "Flink TaskManager / cadqstream-metrics is down"
+      #     description: "cadqstream-metrics endpoint unreachable for 2 minutes."
 
       # Flink High GC Time
       - alert: FlinkHighGCTime
@@ -197,17 +198,19 @@ groups:
           summary: "Flink checkpoint progress stalled"
           description: "No completed checkpoints in the last 30 minutes for job {{ $labels.job_name }}."
 
-      # Flink High Processed Records
-      - alert: FlinkProcessedRecordsHigh
-        expr: rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m]) > 1000000
-        for: 10m
-        labels:
-          severity: info
-          service: flink
-          component: throughput
-        annotations:
-          summary: "Flink high throughput"
-          description: "Flink task {{ $labels.task_name }} is processing {{ $value | humanize }} records/sec."
+      # Flink High Processed Records (disabled - TM job metrics unavailable)
+      # TM throughput metrics require the flink-taskmanager scrape which is DOWN.
+      # Pipeline throughput is tracked via cadqstream_records_valid_total in Grafana.
+      # - alert: FlinkProcessedRecordsHigh
+      #   expr: rate(flink_taskmanager_job_task_numRecordsOutPerSecond_sum[5m]) > 1000000
+      #   for: 10m
+      #   labels:
+      #     severity: info
+      #     service: flink
+      #     component: throughput
+      #   annotations:
+      #     summary: "Flink high throughput"
+      #     description: "Flink task {{ $labels.task_name }} is processing {{ $value | humanize }} records/sec."
 
   - name: infrastructure_alerts
     interval: 30s

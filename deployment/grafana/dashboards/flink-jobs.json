@@ -696,7 +696,7 @@
           "refId": "D"
         }
       ],
-      "title": "IEC Decisions by Strategy",
+      "title": "ML Decisions by Strategy",
       "type": "timeseries"
     },
     {
@@ -757,7 +757,7 @@
           "refId": "A"
         }
       ],
-      "title": "IEC Confidence by Neighborhood",
+      "title": "ML Decision Confidence by Neighborhood",
       "type": "timeseries"
     },
     {

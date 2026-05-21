@@ -31,28 +31,27 @@ RUN mkdir -p /opt/flink/pyflink_extracted && \
     chmod +x /opt/flink/pyflink_extracted/pyflink/bin/pyflink-udf-runner.sh
 
 # ── Connector JARs ─────────────────────────────────────────────────────────
-COPY deployment/flink/flink-connector-kafka-1.17.1.jar /opt/flink/lib/
-COPY deployment/flink/kafka-clients-3.5.1.jar /opt/flink/lib/
-COPY deployment/flink/flink-s3-fs-hadoop-1.17.1.jar /opt/flink/lib/
-
-# ── S3 / Hadoop AWS Dependencies for MinIO ─────────────────────────────────
-# curl downloads stay in RUN so this layer is cacheable until Flink/S3 JAR versions change
+# Download Kafka connector from Maven Central — no local files needed.
+# Version strategy: connector 3.1.0 is stable for Flink 1.18.x
+# NOTE: flink-s3-fs-hadoop and hadoop-aws/aws-sdk are ALREADY included in
+# the base flink:1.18.1-scala_2.12-java11 image. Do NOT add duplicates
+# here (would cause "multiple delegation token providers" error).
 RUN cd /opt/flink/lib && \
-    curl -sL https://repo1.maven.org/maven2/com/amazonaws/aws-java-sdk-bundle/1.12.262/aws-java-sdk-bundle-1.12.262.jar \
-        -o aws-java-sdk-bundle-1.12.262.jar && \
-    curl -sL https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar \
-        -o hadoop-aws-3.3.4.jar && \
-    curl -sL https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-common/3.3.4/hadoop-common-3.3.4.jar \
-        -o hadoop-common-3.3.4.jar
+    curl -sL https://repo1.maven.org/maven2/org/apache/flink/flink-connector-kafka/3.1.0-1.18/flink-connector-kafka-3.1.0-1.18.jar \
+        -o flink-connector-kafka-3.1.0-1.18.jar && \
+    curl -sL https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.5.1/kafka-clients-3.5.1.jar \
+        -o kafka-clients-3.5.1.jar
 
 # ── Python Dependencies ────────────────────────────────────────────────────
 # Step 1: copy requirements.txt only → this layer is invalidated ONLY on dep version bump
 COPY deployment/flink/requirements.txt /app/requirements.txt
 
 # Step 2: install in venv → CACHED forever unless requirements.txt changes
+# CPU-only PyTorch: avoid 2GB CUDA packages in Docker container
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --no-cache-dir --upgrade pip wheel && \
-    /opt/venv/bin/pip install -r /app/requirements.txt
+    /opt/venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu && \
+    /opt/venv/bin/pip install --no-cache-dir -r /app/requirements.txt --ignore-installed torch
 
 # ── Environment ────────────────────────────────────────────────────────────
 ENV PATH=/opt/venv/bin:$PATH

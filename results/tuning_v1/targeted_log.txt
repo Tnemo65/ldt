@@ -1,2 +1,0 @@
-[00:06:04] 
-Results saved to c:\proj\ldt\results\tuning_v1\targeted_results.csv

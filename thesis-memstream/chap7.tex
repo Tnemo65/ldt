@@ -12,16 +12,16 @@ This thesis presented \textbf{CA-DQStream}, a context-aware framework for stream
 CA-DQStream was validated on 72M NYC Yellow Taxi records (14 months real TLC data + 12 months simulated data). Four core contributions were evaluated:
 
 \begin{enumerate}
-    \item \textbf{Online Autoencoder + Memory Module:} Denoising autoencoder (34D $\rightarrow$ 68D $\rightarrow$ 34D) combined with a FIFO memory buffer (50,000 vectors) enables online multivariate anomaly detection without batch retraining. Achieves F1=0.828 on Easy-difficulty anomalies (F1=0.751 Medium, F1=0.563 Hard; weighted avg F1=0.71, FPR=2.99\%).
+    \item \textbf{Online Autoencoder + Memory Module:} Denoising autoencoder ($34$D $\rightarrow$ $76$D $\rightarrow$ $34$D, trained with noise $\sigma=0.001$) combined with a FIFO memory buffer ($N=8{,}192$ vectors, production configuration with $4\times$ margin above the ablation-identified optimal of $N=2{,}048$). On the 1M-record evaluation set, CA-DQStream achieves AUC-PR 0.903, AUC-ROC 0.997, F1 0.860, and FPR 0.65\% (below the 5\% production target), substantially outperforming Isolation Forest (F1 0.432, FPR 2.89\%) and the MemStream baseline (F1 0.825, FPR 0.73\%).
 
-    \item \textbf{4D Context-Aware Thresholding:} Threshold matrix (588 cells: trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood) with automated 95th-percentile computation. Achieves 4.9$\times$ weighted FPR reduction (38.7\% $\rightarrow$ 4.2\%).
+    \item \textbf{4D Context-Aware Thresholding:} Threshold matrix ($80$ cells in production: $10$ neighborhood zones $\times$ $8$ temporal context cells) with automated 95th-percentile computation. The 4D formulation (trip\_type $\times$ time\_window $\times$ day\_type $\times$ neighborhood, $588$ cells) achieves marginally higher performance on the full-data evaluation but suffers from sparse cells with fewer than 100 training samples. The production 2D instantiation captures the two most impactful dimensions (spatial and temporal), consistent with empirical variance reduction ranking. ContextBeta thresholds provide a marginal but consistent improvement over global thresholds (+0.001 AUC-PR).
 
-    \item \textbf{Staged Validation Pipeline with Early Exit:} Four-layer pipeline (Schema Validation $\rightarrow$ Canary Rules $\rightarrow$ Online Autoencoder $\rightarrow$ MetaAggregator) with conditional early exit routing. Records failing lightweight stages bypass ML inference: 1.20$\times$ latency reduction (65ms $\rightarrow$ 54ms), 2.2$\times$ throughput improvement (8,240 $\rightarrow$ 18,450 events/sec).
+    \item \textbf{Staged Validation Pipeline with Early Exit:} Four-layer pipeline (Schema Validation $\rightarrow$ Canary Rules $\rightarrow$ Online Autoencoder $\rightarrow$ MetaAggregator) with conditional early exit routing. Records failing lightweight stages bypass ML inference. Context-aware routing reduces RocksDB I/O by approximately 90\% via Bloom filter pre-check. Per-record scoring throughput on the production Kafka-Flink cluster: $1{,}687{,}817$ records evaluated in $643$ seconds with memory footprint $\approx 56$ MB per TaskManager slot.
 
-    \item \textbf{Intelligent Evolution Controller:} ADWIN-based drift detection on quality meta-streams with four adaptation strategies (Continuous Evolution 78\%, Switching 15\%, METER 6\%, Spatial Tracking 1\%). Resolves 93\% of drift events via lightweight updates; retraining frequency reduced to 0.67 per month.
+    \item \textbf{Intelligent Evolution Controller:} ADWIN-based drift detection on quality meta-streams. \textbf{Limitation:} Drift detection claims (detection latency, retrain frequency, adaptation strategy distribution) are validated exclusively on months 1--14 of real NYC TLC data (Jan 2024 -- Feb 2025). Months 15--26 are GMM-simulated without novel drift patterns and are excluded from drift evaluation.
 \end{enumerate}
 
-All five research hypotheses were supported or conditionally supported: H1 (79.7\% anomalies unique to Layer 3), H2 (F1 targets met), H3 (21-hour detection, 93\% lightweight resolution), H4 (1.20$\times$ latency and 2.2$\times$ throughput gains), H5 (4.9$\times$ FPR reduction).
+All four research questions are supported by experimental evidence: CA-DQStream significantly outperforms Isolation Forest and the streaming MemStream baseline on AUC-PR and FPR at $p < 0.001$ (Wilcoxon signed-rank test, Bonferroni-corrected). The grid search confirms memory size $N$ as the most impactful hyperparameter; AUC-PR improves from 0.339 ($N=16$) to 0.916 ($N=2{,}048$) and degrades for $N > 4{,}096$. Feature engineering is the single largest component contributor (+0.87 AUC-PR over raw features). The context-aware threshold matrix provides a modest but consistent improvement (+0.001 AUC-PR).
 
 % ================================================
 % 6.2 Limitations
@@ -50,7 +50,7 @@ Four directions extend from this work:
 
     \item \textbf{Anomaly explanation:} Augment anomaly scores with reconstruction error attribution to identify which input features drive the score. Implement per-context explanation dashboards to support operator root-cause analysis.
 
-    \item \textbf{Approximate nearest-neighbor indexing:} Replace brute-force k-NN over the 50,000-vector memory buffer with HNSW or FAISS to support larger memory capacities and higher throughput (e.g., $>$100K events/sec).
+    \item \textbf{Approximate nearest-neighbor indexing:} Replace brute-force k-NN over the 8,192-vector memory buffer with HNSW or FAISS to support larger memory capacities and higher throughput (e.g., $>$100K events/sec).
 
     \item \textbf{Deep learning variants:} Explore Variational Autoencoders for probabilistic anomaly scoring, LSTM for temporal anomaly patterns, and attention-weighted memory access for improved pattern matching.
 \end{enumerate}

@@ -553,11 +553,11 @@
       "targets": [
         {
           "expr": "sum(cadqstream_iec_decisions_total)",
-          "legendFormat": "Total IEC Decisions",
+          "legendFormat": "Total ML Decisions",
           "refId": "A"
         }
       ],
-      "title": "Total IEC Decisions",
+      "title": "Total ML Decisions",
       "type": "stat"
     },
     {
@@ -869,7 +869,7 @@
           "refId": "A"
         }
       ],
-      "title": "IEC Strategy Decisions (per 5m)",
+      "title": "ML Strategy Decisions (per 5m)",
       "type": "timeseries"
     },
     {
@@ -933,7 +933,7 @@
           "refId": "A"
         }
       ],
-      "title": "IEC Strategy Confidence by Neighborhood",
+      "title": "ML Strategy Confidence by Neighborhood",
       "type": "stat"
     }
   ],

@@ -38,17 +38,17 @@ env/
 .coverage
 htmlcov/
 *.cover
-.hypothesis/
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb_checkpoints
+
+
 
 # Data & Models
-data/*.parquet
-data/raw/*.parquet
-*.h5
-*.ckpt
+**/*.parquet
+**/*.npz
+**/all_*.jsonl
+*.dll
+GOOD_DATA/
+HP_benchmark_v2/datasetv2/
 
 # Logs
 *.log
@@ -59,19 +59,15 @@ logs/
 Thumbs.db
 
 # Project specific
-temp/
-output/
-thesis_repos/
-repo/
-figure/
+
 
 # Docker
-.env
+# .env
 .env.local
 
 # Flink
-checkpoints/
-savepoints/
+# checkpoints/
+# savepoints/
 flink-*.log
 
 .claude/

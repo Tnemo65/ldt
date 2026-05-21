@@ -1,3 +1,0 @@
-Algorithm,Train_ms,Precision,Recall,F1,FPR,AUC_PR,TP,FP,TN,FN
-IsolationForest (sklearn),747,0.0313,0.7925,0.0603,0.0456,0.0651,294,"9,094","190,535",77
-MemStream 25D (AE+Mem),3081,0.0019,1.0000,0.0037,1.0000,0.0009,371,"199,629",0,0

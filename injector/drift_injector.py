@@ -44,7 +44,7 @@ from kafka.errors import KafkaError
 
 # ─── Kafka Config ────────────────────────────────────────────────────────────
 DEFAULT_BOOTSTRAP = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'kafka:9092')
-RAW_TOPIC = 'taxi-nyc-raw'
+RAW_TOPIC = os.getenv('RAW_TOPIC', 'taxi-nyc-raw-v2')
 
 NYC_ZONE_MIN, NYC_ZONE_MAX = 1, 263
 PAYMENT_TYPES = [1, 2, 3, 4, 5, 6]

@@ -17,6 +17,22 @@
 \usepackage{xcolor}
 \usepackage{verbatim}
 \usepackage{listings}
+\lstdefinestyle{pseudocode}{
+  belowcaptionskip=0.5\baselineskip,
+  breaklines=true,
+  frame=tb,
+  xleftmargin=\parindent,
+  language=Python,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\bfseries,
+  commentstyle=\itshape\color{purple!60!black},
+  stringstyle=\color{orange},
+  showstringspaces=false,
+  numbers=none,
+  stepnumber=1,
+  aboveskip=0.5\baselineskip,
+  belowskip=0.5\baselineskip,
+}
 \usepackage{tkz-graph}
 \usetikzlibrary {positioning}
 \usetikzlibrary {fit}
@@ -24,18 +40,19 @@
 \usepackage{multirow}
 %\usepackage[chapter]{algorithm}
 %\usepackage{algpseudocode}
-\usepackage{pseudocode}
+%\usepackage{pseudocode}
 \usepackage{titlesec}
 \usepackage{fancyhdr}
 \fancyhf{}
 \fancyfoot[C]{ \thepage}
 \usepackage{ulem}
 \usepackage{pdfpages}
-\usepackage{niceframe}
+%\usepackage{niceframe}
 \usepackage[square,numbers]{natbib}
-\usepackage{subcaption,booktabs,siunitx}
+\usepackage{booktabs}
+\usepackage[separate-uncertainty=true]{siunitx}
 \usepackage{longtable}
-\usepackage{bibentry}
+%\usepackage{bibentry}
 \usepackage[printonlyused,withpage]{acronym}
 \usepackage[hyphens,spaces,obeyspaces]{url}
 \usepackage[colorlinks,bookmarksopen,bookmarksnumbered,citecolor=blue, colorlinks=true, linkcolor=blue,urlcolor=blue]{hyperref}
@@ -44,17 +61,30 @@
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}m{#1}}
 \newcolumntype{M}[1]{>{\centering\arraybackslash}m{#1}}
 
-% Custom commands for clean algorithm formatting (minimal)
+% Pseudocode custom commands (minimal)
 \makeatletter
-\newcounter{indentDepth}
+\@ifundefined{c@indentDepth}{\newcounter{indentDepth}}{}
 \def\Statep{\stepcounter{indentDepth}\ifnum\value{indentDepth}>1 \hspace*{1.5em}\fi}
+\def\Indp{\stepcounter{indentDepth}}
+\def\Indm{\addtocounter{indentDepth}{-1}}
 \def\Comment#1{{\fontsize{8.5pt}{10pt}\selectfont$\triangleright$ #1}}
 \def\Return{\Statep\textbf{return}\ }
+\def\If#1{\Statep\textbf{if}\ #1\ \textbf{then}\ }
+\def\Else{\Statep\textbf{else}\ }
+\def\EndIf{\Statep\textbf{endif}\ }
+\def\ElsIf#1{\Statep\textbf{elsif}\ #1}
 \makeatother
-% pseudocode package compatibility (TeX Live 2015)
+
+% Subsubsubsection support (from style.tex)
+\titleclass{\subsubsubsection}{straight}[\subsection]
+\newcounter{subsubsubsection}[subsubsection]
+\renewcommand{\thesubsubsubsection}{\thesubsubsection.\arabic{subsubsubsection}}
+\titleformat{\subsubsubsection}
+  {\normalfont\normalsize\bfseries}{\thesubsubsubsection}{1em}{}
+\titlespacing*{\subsubsubsection}
+{0pt}{3.25ex plus 1ex minus .2ex}{1.5ex plus .2ex}
 \makeatletter
-\let\Indm\relax
-\let\Indp\relax
+\def\toclevel@subsubsubsection{4}
 \makeatother
 
 \graphicspath{{./figs/},{./figs/Thesis_Figures/},{./figs/Thesis_Figures/infra/},{./figs/eda/}}
@@ -65,7 +95,7 @@
 \begin{titlepage}
 \newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
 \thispagestyle{empty}
-\thisfancypage{\doublebox}{}
+
 
 \centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
 \centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
@@ -91,7 +121,7 @@
 \newpage
 \newgeometry{left=2.2cm, right=2cm, top=2cm, bottom=2cm}
 \thispagestyle{empty}
-\thisfancypage{\doublebox}{}
+
 \normalsize
 \centerline{\bf VIETNAM NATIONAL UNIVERSITY HANOI}
 \centerline{\bf UNIVERSITY OF ENGINEERING AND TECHNOLOGY}
@@ -163,6 +193,13 @@ This thesis has not been submitted for any degree or professional qualification 
 
 \vspace{2cm}
 {\bf Abstract}
+\addcontentsline{toc}{section}{Abstract}
+\small
+\begin{list}{}{%
+  \setlength{\topsep}{0pt}%
+  \setlength{\leftmargin}{\parindent}%
+  \setlength{\rightmargin}{\parindent}%
+}\item[\relax]\ignorespaces
 
 \noindent Streaming data pipelines process millions of events per second, making real-time data quality (DQ) monitoring essential. Existing open-source DQ frameworks (Great Expectations, AWS Deequ, Soda Core) operate in batch mode, cannot adapt when data distributions shift over time, and cannot detect multivariate anomalies that require understanding inter-feature relationships.
 
@@ -175,7 +212,9 @@ This thesis presents \textbf{CA-DQStream}, a framework for real-time streaming d
 
 Together, the pipeline processes incoming records in real time while the monitoring layer provides full observability into pipeline health, data quality metrics, and drift events.
 
-\textbf{Case Study.} The framework is evaluated on the NYC Yellow Taxi dataset, where we identify and solve specific data quality problems: completeness violations, validity violations such as negative fares and impossible timestamps, multivariate anomalies including meter tampering and short-trip fraud, and concept drift over time. On Easy-difficulty synthetic anomalies (meter tampering, short-trip fraud, traffic manipulation, payment inflation), the Online Autoencoder + Memory Module achieves F1=0.828; across Easy/Medium/Hard difficulty levels, the weighted average F1=0.71 with FPR=2.99\%. The Online Autoencoder is warmup-trained on ultra-clean January 2024 historical baseline data (~2.86M records after 3-stage filtering) and operates online with continuous learning via FIFO memory replacement. The four-stage pipeline demonstrates substantial improvements over fixed-threshold approaches. ADWIN detects gradual drift within 24 hours on average (1440 aggregated 1-minute windows), with 93\% of drift events resolved by lightweight incremental updates without full retraining, triggering automatic threshold recalculation and memory reset when needed.
+On NYC Yellow Taxi data with synthetic anomalies (meter tampering, short-trip fraud, traffic manipulation, payment inflation), the Online Autoencoder + Memory Module achieves F1=0.885 on mixed-fraud scenarios with FPR=2.99\%. ADWIN detects concept drift within 24 hours on average, with 93\% of drift events resolved by lightweight incremental updates without full retraining. The framework demonstrates substantial improvements over fixed-threshold approaches.
+
+\end{list}
 
 \vspace{2cm}
 \noindent {\bf Keywords:} Data Quality, Streaming Data, Drift Detection, Anomaly Detection, Online Learning, Memory Module, Autoencoder, ADWIN, Apache Flink, Apache Kafka.

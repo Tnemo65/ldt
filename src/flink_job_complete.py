@@ -642,7 +642,9 @@ def main():
     """
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_runtime_mode(RuntimeExecutionMode.STREAMING)
-    env.set_parallelism(4)
+    # NOTE: Do NOT call env.set_parallelism() here — it overrides
+    # FLINK_PROPERTIES/parallelism.default in docker-compose.yml.
+    # Docker Compose sets parallelism.default: 4 (matching 8 Kafka partitions).
 
     from pyflink.datastream import ExternalizedCheckpointCleanup
     checkpoint_config = env.get_checkpoint_config()

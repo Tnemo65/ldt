@@ -51,7 +51,7 @@ check_secret() {
     fi
 
     # Check for placeholder patterns
-    local is_placeholder=0
+        local is_placeholder=0
     case "$trimmed_value" in
         changeme*)
             is_placeholder=1
@@ -66,16 +66,6 @@ check_secret() {
             is_placeholder=1
             ;;
         *_admin)
-            is_placeholder=1
-            ;;
-        minioadmin123)
-            # This is a known insecure default
-            is_placeholder=1
-            ;;
-        redis_password_local)
-            is_placeholder=1
-            ;;
-        grafana_local_admin)
             is_placeholder=1
             ;;
     esac

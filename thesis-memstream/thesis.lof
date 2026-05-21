@@ -3,22 +3,22 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {4.1}{\ignorespaces Fare Distribution of NYC Yellow Taxi Trips.}}{21}{figure.caption.11}%
-\contentsline {figure}{\numberline {4.2}{\ignorespaces Hourly Record Volume Pattern by Weekday and Weekend.}}{21}{figure.caption.12}%
-\contentsline {figure}{\numberline {4.3}{\ignorespaces Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}}{21}{figure.caption.13}%
-\contentsline {figure}{\numberline {4.4}{\ignorespaces Monthly Record Volume and Violation Rate Over 26 Months.}}{22}{figure.caption.14}%
-\contentsline {figure}{\numberline {4.5}{\ignorespaces Drift Detection Mechanism: ADWIN maintains an adaptive window that dynamically adjusts as new data arrives. When the statistical divergence between the reference window (older stable data) and the current window (recent data) exceeds a threshold, a drift alarm is raised, triggering the IEC to recompute thresholds or retrain the model.}}{22}{figure.caption.15}%
-\contentsline {figure}{\numberline {4.6}{\ignorespaces CA-DQStream System Architecture.}}{23}{figure.caption.16}%
-\contentsline {figure}{\numberline {4.7}{\ignorespaces Flatten KeyedState Deduplication with Bloom Filter.}}{27}{figure.caption.19}%
-\contentsline {figure}{\numberline {4.8}{\ignorespaces Online Memory Update Policy.}}{31}{figure.caption.25}%
-\contentsline {figure}{\numberline {4.9}{\ignorespaces 4D Context-Aware Threshold Matrix.}}{31}{figure.caption.27}%
-\contentsline {figure}{\numberline {4.10}{\ignorespaces IEC Drift Detection and Adaptation.}}{35}{figure.caption.29}%
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Fare Distribution of NYC Yellow Taxi Trips.}}{17}{figure.caption.11}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Hourly Record Volume Pattern by Weekday and Weekend.}}{17}{figure.caption.12}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Violation Rate Heatmap by Hour-of-Day and Day-of-Week.}}{17}{figure.caption.13}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Monthly Record Volume and Violation Rate Over 26 Months.}}{18}{figure.caption.14}%
+\contentsline {figure}{\numberline {4.5}{\ignorespaces Drift Detection Mechanism: ADWIN maintains an adaptive window that dynamically adjusts as new data arrives. When the statistical divergence between the reference window (older stable data) and the current window (recent data) exceeds a threshold, a drift alarm is raised, triggering the IEC to recompute thresholds or retrain the model.}}{19}{figure.caption.15}%
+\contentsline {figure}{\numberline {4.6}{\ignorespaces CA-DQStream System Architecture. Raw trip records are ingested through a message broker and processed by a four-layer Flink pipeline. Layer 1 performs schema validation and deduplication. Layer 2 evaluates records through fast deterministic rules followed by neural-network-based anomaly detection against a memory buffer of normal patterns. Layer 3 aggregates quality metrics over one-minute windows. Layer 4 monitors the meta-stream for statistical drift and triggers model retraining when thresholds are breached. MinIO stores model checkpoints and state snapshots. Prometheus collects operational metrics from all components; Grafana visualizes metrics and alerts. The offline training layer prepares the neural network and threshold matrix before deployment.}}{21}{figure.caption.16}%
+\contentsline {figure}{\numberline {4.7}{\ignorespaces Bloom filter pre-check skips RocksDB for non-duplicates; positive hits verify in KeyedState.}}{25}{figure.caption.19}%
+\contentsline {figure}{\numberline {4.8}{\ignorespaces Conditional insert into memory buffer based on reconstruction error threshold and context score.}}{28}{figure.caption.24}%
+\contentsline {figure}{\numberline {4.9}{\ignorespaces 4D Context-Aware Threshold Matrix.}}{29}{figure.caption.26}%
+\contentsline {figure}{\numberline {4.10}{\ignorespaces IEC Drift Detection and Adaptation.}}{33}{figure.caption.32}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces CA-DQStream Infrastructure: (a) Kafka CLI --- topic creation, partition configuration, and producer-consumer test.}}{42}{figure.caption.37}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces CA-DQStream Infrastructure: (b) Kafka consumer group offsets for exactly-once processing.}}{42}{figure.caption.38}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces CA-DQStream Infrastructure: (c) Prometheus metrics dashboard for Kafka and Flink.}}{42}{figure.caption.39}%
-\contentsline {figure}{\numberline {5.4}{\ignorespaces CA-DQStream Infrastructure: (d) Docker container orchestration for Kafka (zookeeper, kafka1--3) and infrastructure services.}}{43}{figure.caption.40}%
-\contentsline {figure}{\numberline {5.5}{\ignorespaces CA-DQStream Infrastructure: (e) Flink JobManager UI --- submitted jobs and runtime metrics.}}{43}{figure.caption.41}%
-\contentsline {figure}{\numberline {5.6}{\ignorespaces CA-DQStream Infrastructure: (f) Grafana dashboard --- FPR, anomaly rate, and violation rate monitoring.}}{43}{figure.caption.42}%
-\contentsline {figure}{\numberline {5.7}{\ignorespaces CA-DQStream Infrastructure: (g) Grafana dashboard --- anomaly score distribution and $\Delta $\_Score divergence monitoring.}}{44}{figure.caption.43}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces CA-DQStream Infrastructure: (a) Kafka CLI --- topic creation, partition configuration, and producer-consumer test.}}{35}{figure.caption.34}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces CA-DQStream Infrastructure: (b) Kafka consumer group offsets for exactly-once processing.}}{35}{figure.caption.35}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces CA-DQStream Infrastructure: (c) Prometheus metrics dashboard for Kafka and Flink.}}{36}{figure.caption.36}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces CA-DQStream Infrastructure: (d) Docker container orchestration for Kafka (zookeeper, kafka1--3) and infrastructure services.}}{36}{figure.caption.37}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces CA-DQStream Infrastructure: (e) Flink JobManager UI --- submitted jobs and runtime metrics.}}{36}{figure.caption.38}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces CA-DQStream Infrastructure: (f) Grafana dashboard --- FPR, anomaly rate, and violation rate monitoring.}}{37}{figure.caption.39}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces CA-DQStream Infrastructure: (g) Grafana dashboard --- anomaly score distribution and $\Delta $\_Score divergence monitoring.}}{37}{figure.caption.40}%
 \addvspace {10\p@ }

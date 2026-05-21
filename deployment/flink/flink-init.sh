@@ -25,7 +25,7 @@ MAX_RESUBMISSIONS=5
 RESUBMIT_BACKOFF=60
 HEALTH_CHECK_INTERVAL=30
 JOB_NAME="CA-DQStream Sequential Pipeline - Phase 3"
-PYTHON_PATH="/opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e"
+PYTHON_PATH="/opt/flink/pyflink_extracted:/opt/flink/opt/python/py4j-0.10.9.7-src.zip:/opt/flink/opt/python/cloudpickle-2.2.0-src.zip:/opt/flink/e2e:/opt/venv/lib/python3.10/site-packages"
 SUBMITTED_JOBS_LOG="/tmp/flink_submitted_jobs.log"
 INITIAL_STATE="NOT_FOUND"
 JOB_ID="NOT_FOUND"
@@ -141,6 +141,7 @@ do_submit() {
 
     echo "[flink-init] Submitting Flink job via flink CLI..."
     if flink run -m flink-jobmanager:8081 -d \
+        -p 4 \
         -py /opt/flink/e2e/src/flink_job_complete.py \
         2>&1 | tee "/tmp/flink_submit_${attempt}.log"; then
         echo "[flink-init]   Submission command completed (exit 0)."

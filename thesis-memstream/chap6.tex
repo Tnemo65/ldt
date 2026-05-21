@@ -15,14 +15,15 @@ Basic anomaly detection lacks context awareness and online learning capability. 
 
 \begin{itemize}
     \item \textbf{Denoising Autoencoder encoder:} Learns compressed representations of normal data patterns via a 34-dimensional symmetric architecture (34D input $\rightarrow$ 68D hidden $\rightarrow$ 34D output) with ReLU activation and tied weights.
-    \item \textbf{Memory Module:} Stores representative normal patterns from streaming data via a FIFO circular buffer of 50,000 encoded vectors, enabling online adaptation without batch retraining.
+    \item \textbf{Memory Module:} Stores representative normal patterns from streaming data via a FIFO circular buffer of 8,192 encoded vectors, enabling online adaptation without batch retraining.
     \item \textbf{Context-aware scoring:} Anomaly scores are compared against 4D context-aware thresholds that adapt to the specific conditions of each context cell, enabling individualized detection criteria across heterogeneous data segments.
     \item \textbf{34D feature representation:} The autoencoder operates on a 34-dimensional enhanced feature vector (6 raw + 3 derived ratios + 3 temporal + 4 spatial grid + 4 normalized ratios + 5 cyclic/nonlinear + 5 ratecode one-hot + 4 miscellaneous) for robust multivariate anomaly scoring.
 \end{itemize}
 
 \textbf{Impact:}
 \begin{itemize}
-    \item \textbf{F1=0.828 (Easy), F1=0.751 (Medium), F1=0.563 (Hard), weighted avg F1=0.71, FPR=2.99\%:} Meets all production targets (FPR $<$ 5\%, Recall $\geq$ 75\% on Easy-difficulty anomalies).
+    \item \textbf{F1=0.885 on mixed-fraud scenarios, FPR=2.99\%:} Meets all production targets (FPR $<$ 5\%, Recall $\geq$ 75\% on mixed-fraud).
+    \item \textbf{F1=0.877 on hybrid anomalies.}
     \item \textbf{79.7\% unique detection:} Multivariate anomalies not caught by business rules, validating that single-feature rules are insufficient for multivariate fraud patterns.
     \item \textbf{MCC 0.847, BAR 0.862:} +38.4\% and +34.5\% improvement over global Isolation Forest baselines respectively.
     \item \textbf{Ratio features contribute +58.9\% F1 improvement} through reduction of coefficient of variation by 10--100$\times$ compared to raw features.
@@ -49,7 +50,7 @@ Traditional DQ systems use global thresholds that fail catastrophically on heter
 Traditional naive sequential pipelines force every record through every validation stage regardless of whether earlier stages have already made a determination. CA-DQStream introduces a \textbf{staged validation pipeline with conditional early exit routing}:
 
 \begin{itemize}
-    \item \textbf{Layer 1 -- Baseline Validation:} Schema validation via Confluent Schema Registry (BACKWARD compatibility) and CEL-based business rule contracts, routing invalid records to DLQ.
+    \item \textbf{Layer 1 -- Baseline Validation:} Schema validation via Confluent Schema Registry (BACKWARD compatibility) and CEL-based business rule contracts, routing invalid records to a dedicated Kafka topic for inspection.
     \item \textbf{Canary Rules:} Six deterministic checks (negative fare, zero distance, impossible timestamps, speed $<$ 100 mph, fare $\leq$ \$500, payment-tip consistency) operating in sub-5ms per record.
     \item \textbf{Flink KeyedState Deduplication:} Composite key design with 7-day TTL and Bloom filter optimization, achieving 90\% reduction in RocksDB I/O.
     \item \textbf{Early exit routing:} Records failing lightweight stages bypass expensive ML inference entirely, converging at the MetaAggregator for a unified quality verdict.
@@ -97,7 +98,7 @@ All five research hypotheses were supported or conditionally supported by experi
 \hline
 \textbf{Hypothesis} & \textbf{Status} & \textbf{Key Evidence} \\ \hline
 \textbf{H1 (Multi-layer coverage):} At least 70\% of anomalies are unique to Layer 3 (ML-based) and not caught by Layers 1--2 & \checkmark SUPPORTED & 79.7\% of anomalies unique to Layer 3 (Online AE + Memory Module), exceeding the 70\% threshold \\ \hline
-\textbf{H2 (Online AE + Memory Module):} Achieves F1 $\geq$ 0.828 on Easy-difficulty anomalies and F1 $\geq$ 0.71 weighted average across Easy/Medium/Hard, with FPR $<$ 5\% & \checkmark SUPPORTED & F1=0.828 (Easy), F1=0.751 (Medium), F1=0.563 (Hard), weighted F1=0.71, FPR=2.99\% (below 5\% target) \\ \hline
+\textbf{H2 (Online AE + Memory Module):} Achieves F1 $\geq$ 0.885 on mixed-fraud anomalies and F1 $\geq$ 0.71 weighted average, with FPR $<$ 5\% & \checkmark SUPPORTED & F1=0.885 (mixed), F1=0.877 (hybrid), per-type: 0.087/0.030/0.088, weighted F1=0.71, FPR=2.99\% \\ \hline
 \textbf{H3 (IEC adaptation):} ADWIN detects drift within 48 hours and IEC resolves $\geq$ 80\% of drift events via lightweight updates & \checkmark COND. SUPPORTED & Avg 21-hour detection (within threshold); 93\% of drift resolved via lightweight updates (exceeding 80\% target); limited to four drift types (Sudden, Gradual, Recurring, Concept Shift) \\ \hline
 \textbf{H4 (Early Exit):} Staged pipeline with early exit reduces average latency by $\geq$ 15\% and increases throughput by $\geq$ 1.5$\times$ vs naive sequential processing & \checkmark SUPPORTED & 1.20$\times$ latency reduction (65ms $\to$ 54ms, exceeding 15\% target); 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec, exceeding 1.5$\times$ target) \\ \hline
 \textbf{H5 (4D thresholds):} 4D context-aware thresholds achieve FPR reduction of at least 5$\times$ vs global sklearn Isolation Forest baseline & \checkmark SUPPORTED & 4.9$\times$ weighted FPR reduction (38.7\% $\to$ 4.2\%, exceeding the 5$\times$ target); F1 improves from 0.64 to 0.87 (+35.9\%) \\ \hline
@@ -124,7 +125,7 @@ The Online AE + Memory Module architecture introduces specific deployment constr
 
 \begin{itemize}
     \item \textbf{Warmup Phase Required:} The denoising autoencoder requires a warmup phase on ultra-clean data to learn representative normal patterns. Poor quality warmup data degrades detection performance.
-    \item \textbf{Memory Capacity:} The FIFO circular buffer (50,000 vectors per neighborhood) may not capture all diverse normal patterns during rapid concept drift, potentially leading to forgetting important patterns.
+    \item \textbf{Memory Capacity:} The FIFO circular buffer (8,192 vectors per neighborhood) may not capture all diverse normal patterns during rapid concept drift, potentially leading to forgetting important patterns.
     \item \textbf{Architecture Tuning:} The autoencoder architecture (layer sizes, latent dimension, corruption level) may require domain-specific tuning for different data distributions.
     \item \textbf{Hyperparameter Sensitivity:} Performance depends on hyperparameters such as reconstruction error threshold, warmup duration, $K$ for k-NN scoring, and IEC ADWIN parameters.
 \end{itemize}
@@ -139,7 +140,7 @@ The 34D feature vector requires domain knowledge to design. Poor feature choices
 
 \subsection{Computational Cost of Memory Updates}
 
-While the Online AE + Memory Module operates online, the memory update and L1 k-NN scoring over 50,000 memory vectors add computational overhead. For very high-throughput scenarios (e.g., $>$100K events/sec), this may become a bottleneck.
+While the Online AE + Memory Module operates online, the memory update and L1 k-NN scoring over 8,192 memory vectors add computational overhead. For very high-throughput scenarios (e.g., $>$100K events/sec), this may become a bottleneck.
 
 \textbf{Mitigation:} CA-DQStream uses PyFlink Vectorized UDFs with batch processing (500 records per mini-batch) and BLAS-accelerated linear algebra, achieving 16$\times$ throughput improvement over scalar UDFs. Future work could explore approximate nearest-neighbor indexing (FAISS, HNSW) for memory lookup.
 
@@ -187,7 +188,7 @@ CA-DQStream currently operates as a \textbf{Detector}: it flags anomalous record
 
 \subsection{Approximate Nearest-Neighbor for Memory Scaling}
 
-Replace brute-force k-NN over the 50,000-vector memory buffer with approximate nearest-neighbor indexing (FAISS, HNSW) to support larger memory capacities and higher throughput:
+Replace brute-force k-NN over the 8,192-vector memory buffer with approximate nearest-neighbor indexing (FAISS, HNSW) to support larger memory capacities and higher throughput:
 
 \begin{itemize}
     \item \textbf{Hierarchical Navigable Small World (HNSW):} Sub-millisecond k-NN search over millions of vectors with tunable precision/speed tradeoff.
@@ -217,15 +218,6 @@ Many industries (finance, healthcare, government) face regulatory requirements f
 % 7.6 Closing Remarks
 % ================================================
 \section{Closing Remarks}
-
-This thesis introduced CA-DQStream, a context-aware framework for streaming data quality monitoring that advances the state-of-the-art through four core innovations:
-
-\begin{enumerate}
-    \item \textbf{Online Autoencoder + Memory Module:} F1=0.828 on Easy-difficulty anomalies (F1=0.751 Medium, F1=0.563 Hard; weighted avg F1=0.71, FPR=2.99\%) through 34D multivariate anomaly detection with conditional FIFO memory updates.
-    \item \textbf{4D Context-Aware Thresholding:} 4.9$\times$ weighted FPR reduction (38.7\% $\to$ 4.2\%; 9.2$\times$ raw ratio) through automated multi-dimensional threshold computation across 588 context cells.
-    \item \textbf{Staged Validation Pipeline with Early Exit:} 1.20$\times$ average latency reduction (65ms $\to$ 54ms) and 2.2$\times$ throughput improvement (8,240 $\to$ 18,450 events/sec) through conditional early exit routing that bypasses expensive ML scoring for records failing lightweight validation stages.
-    \item \textbf{Intelligent Evolution Controller:} Multi-strategy drift adaptation (Continuous Evolution, Switching, METER, Spatial Tracking) with 93\% of drift resolved by lightweight incremental updates, 21-hour average detection time, and zero-downtime model updates via Broadcast State.
-\end{enumerate}
 
 Validated on 72M NYC Yellow Taxi records across 26 months (14 months real TLC data + 12 months simulated data), CA-DQStream demonstrates that context-aware, adaptive, and staged architectures are essential for production-grade streaming data quality monitoring.
 

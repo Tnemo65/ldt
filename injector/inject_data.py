@@ -14,7 +14,7 @@ anomaly = [
 ]
 p = KafkaProducer(bootstrap_servers="kafka:9092", value_serializer=lambda x: json.dumps(x).encode("utf-8"), acks="all")
 for r in records:
-    p.send("taxi-nyc-raw", r)
+    p.send("taxi-nyc-raw-v2", r)
 for a in anomaly:
     p.send("iec-action-replay", a)
 p.flush()

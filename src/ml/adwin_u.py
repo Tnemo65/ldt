@@ -197,6 +197,64 @@ def _norm_cdf(x: float) -> float:
     return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
 
 
+def _levene_statistic(w1: list, w2: list) -> Tuple[float, float]:
+    """Two-sample Levene's test for equality of variances.
+
+    More robust to non-normality than Bartlett's test. Uses deviations
+    from the median (Brown-Forsythe variant) which is the default in scipy.
+
+    Returns:
+        (levene_statistic, p_approximation)
+
+    Per KAIS 2025 paper: Levene's test is a key component of variance shift
+    detection alongside skewness/kurtosis for unsupervised drift detection.
+    """
+    n1, n2 = len(w1), len(w2)
+    if n1 < 2 or n2 < 2:
+        return 0.0, 1.0
+
+    median_w1 = _nan_median(w1)
+    median_w2 = _nan_median(w2)
+
+    z1 = [abs(v - median_w1) for v in w1 if v == v]
+    z2 = [abs(v - median_w2) for v in w2 if v == v]
+
+    z1_valid = [x for x in z1 if x == x]
+    z2_valid = [x for x in z2 if x == x]
+
+    if len(z1_valid) < 2 or len(z2_valid) < 2:
+        return 0.0, 1.0
+
+    z1_mean = _nan_mean(z1_valid)
+    z2_mean = _nan_mean(z2_valid)
+
+    nn1, nn2 = len(z1_valid), len(z2_valid)
+
+    # Levene's W statistic (Brown-Forsythe variant)
+    numerator = (nn1 + nn2 - 2) * nn1 * (z1_mean - (nn1 * z1_mean + nn2 * z2_mean) / (nn1 + nn2))**2
+    denominator = (nn1 - 1) * sum((z - z1_mean) ** 2 for z in z1_valid) + \
+                  (nn2 - 1) * sum((z - z2_mean) ** 2 for z in z2_valid)
+
+    if denominator < 1e-10:
+        return 0.0, 1.0
+
+    W = numerator / denominator
+
+    # Approximate p-value using chi-squared distribution with df=1
+    # For large W, p small. W ~ chi-squared(1) under null.
+    # Conservative: W > 4.0 -> p < 0.05, W > 6.6 -> p < 0.01
+    if W > 10.0:
+        p_approx = 0.001
+    elif W > 7.0:
+        p_approx = 0.01
+    elif W > 4.0:
+        p_approx = 0.05
+    else:
+        p_approx = min(W / 4.0, 1.0)
+
+    return float(W), float(p_approx)
+
+
 # ---------------------------------------------------------------------------
 # Statistic registry
 # ---------------------------------------------------------------------------
@@ -216,13 +274,22 @@ _STAT_NAMES = list(_STAT_FUNCS.keys())
 STAT_NAMES = _STAT_NAMES
 
 # Default statistic per meta-metric (CA-DQStream metaaggregator)
+#
+# Per KAIS 2025 paper findings:
+#   - Skewness: Rank 1 for BAR (accuracy-based), Rank 1 for accuracy
+#   - Kurtosis: Rank 1 (tied) for BAR, Rank 2 for accuracy
+#   - Variance: Rank 4 for BAR, Rank 2 for accuracy
+#   - Mean: Rank 5 for BAR, Rank 3 for accuracy
+#
+# Higher-order statistics (skewness/kurtosis) capture distributional shifts
+# that mean/variance miss. They are most effective for unsupervised drift detection.
 DEFAULT_STATISTIC_PER_METRIC = {
-    'volume':             'variance',   # Detect volume spikes
-    'null_rate':          'skewness',   # Detect NULL burst asymmetry
-    'violation_rate':     'mean',       # Detect rule violation level changes
-    'anomaly_rate':       'mean',       # Detect ML behavior changes
-    'avg_anomaly_score':  'mean',       # Detect concept drift via score shifts
-    'delta_score':        'mean',       # Detect canary-vs-ML disagreement shifts
+    'volume':             'variance',  # Volume spike = variance shift (OK)
+    'null_rate':          'skewness', # NULL burst = asymmetric distribution (rank 1)
+    'violation_rate':     'skewness', # Violation bursts create asymmetric patterns (rank 1)
+    'anomaly_rate':       'skewness', # Anomaly rate spikes = distribution shift (rank 1)
+    'avg_anomaly_score':  'kurtosis', # Score tail changes = kurtosis shift (rank 1)
+    'delta_score':        'kurtosis', # Canary-ML disagreement = tail divergence (rank 1)
 }
 
 
@@ -332,10 +399,22 @@ class ADWIN_U:
         self._stat_fn = _STAT_FUNCS[statistic]
 
         # Secondary statistic (for cross-validation)
+        # Per KAIS 2025 paper: skewness and kurtosis are the most effective
+        # statistics for unsupervised drift detection (rank 1 BAR).
+        # We recommend cross-checking with complementary statistics.
         if secondary_stat is None:
-            # Default: variance for mean/stat, skewness for variance/stat
-            if statistic in ('mean', 'median'):
+            # Primary skewness -> cross-check with kurtosis (both rank 1)
+            # Primary kurtosis -> cross-check with skewness
+            # Primary mean -> cross-check with variance (traditional)
+            # Primary variance -> cross-check with kurtosis (higher-order)
+            if statistic == 'skewness':
+                secondary_stat = 'kurtosis'
+            elif statistic == 'kurtosis':
+                secondary_stat = 'skewness'
+            elif statistic in ('mean', 'median'):
                 secondary_stat = 'variance'
+            elif statistic == 'variance':
+                secondary_stat = 'kurtosis'
             else:
                 secondary_stat = 'mean'
         self.secondary_stat: str = secondary_stat
@@ -421,6 +500,7 @@ class ADWIN_U:
         hoeffding_thresh = self._hoeffding_threshold(n)
 
         # For 'mean' statistic: use Welch's t-test for statistical rigor
+        # For 'variance' statistic: use Levene's test (Brown-Forsythe variant)
         # For other statistics: use relative difference + Hoeffding bound
         if self.statistic == 'mean':
             t_stat, p_val = _t_test_statistic(recent, old)
@@ -428,6 +508,17 @@ class ADWIN_U:
             primary_drift = p_val < self.delta
             self.last_hoeffding_threshold = hoeffding_thresh
             drift_magnitude = abs(primary_recent - primary_old)
+        elif self.statistic == 'variance':
+            # Levene's test for variance equality (per KAIS 2025)
+            levene_stat, levene_p = _levene_statistic(recent, old)
+            self.last_p_value = levene_p
+            primary_drift = levene_p < self.delta
+            self.last_hoeffding_threshold = hoeffding_thresh
+            # Magnitude: relative difference in variance
+            var_old = primary_old
+            var_recent = primary_recent
+            denom = abs(var_old) + 1e-10
+            drift_magnitude = abs(var_recent - var_old) / denom
         else:
             # Relative difference with Hoeffding guard
             denom = (abs(primary_old) + 1e-10)

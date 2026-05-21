@@ -1,5 +1,17 @@
 import subprocess
 import json
+import os
+
+# Load env vars from .env if present
+try:
+    with open(os.path.join(os.path.dirname(__file__), '../.env')) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, v = line.split('=', 1)
+                os.environ.setdefault(k, v)
+except Exception:
+    pass
 
 JOB_ID = "817e44e0a9ddd87608c86dfc80f8bccf"
 
@@ -57,7 +69,7 @@ if inp:
 result4 = subprocess.run(
     ['docker', 'exec', 'ldt-kafka-producer', 'python3', '-c', '''
 import boto3
-s3 = boto3.client("s3", endpoint_url="http://ldt-minio:9000", aws_access_key_id="minioadmin", aws_secret_access_key="minioadmin123")
+s3 = boto3.client("s3", endpoint_url="http://ldt-minio:9000", aws_access_key_id=os.environ.get("MINIO_ROOT_USER","cadqstream"), aws_secret_access_key=os.environ.get("MINIO_ROOT_PASSWORD","CADQStream2026!"))
 for b in ["cadqstream-raw", "cadqstream-anomalies", "cadqstream-metrics"]:
     r = s3.list_objects_v2(Bucket=b, MaxKeys=5)
     print(f"{b}: {r.get(\\"KeyCount\\", 0)} objects")

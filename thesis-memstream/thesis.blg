@@ -4,14 +4,22 @@ The top-level auxiliary file: thesis.aux
 The style file: plainnat.bst
 Database file #1: citation.bib
 Warning--entry type for "flink_rocksdb" isn't style-file defined
---line 1587 of file citation.bib
+--line 731 of file citation.bib
 Warning--entry type for "flink_rocksdb_bloom" isn't style-file defined
---line 1601 of file citation.bib
+--line 738 of file citation.bib
+Warning--to sort, need author or key in mtri2026
+Warning--to sort, need author or key in icewafl2025
+Warning--to sort, need author or key in dafdiscover2024
+Warning--empty author in dafdiscover2024
+Warning--empty journal in dafdiscover2024
+Warning--empty author in icewafl2025
+Warning--empty journal in icewafl2025
+Warning--empty author in mtri2026
+Warning--empty journal in mtri2026
 Warning--empty journal in baier2020switching
 Warning--empty journal in bhatia2022dense
 Warning--empty journal in bifet2007learning
 Warning--empty journal in breunig2000lof
-Warning--empty journal in confluent_dead_letter_queue
 Warning--empty journal in confluent_schema_registry
 Warning--empty journal in siemens_confluent2024
 Warning--empty journal in confluent_2025
@@ -23,45 +31,45 @@ Warning--empty journal in read2020
 Warning--empty journal in papastergios2025stream
 Warning--empty journal in contextdq2022
 Warning--empty journal in ververica2024
-You've used 57 entries,
+You've used 55 entries,
             2773 wiz_defined-function locations,
-            931 strings with 16902 characters,
-and the built_in function-call counts, 27172 in all, are:
-= -- 2454
-> -- 1621
-< -- 39
-+ -- 559
-- -- 498
-* -- 2105
-:= -- 4206
-add.period$ -- 231
-call.type$ -- 57
-change.case$ -- 331
-chr.to.int$ -- 53
-cite$ -- 130
-duplicate$ -- 1218
-empty$ -- 2146
-format.name$ -- 571
-if$ -- 5707
-int.to.chr$ -- 5
+            911 strings with 16113 characters,
+and the built_in function-call counts, 25335 in all, are:
+= -- 2278
+> -- 1482
+< -- 35
++ -- 514
+- -- 456
+* -- 1952
+:= -- 3887
+add.period$ -- 216
+call.type$ -- 55
+change.case$ -- 311
+chr.to.int$ -- 52
+cite$ -- 137
+duplicate$ -- 1160
+empty$ -- 2040
+format.name$ -- 520
+if$ -- 5330
+int.to.chr$ -- 4
 int.to.str$ -- 1
-missing$ -- 48
-newline$ -- 348
-num.names$ -- 228
-pop$ -- 685
+missing$ -- 46
+newline$ -- 330
+num.names$ -- 208
+pop$ -- 669
 preamble$ -- 1
-purify$ -- 274
+purify$ -- 256
 quote$ -- 0
-skip$ -- 969
+skip$ -- 916
 stack$ -- 0
-substring$ -- 842
-swap$ -- 143
-text.length$ -- 10
+substring$ -- 736
+swap$ -- 126
+text.length$ -- 9
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 627
-warning$ -- 16
-while$ -- 230
+type$ -- 605
+warning$ -- 24
+while$ -- 207
 width$ -- 0
-write$ -- 819
-(There were 18 warnings)
+write$ -- 772
+(There were 26 warnings)

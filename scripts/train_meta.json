@@ -1,7 +1,8 @@
 {
   "memory_len": 8192,
-  "train_samples": 81920,
-  "train_time": 29337.49310517311,
-  "epochs": 200,
-  "max_thres": 1581.5494384765625
+  "train_samples": 3833771,
+  "train_time_seconds": 126666.51131629944,
+  "epochs": 500,
+  "max_thres": 109.38717002868653,
+  "checkpoint_path": "/data/output/memstream_memory.pt"
 }

@@ -146,7 +146,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(cadqstream_records_violation_total)",
+          "expr": "sum(cadqstream_violation_records_total{layer=\"L1\",type=\"schema\"})",
           "legendFormat": "Schema Violations",
           "refId": "A"
         }
@@ -326,7 +326,7 @@
       "pluginVersion": "10.1.0",
       "targets": [
         {
-          "expr": "sum(cadqstream_records_valid_total) / (sum(cadqstream_records_valid_total) + sum(cadqstream_records_violation_total)) * 100",
+          "expr": "sum(cadqstream_records_valid_total{layer=\"L1\"}) / (sum(cadqstream_records_valid_total{layer=\"L1\"}) + sum(cadqstream_violation_records_total{layer=\"L1\"}) + 1) * 100",
           "legendFormat": "Data Quality %",
           "refId": "A"
         }
@@ -762,7 +762,7 @@
       },
       "id": 14,
       "panels": [],
-      "title": "Anomaly Detection by Rule",
+      "title": "Rule-based Detection by Rule",
       "type": "row"
     },
     {
@@ -845,7 +845,7 @@
           "refId": "A"
         }
       ],
-      "title": "Anomalies by Layer & Rule",
+      "title": "Rule-based Detections by Layer & Rule",
       "type": "timeseries"
     },
     {
@@ -876,115 +876,6 @@
         "w": 12,
         "x": 0,
         "y": 20
-      },
-      "id": 16,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(rate(cadqstream_voting_decisions_total[5m])) by (decision, layer)",
-          "legendFormat": "decision={{decision}} layer={{layer}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Voting Decisions Rate (L3/L4)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.5
-              },
-              {
-                "color": "green",
-                "value": 0.8
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 20
-      },
-      "id": 17,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "cadqstream_iec_confidence{layer=\"L4\"}",
-          "legendFormat": "IEC Confidence L4",
-          "refId": "A"
-        }
-      ],
-      "title": "IEC Confidence Score (L4)",
-      "type": "stat"
-    },
-    {
-      "datasource": "Prometheus",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        }
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 28
       },
       "id": 18,
       "options": {
@@ -1000,12 +891,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(cadqstream_iec_strategies_total[5m])) by (decision)",
+          "expr": "sum(rate(cadqstream_iec_strategies_total[5m])) by (strategy)",
           "legendFormat": "{{decision}}",
           "refId": "A"
         }
       ],
-      "title": "IEC Strategy Decisions Rate",
+      "title": "IEC Correction Strategy Rate",
       "type": "timeseries"
     },
     {
@@ -1051,12 +942,12 @@
       },
       "targets": [
         {
-          "expr": "cadqstream_anomalies_canary_total{layer=\"L1\"}",
+          "expr": "cadqstream_anomalies_canary_total{layer=\"L2\"}",
           "legendFormat": "{{rule}}",
           "refId": "A"
         }
       ],
-      "title": "Canary Anomalies by Rule (L1)",
+      "title": "Canary Anomalies by Rule (L2)",
       "type": "timeseries"
     }
   ],

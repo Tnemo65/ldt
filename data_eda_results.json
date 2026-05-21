@@ -1,0 +1,219 @@
+{
+  "section1_total": 48722602,
+  "section1_monthly": {
+    "202501": 3475226,
+    "202502": 3577543,
+    "202503": 4145257,
+    "202504": 3970553,
+    "202505": 4591845,
+    "202506": 4322960,
+    "202507": 3898963,
+    "202508": 3574091,
+    "202509": 4251015,
+    "202510": 4428699,
+    "202511": 4181444,
+    "202512": 4305006
+  },
+  "section2_columns": [
+    "VendorID",
+    "tpep_pickup_datetime",
+    "tpep_dropoff_datetime",
+    "passenger_count",
+    "trip_distance",
+    "RatecodeID",
+    "store_and_fwd_flag",
+    "PULocationID",
+    "DOLocationID",
+    "payment_type",
+    "fare_amount",
+    "extra",
+    "mta_tax",
+    "tip_amount",
+    "tolls_amount",
+    "improvement_surcharge",
+    "total_amount",
+    "congestion_surcharge",
+    "Airport_fee",
+    "cbd_congestion_fee"
+  ],
+  "section2_ncols": 20,
+  "section3_completeness": {
+    "passenger_count": {
+      "count": 11611894,
+      "rate": 23.8327
+    },
+    "RatecodeID": {
+      "count": 11611894,
+      "rate": 23.8327
+    },
+    "store_and_fwd_flag": {
+      "count": 11611894,
+      "rate": 23.8327
+    },
+    "congestion_surcharge": {
+      "count": 11611894,
+      "rate": 23.8327
+    },
+    "Airport_fee": {
+      "count": 11611894,
+      "rate": 23.8327
+    },
+    "PULocationID_range": {
+      "count": 103043,
+      "rate": 0.2115
+    },
+    "DOLocationID_range": {
+      "count": 324266,
+      "rate": 0.6655
+    },
+    "passenger_count_range": {
+      "count": 260062,
+      "rate": 0.5338
+    }
+  },
+  "section4_monthly_null": {
+    "202501": {
+      "rows": 3475226,
+      "null_count": 540149,
+      "null_rate": 15.5428
+    },
+    "202502": {
+      "rows": 3577543,
+      "null_count": 806937,
+      "null_rate": 22.5556
+    },
+    "202503": {
+      "rows": 4145257,
+      "null_count": 916663,
+      "null_rate": 22.1135
+    },
+    "202504": {
+      "rows": 3970553,
+      "null_count": 745730,
+      "null_rate": 18.7815
+    },
+    "202505": {
+      "rows": 4591845,
+      "null_count": 1196176,
+      "null_rate": 26.05
+    },
+    "202506": {
+      "rows": 4322960,
+      "null_count": 1212946,
+      "null_rate": 28.0582
+    },
+    "202507": {
+      "rows": 3898963,
+      "null_count": 1038755,
+      "null_rate": 26.6418
+    },
+    "202508": {
+      "rows": 3574091,
+      "null_count": 886234,
+      "null_rate": 24.7961
+    },
+    "202509": {
+      "rows": 4251015,
+      "null_count": 1067195,
+      "null_rate": 25.1045
+    },
+    "202510": {
+      "rows": 4428699,
+      "null_count": 990887,
+      "null_rate": 22.3742
+    },
+    "202511": {
+      "rows": 4181444,
+      "null_count": 1014740,
+      "null_rate": 24.2677
+    },
+    "202512": {
+      "rows": 4305006,
+      "null_count": 1195482,
+      "null_rate": 27.7696
+    }
+  },
+  "section5_financial": {
+    "fare_amount": {
+      "count": 2848620,
+      "rate": 5.8466,
+      "min": -1807.6,
+      "max": -0.01,
+      "mean": -9.88,
+      "median": -4.75
+    },
+    "total_amount": {
+      "count": 973721,
+      "rate": 1.9985,
+      "min": -1832.85,
+      "max": -0.01,
+      "mean": -25.48,
+      "median": -16.15
+    },
+    "extra": {
+      "count": 414216,
+      "rate": 0.8502,
+      "min": -17.39,
+      "max": -0.01,
+      "mean": -2.1,
+      "median": -1.0
+    },
+    "mta_tax": {
+      "count": 762381,
+      "rate": 1.5647,
+      "min": -21.74,
+      "max": -0.5,
+      "mean": -0.5,
+      "median": -0.5
+    },
+    "overlap": {
+      "count": 968747,
+      "rate": 1.9883
+    }
+  },
+  "section6_physical": {
+    "speed_gt_80": {
+      "count": 13700,
+      "rate": 0.0281
+    },
+    "speed_gt_100": {
+      "count": 12242,
+      "rate": 0.0251
+    },
+    "speed_gt_200": {
+      "count": 9021,
+      "rate": 0.0185
+    },
+    "speed_max": 5301620.399999999,
+    "duration_zero": {
+      "count": 544069,
+      "rate": 1.1167
+    },
+    "duration_gt_4h": {
+      "count": 16720,
+      "rate": 0.0343
+    },
+    "fare_amount_max": 863372.12,
+    "trip_distance_max": 397994.37,
+    "fare_per_mile_max": 539607.575
+  },
+  "section7_zero_temporal": {
+    "zero_dist_count": 1402958,
+    "zero_dist_rate": 2.8795,
+    "zero_dist_pos_fare": 1149848,
+    "zero_dist_fare_mean": 19.64,
+    "tpep_pickup_datetime_outside_2025": {
+      "count": 29,
+      "rate": 0.0001
+    },
+    "tpep_dropoff_datetime_outside_2025": {
+      "count": 796,
+      "rate": 0.0016
+    }
+  },
+  "section8_schema": {
+    "sample_size": 3475226,
+    "schema_rej_null_passenger_or_ratecode": 540149,
+    "schema_rej_rate": 15.5428
+  }
+}

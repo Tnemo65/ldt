@@ -72,8 +72,8 @@ class MinIOClient:
 
     def __init__(self):
         self.endpoint = os.getenv('MINIO_ENDPOINT', 'http://minio:9000')
-        self.access_key = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
-        self.secret_key = os.getenv('MINIO_SECRET_KEY', 'minioadmin')
+        self.access_key = os.getenv('MINIO_ACCESS_KEY', '')
+        self.secret_key = os.getenv('MINIO_SECRET_KEY', '')
         self.bucket = os.getenv('MEMSTREAM_CHECKPOINT_BUCKET', 'cadqstream-drift')
         self.prefix = os.getenv('MEMSTREAM_CHECKPOINT_PREFIX', 'checkpoints/memstream/')
 

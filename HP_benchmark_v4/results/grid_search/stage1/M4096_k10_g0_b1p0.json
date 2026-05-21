@@ -1,0 +1,28 @@
+{
+  "config_id": "M4096_k10_g0_b1p0",
+  "stage": 1,
+  "memory_len": 4096,
+  "k": 10,
+  "gamma": 0.0,
+  "beta": 1.0,
+  "noise_std": 0.001,
+  "lr": 0.01,
+  "out_dim": 68,
+  "epochs": 1000,
+  "adam_betas": [
+    0.9,
+    0.999
+  ],
+  "auc_roc": 0.7955014602173913,
+  "auc_pr": 0.4039947874083615,
+  "f1": 0.4636696050615242,
+  "precision": 0.589756455285808,
+  "recall": 0.382,
+  "fpr": 0.023106521739130435,
+  "acc": 0.929302,
+  "best_threshold": 1.6601715238897168,
+  "score_normal_mean": 0.4982824597308873,
+  "score_anomaly_mean": 1.8096709849892672,
+  "separation_ratio": 3.631817555782789,
+  "train_time_s": 518.6766126155853
+}

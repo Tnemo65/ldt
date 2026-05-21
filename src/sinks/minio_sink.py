@@ -27,8 +27,8 @@ Sink strategy:
 
 Env vars:
   MINIO_ENDPOINT   e.g. http://minio:9000
-  MINIO_ACCESS_KEY  defaults to minioadmin
-  MINIO_SECRET_KEY  defaults to minioadmin123
+  MINIO_ACCESS_KEY  (required, set via MINIO_ACCESS_KEY env)
+  MINIO_SECRET_KEY  (required, set via MINIO_SECRET_KEY env)
   MINIO_BUCKET      target bucket name (set per sink factory)
 
 Bucket layout (created by deployment/minio/init-scripts/01-create-buckets.sh):
@@ -57,8 +57,8 @@ from pyflink.datastream.functions import RuntimeContext, MapFunction
 # ─────────────────────────────────────────────────────────────────────────────
 
 _MINIO_ENDPOINT  = os.getenv('MINIO_ENDPOINT',  'http://minio:9000')
-_MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
-_MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', 'minioadmin123')
+_MINIO_ACCESS_KEY = os.getenv('MINIO_ACCESS_KEY', '')
+_MINIO_SECRET_KEY = os.getenv('MINIO_SECRET_KEY', '')
 
 
 def _generate_filename(table: str) -> str:
@@ -285,8 +285,8 @@ class CustomMinioUploader(MapFunction):
 # ─────────────────────────────────────────────────────────────────────────────
 
 _S3_ENDPOINT = os.getenv('S3_ENDPOINT', 'http://minio:9000')
-_S3_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID', 'minioadmin')
-_S3_SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', 'minioadmin123')
+_S3_ACCESS_KEY = os.getenv('AWS_ACCESS_KEY_ID', '')
+_S3_SECRET_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', '')
 
 
 def _s3_path(bucket: str, table: str) -> str:

@@ -211,7 +211,7 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
       "id": 16,
       "panels": [],
-      "title": "Layer 3: Rendezvous + MetaAggregator (Voting Ensemble)",
+      "title": "Layer 3: Rendezvous + MetaAggregator",
       "type": "row"
     },
     {
@@ -293,7 +293,7 @@
           "refId": "D"
         }
       ],
-      "title": "L4: IEC Strategy Execution Distribution",
+      "title": "L4: ML Strategy Execution Distribution",
       "type": "timeseries"
     }
   ],

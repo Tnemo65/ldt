@@ -9,6 +9,6 @@ COPY continuous_data_simulator.py /app/continuous_data_simulator.py
 # For single-pass test: --no-loop
 # For different topic: --topic taxi-nyc-raw-v2
 CMD ["python3", "/app/continuous_data_simulator.py", \
-     "--input", "/data/taxi_sample_5k.parquet", \
+     "--input", "/data/demo_trips.parquet", \
      "--topic", "taxi-nyc-raw-v2", \
      "--delay", "0.005"]

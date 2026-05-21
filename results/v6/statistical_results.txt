@@ -1,4 +1,0 @@
-
-=== Batch Algorithms ===
-Friedman: stat=1.600, p=0.8088
-  NOT SIGNIFICANT -- No significant differences (Friedman p=0.8088 >= 0.05).

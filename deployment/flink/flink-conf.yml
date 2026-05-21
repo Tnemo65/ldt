@@ -17,7 +17,7 @@ parallelism.default: ${FLINK_PARALLELISM_DEFAULT}
 
 # State Backend: RocksDB with local checkpoint storage
 # (overridden by FLINK_PROPERTIES env var in docker-compose.yml)
-state.backend: rocksdb
+state.backend.type: rocksdb
 state.backend.incremental: true
 state.checkpoints.dir: file:///opt/flink/checkpoints/flink/checkpoints
 state.savepoints.dir: file:///opt/flink/checkpoints/flink/savepoints

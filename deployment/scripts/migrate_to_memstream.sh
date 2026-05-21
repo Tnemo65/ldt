@@ -600,7 +600,7 @@ step_5_alert_success() {
     # Notify via Grafana annotation if available
     curl -sf -X POST "http://localhost:3000/api/annotations" \
         -H "Content-Type: application/json" \
-        -u admin:changeme \
+        -u admin:${GRAFANA_PASSWORD} \
         -d "{\"tags\":[\"memstream\",\"migration\"],\"text\":\"MemStream migration completed successfully on ${TIMESTAMP}\"}" &>/dev/null || true
 
     return 0
@@ -670,7 +670,7 @@ do_rollback() {
     # Notify via Grafana annotation
     curl -sf -X POST "http://localhost:3000/api/annotations" \
         -H "Content-Type: application/json" \
-        -u admin:changeme \
+        -u admin:${GRAFANA_PASSWORD} \
         -d "{\"tags\":[\"memstream\",\"rollback\"],\"text\":\"MemStream migration ROLLED BACK on ${TIMESTAMP}. Reason: check logs.\"}" &>/dev/null || true
 
     exit 1

@@ -1,0 +1,19 @@
+{
+  "sweep": "4c_beta",
+  "param": "beta",
+  "value": 0.01,
+  "config_id": "4c_beta_beta0.01",
+  "auc_roc": 0.9967826982089711,
+  "auc_pr": 0.9162873498801685,
+  "f1": 0.05808651612389343,
+  "precision": 0.029911999999999994,
+  "recall": 0.9999999999999933,
+  "fpr": 0.9999999999999998,
+  "acc": 0.029912,
+  "best_threshold": 0.05808651612389343,
+  "score_normal_mean": 68.13493494955597,
+  "score_anomaly_mean": 515.7138178027801,
+  "separation_ratio": 7.5690072674734985,
+  "train_time_s": 108.51359868049622,
+  "status": "MATCHED"
+}

@@ -1,7 +1,0 @@
-difficulty,alg_i,alg_j,W_stat,p_raw,cohens_d,effect,p_holm,sig_holm
-hard,sHST-River,MemStream,0.0,0.0625,24.176941526026482,large,0.375,False
-hard,sHST-River,IForestASD,0.0,0.0625,178.2932524970239,large,0.3125,False
-hard,sHST-River,sHST-Mem-Ens,0.0,0.0625,24.176835886174572,large,0.25,False
-hard,MemStream,IForestASD,0.0,0.0625,11.666870376826049,large,0.1875,False
-hard,MemStream,sHST-Mem-Ens,0.0,0.0625,2.1659644096041255,large,0.125,False
-hard,IForestASD,sHST-Mem-Ens,0.0,0.0625,-11.666633780945158,large,0.0625,False

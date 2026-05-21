@@ -1,0 +1,19 @@
+{
+  "sweep": "4a_memory",
+  "param": "memory_len",
+  "value": 32,
+  "config_id": "4a_memory_memory_len32",
+  "auc_roc": 0.9896027905263348,
+  "auc_pr": 0.6705968806405819,
+  "f1": 0.05808651612389343,
+  "precision": 0.029911999999999994,
+  "recall": 0.9999999999999933,
+  "fpr": 0.9999999999999998,
+  "acc": 0.029912,
+  "best_threshold": 0.05808651612389343,
+  "score_normal_mean": 264.60113487998973,
+  "score_anomaly_mean": 688.1427085011297,
+  "separation_ratio": 2.6006793538998916,
+  "train_time_s": 20.87279725074768,
+  "status": "MATCHED"
+}

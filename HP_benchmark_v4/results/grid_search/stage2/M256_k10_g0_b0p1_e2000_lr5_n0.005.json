@@ -1,0 +1,29 @@
+{
+  "config_id": "M256_k10_g0_b0p1_e2000_lr5_n0.005",
+  "stage": 2,
+  "base_id": "M256_k10_g0_b0p1",
+  "memory_len": 256,
+  "k": 10,
+  "gamma": 0.0,
+  "beta": 0.1,
+  "noise_std": 0.005,
+  "lr": 0.005,
+  "out_dim": 68,
+  "epochs": 2000,
+  "adam_betas": [
+    0.9,
+    0.999
+  ],
+  "auc_roc": 0.8090065087499999,
+  "auc_pr": 0.4561590909589271,
+  "f1": 0.5204048739604151,
+  "precision": 0.7323534748684449,
+  "recall": 0.4036,
+  "fpr": 0.012826086956521739,
+  "acc": 0.940488,
+  "best_threshold": 1.289525635484749,
+  "score_normal_mean": 0.4030192958482729,
+  "score_anomaly_mean": 1.1383511857504738,
+  "separation_ratio": 2.82455752733744,
+  "train_time_s": 30.938108682632446
+}

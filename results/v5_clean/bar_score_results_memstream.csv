@@ -1,2 +1,0 @@
-n_records,memory_updates,bar_rate,bar_target,status,reasons
-20000,200,0.01,1-5%,OK,{'minimum_budget_guarantee': 200}

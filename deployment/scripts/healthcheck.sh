@@ -170,7 +170,7 @@ run_check "kafka-ui"    "curl -sf http://localhost:8080"
 run_check "kafka-exp"   "curl -sf http://localhost:9308/metrics"
 
 # ── Storage ──
-REDIS_PASSWORD="${REDIS_PASSWORD:-redis_password}"
+REDIS_PASSWORD="${REDIS_PASSWORD}"
 run_check "redis"       "docker exec ldt-redis redis-cli -a \"$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG"
 run_check "minio"       "docker exec ldt-minio mc ready local 2>/dev/null"
 

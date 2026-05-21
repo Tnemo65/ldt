@@ -1,66 +1,69 @@
 \babel@toc {USenglish}{}\relax 
+\contentsline {section}{Abstract}{iii}{chapter*.3}%
 \contentsline {chapter}{\numberline {1}INTRODUCTION}{1}{chapter.1}%
 \contentsline {section}{\numberline {1.1}Motivation}{1}{section.1.1}%
 \contentsline {section}{\numberline {1.2}Research Challenges}{1}{section.1.2}%
 \contentsline {section}{\numberline {1.3}Objective}{2}{section.1.3}%
-\contentsline {section}{\numberline {1.4}Contribution Highlights}{3}{section.1.4}%
+\contentsline {section}{\numberline {1.4}Contribution Highlights}{2}{section.1.4}%
 \contentsline {section}{\numberline {1.5}Thesis Content}{3}{section.1.5}%
-\contentsline {chapter}{\numberline {2}BACKGROUND}{5}{chapter.2}%
-\contentsline {section}{\numberline {2.1}Data Streaming Systems}{5}{section.2.1}%
-\contentsline {subsection}{\numberline {2.1.1}Apache Kafka}{6}{subsection.2.1.1}%
-\contentsline {subsection}{\numberline {2.1.2}Apache Flink}{7}{subsection.2.1.2}%
-\contentsline {section}{\numberline {2.2}MLOps and Continuous Learning}{7}{section.2.2}%
-\contentsline {section}{\numberline {2.3}Data Quality and Anomaly Detection}{8}{section.2.3}%
-\contentsline {section}{\numberline {2.4}Concept Drift Detection}{9}{section.2.4}%
-\contentsline {section}{\numberline {2.5}Memory-Augmented Neural Networks}{10}{section.2.5}%
-\contentsline {section}{\numberline {2.6}Context-Aware Systems}{11}{section.2.6}%
-\contentsline {section}{\numberline {2.7}Chapter Summary}{13}{section.2.7}%
-\contentsline {chapter}{\numberline {3}RELATED WORK}{14}{chapter.3}%
-\contentsline {section}{\numberline {3.1}Streaming Data Quality Monitoring}{14}{section.3.1}%
-\contentsline {section}{\numberline {3.2}Concept Drift Handling in ML Systems}{15}{section.3.2}%
-\contentsline {section}{\numberline {3.3}Context-Aware Anomaly Detection}{16}{section.3.3}%
-\contentsline {subsection}{\numberline {3.3.1}Anomaly Detection Methods and Benchmarks}{16}{subsection.3.3.1}%
-\contentsline {section}{\numberline {3.4}Memory-Based Streaming Anomaly Detection}{17}{section.3.4}%
-\contentsline {section}{\numberline {3.5}Chapter Summary}{18}{section.3.5}%
-\contentsline {chapter}{\numberline {4}CA-DQStream: Context-Aware Data Quality Streaming System}{19}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Approach Direction}{19}{section.4.1}%
-\contentsline {section}{\numberline {4.2}Data Exploration}{19}{section.4.2}%
-\contentsline {subsection}{\numberline {4.2.1}Raw Data EDA}{19}{subsection.4.2.1}%
-\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{22}{subsection.4.2.2}%
-\contentsline {subsection}{\numberline {4.2.3}Injected Data}{23}{subsection.4.2.3}%
-\contentsline {section}{\numberline {4.3}Proposed Method}{23}{section.4.3}%
-\contentsline {subsection}{\numberline {4.3.1}Overview}{23}{subsection.4.3.1}%
-\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{24}{subsection.4.3.2}%
-\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{25}{subsection.4.3.3}%
-\contentsline {subsubsection}{Schema Validation}{26}{subsubsection*.17}%
-\contentsline {subsubsection}{Flink KeyedState Deduplication}{26}{subsubsection*.18}%
-\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{28}{subsubsection*.20}%
-\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{28}{subsection.4.3.4}%
-\contentsline {subsubsection}{Denoising Autoencoder Architecture}{29}{subsubsection*.21}%
-\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{29}{subsubsection*.22}%
-\contentsline {subsubsection}{Online Memory Update Policy}{30}{subsubsection*.24}%
-\contentsline {subsubsection}{4D Context-Aware Thresholding}{31}{subsubsection*.26}%
-\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{32}{subsubsection*.28}%
-\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{32}{subsection.4.3.5}%
-\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{34}{subsection.4.3.6}%
-\contentsline {subsection}{\numberline {4.3.7}Fault Tolerance}{36}{subsection.4.3.7}%
-\contentsline {subsubsection}{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}{36}{subsubsection*.30}%
-\contentsline {subsubsection}{Kafka Transactions and Exactly-Once Semantics}{36}{subsubsection*.31}%
-\contentsline {subsubsection}{Dead Letter Queue (DLQ) Pattern}{37}{subsubsection*.32}%
-\contentsline {subsubsection}{Two-Phase Commit (2PC) for Cross-System Atomicity}{37}{subsubsection*.33}%
-\contentsline {subsubsection}{Idempotent Operations}{37}{subsubsection*.34}%
-\contentsline {subsubsection}{State Size Management}{38}{subsubsection*.35}%
-\contentsline {subsubsection}{Model Distribution and GC Overhead}{38}{subsubsection*.36}%
-\contentsline {section}{\numberline {4.4}Chapter Summary}{38}{section.4.4}%
-\contentsline {chapter}{\numberline {5}EXPERIMENTS}{40}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Implementation Setup}{40}{section.5.1}%
-\contentsline {subsection}{\numberline {5.1.1}Experiment Environment}{41}{subsection.5.1.1}%
-\contentsline {subsection}{\numberline {5.1.2}Experimental Infrastructure}{41}{subsection.5.1.2}%
-\contentsline {section}{\numberline {5.2}Results}{44}{section.5.2}%
-\contentsline {section}{\numberline {5.3}Chapter Summary}{44}{section.5.3}%
-\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{45}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Conclusions}{45}{section.6.1}%
-\contentsline {section}{\numberline {6.2}Limitations}{45}{section.6.2}%
-\contentsline {section}{\numberline {6.3}Future Work}{46}{section.6.3}%
-\contentsline {section}{\numberline {6.4}Broader Impact}{46}{section.6.4}%
-\contentsline {chapter}{REFERENCES}{47}{section.6.4}%
+\contentsline {chapter}{\numberline {2}BACKGROUND}{4}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Data Streaming Systems}{4}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Apache Kafka}{5}{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {2.1.2}Apache Flink}{6}{subsection.2.1.2}%
+\contentsline {section}{\numberline {2.2}MLOps and Continuous Learning}{6}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Data Quality and Anomaly Detection}{7}{section.2.3}%
+\contentsline {section}{\numberline {2.4}Concept Drift Detection}{8}{section.2.4}%
+\contentsline {section}{\numberline {2.5}Memory-Augmented Neural Networks}{9}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Context-Aware Systems}{9}{section.2.6}%
+\contentsline {section}{\numberline {2.7}Chapter Summary}{10}{section.2.7}%
+\contentsline {chapter}{\numberline {3}RELATED WORK}{11}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Streaming Data Quality Monitoring}{11}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Concept Drift Handling in ML Systems}{12}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Context-Aware Anomaly Detection}{12}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Anomaly Detection Methods and Benchmarks}{13}{subsection.3.3.1}%
+\contentsline {section}{\numberline {3.4}Memory-Based Streaming Anomaly Detection}{14}{section.3.4}%
+\contentsline {section}{\numberline {3.5}Chapter Summary}{14}{section.3.5}%
+\contentsline {chapter}{\numberline {4}CA-DQStream: Context-Aware Data Quality Streaming System}{15}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Approach Direction}{15}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Data Exploration}{15}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Raw Data EDA}{15}{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.2.2}Concept Drift Example}{18}{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {4.2.3}Injected Data}{19}{subsection.4.2.3}%
+\contentsline {section}{\numberline {4.3}Proposed Method}{19}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Overview}{19}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Feature Engineering}{21}{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.3.3}Layer 1: Baseline Validation}{23}{subsection.4.3.3}%
+\contentsline {subsubsection}{Schema Validation}{23}{subsubsection*.17}%
+\contentsline {subsubsection}{Flink KeyedState Deduplication}{24}{subsubsection*.18}%
+\contentsline {subsubsection}{Canary Pattern: Lightweight Validation}{25}{subsubsection*.20}%
+\contentsline {subsection}{\numberline {4.3.4}Layer 2: Memory-Based Streaming Anomaly Detection}{26}{subsection.4.3.4}%
+\contentsline {subsubsection}{Denoising Autoencoder Architecture}{26}{subsubsection*.21}%
+\contentsline {subsubsection}{L1 k-NN Scoring on Memory Module}{26}{subsubsection*.22}%
+\contentsline {subsubsection}{Online Memory Update Policy}{27}{subsubsection*.23}%
+\contentsline {subsubsection}{4D Context-Aware Thresholding}{28}{subsubsection*.25}%
+\contentsline {subsubsection}{PyFlink Vectorized UDF Implementation}{29}{subsubsection*.27}%
+\contentsline {subsection}{\numberline {4.3.5}Layer 3: Meta-Aggregation}{29}{subsection.4.3.5}%
+\contentsline {subsection}{\numberline {4.3.6}Layer 4: Intelligent Evolution Controller}{31}{subsection.4.3.6}%
+\contentsline {subsubsubsection}{IEC Architecture: Three Core Components}{32}{subsubsubsection*.28}%
+\contentsline {subsubsubsection}{IEC Decision Outcomes}{32}{subsubsubsection*.29}%
+\contentsline {subsubsubsection}{Three Retrain Triggers}{32}{subsubsubsection*.30}%
+\contentsline {subsubsubsection}{ADWIN-U Drift Detection in the IEC}{32}{subsubsubsection*.31}%
+\contentsline {subsubsubsection}{Verification Feedback Loop (Phase 4 Reserved)}{33}{subsubsubsection*.33}%
+\contentsline {section}{\numberline {4.4}Chapter Summary}{33}{section.4.4}%
+\contentsline {chapter}{\numberline {5}EXPERIMENTS}{34}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Experimental Setup}{34}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Dataset}{34}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Evaluation Metrics}{34}{subsection.5.1.2}%
+\contentsline {subsection}{\numberline {5.1.3}Experiment Environment}{35}{subsection.5.1.3}%
+\contentsline {subsection}{\numberline {5.1.4}Experimental Infrastructure}{35}{subsection.5.1.4}%
+\contentsline {section}{\numberline {5.2}Results}{37}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Memory Buffer Size Ablation}{38}{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {5.2.2}Hyperparameter Tuning: Grid Search Results}{38}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}Ablation Study}{39}{subsection.5.2.3}%
+\contentsline {section}{\numberline {5.3}Chapter Summary}{40}{section.5.3}%
+\contentsline {chapter}{\numberline {6}CONCLUSION \& FUTURE WORK}{41}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Conclusions}{41}{section.6.1}%
+\contentsline {section}{\numberline {6.2}Limitations}{41}{section.6.2}%
+\contentsline {section}{\numberline {6.3}Future Work}{42}{section.6.3}%
+\contentsline {section}{\numberline {6.4}Broader Impact}{42}{section.6.4}%
+\contentsline {chapter}{REFERENCES}{43}{section.6.4}%

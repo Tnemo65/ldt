@@ -303,7 +303,7 @@ log_div
 
 # 3a. Redis
 echo -e "${BLUE}[Storage]${NC}"
-REDIS_PASSWORD="${REDIS_PASSWORD:-redis_password}"
+REDIS_PASSWORD="${REDIS_PASSWORD}"
 wait_for_health "redis" "$TIMEOUT_DEFAULT" 3 \
     "docker exec ldt-redis redis-cli -a \"$REDIS_PASSWORD\" ping 2>/dev/null | grep -q PONG" \
     "ldt-redis" || FAILED=$((FAILED + 1))

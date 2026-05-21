@@ -1,9 +1,14 @@
-\chapter{CA-DQStream: Context-Aware Data Quality Streaming System}
+﻿\chapter{CA-DQStream: Context-Aware Data Quality Streaming System}
 \pagestyle{fancy}
+
+% NOTE: \titleclass{\subsubsubsection} is defined in thesis.tex preamble (line ~62)
+% and MUST NOT be redefined here (would cause "Command already defined" error)
+% NOTE: All pseudocode commands (\Statep, \If, \Else, \EndIf, \Comment, etc.)
+% are defined in thesis.tex preamble and are available globally.
 
 \section{Approach Direction}
 
-CA-DQStream implements a four-layer processing pipeline on Apache Flink. Layer 1 (Schema Filter and Deduplication) acts as a deterministic quality gate. Layer 2 (Memory-Based Streaming Anomaly Detection) processes records through sequential Canary and Complex stages that converge at the MetaAggregator. Layer 3 (Meta-Aggregation) computes 1-minute windowed quality metrics. Layer 4 (Intelligent Evolution Controller) monitors meta-streams via ADWIN and triggers drift-adaptive model retraining via the \texttt{quick\_retrain} action. The following sections detail the data exploration (Section 3.2), feature engineering (Section 3.3.3.2), the four processing layers (Sections 3.3.3--3.3.6), and fault tolerance (Section 3.3.7). The system requires an offline warmup phase before deployment, detailed in Section 3.3.3.5.
+CA-DQStream implements a four-layer processing pipeline on Apache Flink. Layer 1 (Schema Filter and Deduplication) acts as a deterministic quality gate. Layer 2 (Memory-Based Streaming Anomaly Detection) processes records through sequential Canary and Complex stages that converge at the MetaAggregator (Section 3.3.5). Layer 3 (Meta-Aggregation) computes 1-minute windowed quality metrics. Layer 4 (Intelligent Evolution Controller) monitors meta-streams via ADWIN and triggers drift-adaptive model retraining via the \texttt{quick\_retrain} action. The following sections detail the data exploration (Section 3.2), feature engineering (Section 3.3.3.2), the four processing layers (Sections 3.3.3--3.3.6), and fault tolerance (Section 3.3.7). The system requires an offline warmup phase before deployment, detailed in Section 3.3.3.5.
 
 \section{Data Exploration}
 
@@ -11,67 +16,68 @@ CA-DQStream implements a four-layer processing pipeline on Apache Flink. Layer 1
 
 The NYC Yellow Taxi dataset covers 26 months (January 2024 -- February 2026, approximately 72M records). The EDA reveals bimodal fare distributions (modes around \$8--\$12 for short in-borough trips and \$50--\$60 for airport trips), extreme variance across ratecode types (Standard: mean \$15.42, JFK: mean \$52.18, Newark: mean \$68.44), and volume patterns varying 2--3$\times$ between peak and off-peak periods. Data quality issues include 9.1\% NULL rate on passenger\_count and RatecodeID (systematic upstream capture failure), 1.8\% negative fares (voided trips, data entry errors), 1.5\% zero distances (tolls-only, canceled trips), and sporadic GPS errors producing impossible speeds exceeding 100 mph.
 
-\textbf{Schema and Completeness Violations:} The raw parquet files contain 24 columns (including 5 derived features: duration\_s, speed\_mph, hour, month, weekday, date). Among them, 6 columns exhibit NULL values (Table~\ref{tab:eda_null}). Five columns (passenger\_count, RatecodeID, store\_and\_fwd\_flag, congestion\_surcharge, Airport\_fee) share an identical NULL count of 4,091,232 records (9.94\% of the dataset), indicating a systematic upstream capture failure affecting a consistent subset of data uploads. The remaining column, speed\_mph, has 778,691 NULL values (1.89\%) attributable to uncomputable trips where either trip\_distance or duration\_s is zero. Beyond NULLs, out-of-range values appear in categorical fields: PULocationID exceeds the valid range (1--263) in 146,201 records (0.36\%); DOLocationID in 370,258 records (0.90\%); and passenger\_count contains 401,638 out-of-range values (0.98\%).
+\textbf{Schema and Completeness Violations:} The raw parquet files contain 20 columns; 5 additional features (duration\_s, speed\_mph, hour, month, weekday, date) are derived in the pipeline. Among raw columns, 5 exhibit NULL values (Table~\ref{tab:eda_null}). The columns passenger\_count, RatecodeID, store\_and\_f\_flag, congestion\_surcharge, and Airport\_fee share an identical NULL count of 11,611,894 records (23.83\% of the dataset), indicating a systematic upstream capture failure affecting a consistent subset of data uploads. The derived column speed\_mph has 544,069 NULL values (1.12\%) attributable to uncomputable trips where either trip\_distance or duration\_s is zero. Beyond NULLs, out-of-range values appear in categorical fields: PULocationID exceeds the valid range (1--263) in 103,043 records (0.21\%); DOLocationID in 370,258 records (0.90\%); and passenger\_count contains 260,062 out-of-range values (0.53\%).
 
 \begin{table}[H]
 \centering
-\caption{Completeness Violations in NYC Yellow Taxi Raw Data (2024, 41.2M records).}
+\caption{Completeness Violations in NYC Yellow Taxi Raw Data (Jan-Dec 2025, 48.7M records).}
 \label{tab:eda_null}
 \begin{tabular}{lrrrr}
 \toprule
 \textbf{Column} & \textbf{NULL Count} & \textbf{NULL Rate} & \textbf{Non-Null Count} \\
 \midrule
-passenger\_count    & 4,091,232 & 9.94\% & 37,078,488 \\
-RatecodeID          & 4,091,232 & 9.94\% & 37,078,488 \\
-store\_and\_fwd\_flag & 4,091,232 & 9.94\% & 37,078,488 \\
-congestion\_surcharge & 4,091,232 & 9.94\% & 37,078,488 \\
-Airport\_fee        & 4,091,232 & 9.94\% & 37,078,488 \\
-speed\_mph          &   778,691 & 1.89\% & 40,391,029 \\
+passenger\_count     & 11,611,894 & 23.83\% & 37,110,708 \\
+RatecodeID           & 11,611,894 & 23.83\% & 37,110,708 \\
+store\_and\_f\_flag  & 11,611,894 & 23.83\% & 37,110,708 \\
+congestion\_surcharge & 11,611,894 & 23.83\% & 37,110,708 \\
+Airport\_fee          & 11,611,894 & 23.83\% & 37,110,708 \\
+speed\_mph           &    544,069 &  1.12\% & 48,178,533 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Validity Violations (Hard Rules):} Negative values violate fundamental physical constraints. Table~\ref{tab:eda_neg} shows that fare\_amount < 0 affects 731,024 records (1.78\% of the dataset), with a median negative value of -\$10.00 and a maximum of -\$2,261.20, suggesting systematic void/refund processing errors rather than random noise. Similarly, total\_amount < 0 appears in 609,344 records (1.48\%). Notably, 82.6\% of these validity violations overlap (both fare\_amount and total\_amount are negative simultaneously), indicating a common underlying cause. Additional hard-rule violations include negative extra charges (304,569, 0.74\%) and negative mta\_tax (583,164, 1.42\%).
+\textbf{Validity Violations (Hard Rules):} Negative values violate fundamental physical constraints. Table~\ref{tab:eda\_neg} shows that fare\_amount < 0 affects 2,848,620 records (5.85\% of the dataset), with a median negative value of -\$4.75 and a maximum of -\$1,807.60, suggesting systematic void/refund processing errors rather than random noise. Similarly, total\_amount < 0 appears in 973,721 records (2.00\%) and improvement\_surcharge < 0 in 804,443 records (1.65\%). Notably, 99.5\% of these validity violations overlap (fare\_amount and total\_amount are negative simultaneously), indicating a common underlying cause. Additional hard-rule violations include negative mta\_tax (762,381, 1.56\%) and negative extra charges (414,216, 0.85\%).
 
 \begin{table}[H]
 \centering
-\caption{Validity Violations: Negative Financial Values (2024, 41.2M records).}
+\caption{Validity Violations: Negative Financial Values (Jan-Dec 2025, 48.7M records).}
 \label{tab:eda_neg}
 \begin{tabular}{lrrrrrr}
 \toprule
 \textbf{Column} & \textbf{Neg. Count} & \textbf{Rate} & \textbf{Min} & \textbf{Max} & \textbf{Mean} & \textbf{Median} \\
 \midrule
-fare\_amount < 0     & 731,024 & 1.78\% & -\$2,261.20 & -\$0.01 & -\$19.04 & -\$10.00 \\
-total\_amount < 0    & 609,344 & 1.48\% & -\$2,265.45 & -\$0.01 & -\$27.93 & -\$17.20 \\
-extra < 0            & 304,569 & 0.74\% & --          & --      & --        & -- \\
-mta\_tax < 0         & 583,164 & 1.42\% & --          & --      & --        & -- \\
+fare\_amount < 0              &  2,848,620 & 5.85\% & -\$1,807.60 & -\$0.01 &  -\$9.88 & -\$4.75 \\
+total\_amount < 0             &    973,721 & 2.00\% & -\$1,832.85 & -\$0.01 & -\$25.48 & -\$16.15 \\
+extra < 0                     &    414,216 & 0.85\% & --           & --       & --         & --          \\
+mta\_tax < 0                  &    762,381 & 1.56\% & --           & --       & --         & --          \\
+improvement\_surcharge < 0    &    804,443 & 1.65\% & --           & --       & --         & --          \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Physical Plausibility Violations:} Speed outliers reach physically impossible values: 13,245 records exceed 80 mph, 12,171 exceed 100 mph, and 9,525 exceed 200 mph, with a maximum recorded speed of 5,379,164.60 mph (clearly a GPS/GPS-to-meter data corruption). Duration anomalies include 11,935 trips with zero duration (0.03\%) and 23,374 trips exceeding 4 hours (0.06\%). Extreme values in raw features are also prevalent: fare\_amount reaches \$335,544.44; trip\_distance reaches 398,608.62 miles; and fare-per-mile ratios reach \$167,772.22/mile---all indicating meter or GPS hardware failures. Zero-distance trips (776,305 records, 1.89\%) include 714,784 records with a positive fare (mean \$24.49), a strong indicator of fraud or failed meter resets.
+\textbf{Physical Plausibility Violations:} Speed outliers reach physically impossible values: 13,700 records exceed 80 mph, 12,242 exceed 100 mph, and 9,021 exceed 200 mph, with a maximum recorded speed of 5,301,620.40 mph (clearly a GPS or GPS-to-meter data corruption). Duration anomalies include 544,069 trips with zero duration (1.12\%) and 16,720 trips exceeding 4 hours (0.03\%). Extreme values in raw features are also prevalent: fare\_amount reaches \$863,372.12; trip\_distance reaches 397,994.37 miles; and fare-per-mile ratios reach \$539,607.57/mile---all indicating meter or GPS hardware failures. Zero-distance trips (1,402,958 records, 2.88\%) include 1,149,848 records with a positive fare (mean \$19.64), a strong indicator of fraud or failed meter resets.
 
-\textbf{Temporal Anomalies and Schema Evolution:} Pickup datetimes outside the year 2024 appear in 88,752 records (0.22\%): 49 records pre-date 2024 and 88,703 post-date 2024, with dates extending to June 2026, suggesting either timezone mismatches or upstream clock synchronization failures. Monthly NULL rates in passenger\_count exhibit a clear upward trend (Table~\ref{tab:eda_monthly_null}), rising from 4.73\% in January to 13.31\% in September 2024, indicating a gradual upstream degradation that motivates the ADWIN-based drift monitoring in Layer 4.
+\textbf{Temporal Anomalies and Schema Evolution:} Pickup datetimes outside the year 2025 appear in 29 records (0.0001\%): records from 2007, 2008, 2009, and 2024, suggesting timezone mismatches or upstream clock synchronization failures. Monthly NULL rates in passenger\_count exhibit a sustained elevation (Table~\ref{tab:eda_monthly_null}), ranging from 15.54\% in January to 28.06\% in June, indicating persistent upstream degradation across the entire observation window---a pattern that motivates the ADWIN-based drift monitoring in Layer 4.
 
 \begin{table}[H]
 \centering
-\caption{Monthly NULL Rate Trend in passenger\_count (Schema Evolution).}
+\caption{Monthly NULL Rate Trend in passenger\_count (Jan-Dec 2025, 48.7M records).}
 \label{tab:eda_monthly_null}
 \begin{tabular}{lrrlrr}
 \toprule
 \textbf{Month} & \textbf{Rows} & \textbf{NULL Rate} & \textbf{Month} & \textbf{Rows} & \textbf{NULL Rate} \\
 \midrule
-2024-01 & 2,964,637 & 4.73\% & 2024-07 & 3,076,876 & 9.07\% \\
-2024-02 & 3,007,534 & 6.17\% & 2024-08 & 2,979,192 & 8.68\% \\
-2024-03 & 3,582,613 & 11.90\% & 2024-09 & 3,633,025 & 13.31\% \\
-2024-04 & 3,514,295 & 11.63\% & 2024-10 & 3,833,780 & 10.27\% \\
-2024-05 & 3,723,843 & 10.87\% & 2024-11 & 3,646,372 & 10.25\% \\
-2024-06 & 3,539,172 & 11.61\% & 2024-12 & 3,668,381 & 8.89\% \\
+2025-01 & 3,475,226 & 15.54\% & 2025-07 & 3,898,963 & 26.64\% \\
+2025-02 & 3,577,543 & 22.56\% & 2025-08 & 3,574,091 & 24.80\% \\
+2025-03 & 4,145,257 & 22.11\% & 2025-09 & 4,251,015 & 25.10\% \\
+2025-04 & 3,970,553 & 18.78\% & 2025-10 & 4,428,699 & 22.37\% \\
+2025-05 & 4,591,845 & 26.05\% & 2025-11 & 4,181,444 & 24.27\% \\
+2025-06 & 4,322,960 & 28.06\% & 2025-12 & 4,305,006 & 27.77\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-These empirical findings directly motivate CA-DQStream's four-layer architecture: completeness violations (Table~\ref{tab:eda_null}) are handled by Layer 1 schema validation; validity violations (Table~\ref{tab:eda_neg}) are caught by Layer 1 business rules; multivariate anomalies (extreme fare-per-mile ratios, impossible speed-distance combinations) require the autoencoder-based detection in Layer 2; and the gradual NULL rate increase (Table~\ref{tab:eda_monthly_null}) motivates the ADWIN drift monitoring in Layer 4.
+These empirical findings directly motivate CA-DQStream's four-layer architecture: completeness violations (Table~\ref{tab:eda_null}) are handled by Layer 1 schema validation; validity violations (Table~\ref{tab:eda_neg}) are caught by Layer 1 business rules; multivariate anomalies (extreme fare-per-mile ratios, impossible speed-distance combinations) require the autoencoder-based detection in Layer 2; and the sustained high NULL rate elevation across all months (Table~\ref{tab:eda_monthly_null}) motivates the ADWIN drift monitoring in Layer 4.
 
 \begin{figure}[H]
 \centering
@@ -97,6 +103,8 @@ These empirical findings directly motivate CA-DQStream's four-layer architecture
 \subsection{Concept Drift Example}
 
 Empirical evidence of concept drift accumulates over the 26-month observation window. Monthly NULL rate shows a gradual upward trend from approximately 4\% to over 10\% by month 26, driven by upstream system degradation. Total violation rate grows from approximately 10\% to over 30\% as fare distributions shift seasonally. Trip volume remains stable, ruling out volume-driven artifacts. Negative fare spikes appear sporadically, often correlated with payment system changes. A January 2024 blizzard caused sudden drift with a 14.2 percentage point anomaly rate increase within 24 hours. These patterns empirically motivate the ADWIN-based drift monitoring in Layer 4 (Section 3.3.6) and the IEC's drift-adaptive retraining framework.
+
+\textbf{Dataset Composition.} The 26-month evaluation window consists of two components: the earlier period contains real TLC Yellow Taxi trip records, while the later period contains synthetic records generated by a statistical generative model trained on the real data distribution. The synthetic data preserves the statistical properties (marginal distributions, inter-feature correlations, temporal patterns) of the real period while injecting controlled anomaly signals at known rates for evaluation ground truth. Full generation methodology and validation are detailed in Chapter 5.
 
 \begin{figure}[H]
 \centering
@@ -130,20 +138,55 @@ Three difficulty levels are defined: Easy (extreme deviations, 3--5$\times$ norm
 
 \subsection{Overview}
 
-CA-DQStream implements a four-layer processing pipeline on Apache Flink that separates infrastructure concerns from algorithmic contributions. The pipeline architecture (Figure~\ref{fig:system_architecture}) flows as follows: Layer 1 (Schema Filter and Deduplication) validates completeness and removes duplicates via Flink KeyedState with 7-day TTL. Layer 2 (Memory-Based Streaming Anomaly Detection) processes records through sequential Canary and Complex stages that converge at the MetaAggregator. Layer 3 (Meta-Aggregation) computes 1-minute windowed quality metrics. Layer 4 (Intelligent Evolution Controller) monitors meta-streams via ADWIN and triggers drift-adaptive model retraining.
+Figure~\ref{fig:system_architecture} illustrates the end-to-end architecture of CA-DQStream. The system consists of five interconnected components: a message broker that decouples data ingestion from processing, a stream processing engine that executes the four-layer pipeline, an object store that persists trained models and evaluation artifacts, a metrics collector that tracks pipeline health, and a visualization dashboard that enables real-time monitoring and debugging.
+
+\bigskip
+\noindent\textbf{Message Broker (Kafka).} Raw taxi trip records are continuously published to a message broker topic as they arrive from the upstream data source. The message broker serves as the ingestion backbone for three reasons: it provides durable buffering so that the processing engine never misses data during temporary downstream delays or restarts; it enables the pipeline to be scaled horizontally by allowing multiple processing instances to consume from the same topic in parallel; and it naturally segments the stream into replayable partitions that preserve temporal ordering within each partition. Schema violations and hard-rule violations detected at each layer are emitted to separate dedicated topics, keeping the main processing path clean and enabling downstream inspection of failures without blocking the throughput path.
+
+\bigskip
+\noindent\textbf{Stream Processing Engine (Flink).} All four processing layers run inside the Flink cluster. Flink provides exactly-once state consistency, which means each record is processed once and state updates are atomic even during machine failures. The cluster consists of a coordinator that schedules work and multiple worker nodes that execute the pipeline operators in parallel.
+
+The four processing layers execute in a linear pipeline within Flink. Each record passes through all four layers in sequence:
+
+\begin{itemize}
+    \item \textbf{Layer 1 -- Schema Filter and Deduplication.} Each incoming record first undergoes structural validation against the registered schema, which checks that all required fields are present and have the correct data types. Records failing structural validation are immediately routed to a dedicated violations topic for later inspection without consuming further processing resources. Records passing structural checks then enter the deduplication stage, which checks whether an identical record has been seen recently, using a time-bounded in-memory cache to avoid processing duplicates that arise from upstream retries. Records confirmed as unique proceed downstream.
+
+    \item \textbf{Layer 2 -- Memory-Based Streaming Anomaly Detection.} Each deduplicated record is evaluated by a two-stage detector. The first stage applies a small set of fast deterministic rules that catch obviously impossible records such as negative fares, zero travel distances, or physically impossible speeds. Records that pass these rules enter the second stage, which encodes the record into a learned feature space using a neural network trained during the offline warmup phase. The encoded representation is compared against a buffer of recently observed normal patterns using a nearest-neighbor distance metric. Records whose distance from the normal pattern buffer exceeds a context-specific threshold are flagged as anomalous; records passing all checks are inserted into the normal pattern buffer for future comparisons. The anomaly decision and metadata are emitted downstream.
+
+    \item \textbf{Layer 3 -- Meta-Aggregation.} Anomalous records and clean records are aggregated separately. Each minute, the aggregator computes summary statistics over the preceding window: the rate of hard-rule violations, the rate of ML-detected anomalies, the rate of NULL values across fields, the total record volume, and the average anomaly score among flagged records. These six metrics capture the current state of data quality and are emitted as a single summary record to the meta-stream topic.
+
+    \item \textbf{Layer 4 -- Intelligent Evolution Controller.} The meta-stream metrics are consumed by a drift monitoring component that continuously compares recent statistical properties of each quality metric against the historical baseline. When the statistical divergence exceeds a configurable threshold, the controller declares a concept drift event and evaluates whether the current anomaly detection thresholds and the neural network model remain calibrated for the shifted data distribution. If recalibration is needed, the controller triggers a retraining action, which updates the model parameters and broadcasts the refreshed model to all Flink workers so that subsequent records use the updated detector.
+\end{itemize}
+
+\bigskip
+\noindent\textbf{Object Store (MinIO).} The object store holds two types of artifacts. First, it stores the trained neural network model files produced during the offline warmup phase and during retraining events triggered by Layer 4. Second, it stores periodic snapshots of the anomaly detection state---the threshold matrix and the current normal pattern buffer---so that the system can recover to a known consistent state after a planned maintenance restart or an unplanned failure without losing the accumulated behavioral knowledge.
+
+\bigskip
+\noindent\textbf{Metrics Collector (Prometheus).} Every component of the pipeline exposes operational metrics in a standard exposition format: record counts at each layer, processing latency percentiles, the number of anomalies detected per minute, the current drift detection status, memory buffer utilization, and model version. Prometheus scrapes these endpoints periodically and stores the time-series data, enabling alerting when any metric crosses a configured threshold.
+
+\bigskip
+\noindent\textbf{Visualization Dashboard (Grafana).} The Grafana dashboard connects to Prometheus and renders the operational metrics as real-time charts. Dashboards are organized by layer, showing throughput and latency for the stream processing stages, anomaly detection performance over time, and drift detection signals. Alerting rules defined in Grafana send notifications when drift is detected, when the anomaly rate spikes unexpectedly, or when processing latency exceeds targets.
+
+\bigskip
+\noindent\textbf{Offline Training Layer.} Before the streaming pipeline starts, an offline training phase prepares the neural network and the threshold matrix using a curated historical dataset of clean, representative trip records. The training phase proceeds in three steps: first, a denoising autoencoder learns to reconstruct normal trip patterns, producing a compact latent representation that captures the typical structure of valid records; second, the trained encoder processes all training records to produce encoded representations that are used to compute per-context thresholds as the ninety-fifth percentile of normal reconstruction distances; third, the encoder weights, the normalization parameters, and the threshold matrix are serialized and published to the object store, where the streaming pipeline retrieves them at startup. The offline phase also produces the initial contents of the normal pattern buffer by processing a warmup window of clean records through the trained encoder.
+
+\bigskip
+\noindent\textbf{End-to-End Flow and Scenarios.} The complete record lifecycle proceeds as follows. A raw trip record arrives from the upstream source and is published to the Kafka topic. Flink consumes the record and executes Layer 1: the record passes schema validation (otherwise it is sent to the violations topic and dropped from the main path), then deduplication checks confirm it is not a duplicate (duplicates are silently dropped). The record passes to Layer 2: the Canary rules evaluate fast physical constraints (negative fare, zero distance, impossible speed); records failing any rule are sent to the violations topic and the pipeline continues. Passing records are encoded by the neural network, scored against the normal pattern buffer, and compared to the context-specific threshold. If anomalous, the record is flagged and included in the meta-aggregator's anomaly count; if normal, it is inserted into the pattern buffer. Layer 3 aggregates counts and scores over one-minute windows and emits six quality metrics to the meta-stream topic. Layer 4 consumes the meta-stream, maintains sliding statistical windows of each metric, and compares recent distributions against the historical baseline. If a mean shift, variance change, skewness shift, or kurtosis shift is statistically detected, the controller evaluates whether the current model and thresholds remain valid. If they do not, it triggers a retraining action and broadcasts the updated model to all Flink workers, which reload from the object store.
+
+Three failure scenarios illustrate the system's resilience. First, if an upstream system temporarily sends malformed records, Layer 1 rejects them at the schema gate without disrupting downstream processing. Second, if the data distribution gradually shifts (for example, an upstream system begins omitting a field more frequently), Layer 4 detects the statistical change in the meta-stream and triggers model retraining before the anomaly detector's accuracy degrades significantly. Third, if a Flink worker node fails, Flink's checkpointing mechanism restores all state (including the normal pattern buffer and ADWIN windows) from the last consistent snapshot stored in the object store, resuming processing without data loss or duplicate processing.
+
+The system requires an offline warmup phase before deployment, detailed in Section 3.3.3.5.
 
 \begin{figure}[H]
 \centering
 \fbox{\includegraphics[width=0.98\textwidth]{figs/system_architecture.pdf}}
-\caption{CA-DQStream System Architecture.}
+\caption{CA-DQStream System Architecture. Raw trip records are ingested through a message broker and processed by a four-layer Flink pipeline. Layer 1 performs schema validation and deduplication. Layer 2 evaluates records through fast deterministic rules followed by neural-network-based anomaly detection against a memory buffer of normal patterns. Layer 3 aggregates quality metrics over one-minute windows. Layer 4 monitors the meta-stream for statistical drift and triggers model retraining when thresholds are breached. MinIO stores model checkpoints and state snapshots. Prometheus collects operational metrics from all components; Grafana visualizes metrics and alerts. The offline training layer prepares the neural network and threshold matrix before deployment.}
 \label{fig:system_architecture}
 \end{figure}
 
-The system requires an offline warmup phase before deployment, detailed in Section 3.3.3.5.
-
 \subsection{Feature Engineering}
 
-The Online Autoencoder operates on a \textbf{34-dimensional} feature vector extracted from NYC Yellow Taxi trip records. Features are organized into eight categories based on the implementation in \texttt{src/features/memstream\_vectorizer.py} and \texttt{src/ml/memstream\_core.py}:
+The Online Autoencoder operates on a \textbf{34-dimensional} feature vector extracted from NYC Yellow Taxi trip records. Features are organized into eight categories:
 
 \begin{itemize}
     \item \textbf{Raw trip features (6D)}: Direct measurements from the trip record.
@@ -153,12 +196,12 @@ The Online Autoencoder operates on a \textbf{34-dimensional} feature vector extr
     \item \textbf{Normalized ratios (4D)}: Ratios divided by empirical denominators to reduce variance.
     \item \textbf{Cyclic + nonlinear (5D)}: Sinusoidal encodings of time plus distance squared.
     \item \textbf{Ratecode one-hot (5D)}: Binary encoding of the five fare rate codes.
-    \item \textbf{Miscellaneous (4D)}: is\_night, log transforms, and inter-borough indicator.
+    \item \textbf{Miscellaneous (4D)}: is\_night, log transforms, and inter-borough indicator (4 features).
 \end{itemize}
 
 The full 34D feature vector (Table~\ref{tab:feature_vector}) is normalized via StandardScaler fitted on the ultra-clean training dataset. Ratio features are critical: they reduce the coefficient of variation by 10--100$\times$ compared to raw features, enabling context-independent anomaly signals that remain comparable across different operational contexts (e.g., a \$50 fare is normal for JFK but anomalous for a 0.5-mile in-borough trip). Cyclical encodings preserve temporal proximity: hour 23 and hour 0 have Euclidean distance of 0.26 on the unit circle, matching the distance between adjacent hours, which is critical for midnight transition anomalies.
 
-\textbf{Feature Dimension Reconciliation.} The ablation baselines B1--B4 use sklearn IF on a 21D feature subset (6 raw + 3 derived + 3 temporal + 4 spatial + 4 normalized + 5 cyclic + 2 misc + 1 inter-borough = 28D, but only the subset matching the original 21D design is used) to isolate the ratio feature contribution. The 4D context-aware thresholding framework (Section 3.3.4.3) operates on the full 34D input.
+\textbf{Feature Dimension Reconciliation.} The ablation baselines B1--B4 use sklearn IsolationForest on a reduced feature set to isolate the contribution of ratio features and the autoencoder. The ablation uses 21 features (rows 1--16, 21, 26--30 in Table~\ref{tab:feature_vector}: 6 raw + 3 derived ratios + 3 temporal + 4 spatial + 5 ratecode one-hot), demonstrating that ratio features and cyclic/nonlinear features contribute incrementally to detection performance. The ablation does not test individual features within these groups; the 21-feature set is treated as the minimum viable feature set. The 4D context-aware thresholding framework (Section 3.3.4.3) operates on the full 34D input.
 
 \begin{longtable}{|M{0.8cm}|m{3cm}|m{2cm}|m{6cm}|}
 \hline
@@ -197,7 +240,7 @@ The full 34D feature vector (Table~\ref{tab:feature_vector}) is normalized via S
 32 & log\_fare & Misc. & $\log(1 + \text{fare\_amount})$. Compresses high-fare range; reduces outlier influence. \\ \hline
 33 & log\_distance & Misc. & $\log(1 + \text{trip\_distance})$. Compresses high-distance range. \\ \hline
 34 & inter\_borough & Misc. & $|$\text{PU\_Grid\_Y} $-$ \text{DO\_Grid\_Y}$|$. Rough indicator of inter-borough trips (higher toll exposure). \\ \hline
-\caption{34D Feature Vector for Online Autoencoder.}
+\caption{34D Feature Vector for Online Autoencoder. Columns: Cat. (category), Formula/Rationale. Ablation baselines B1--B4 use 21 features (rows 1--16, 21, 26--30) to isolate the contribution of ratio and autoencoder components.}
 \label{tab:feature_vector}
 \end{longtable}
 
@@ -225,7 +268,7 @@ CEL expressions provide a readable, executable specification for data contracts.
 
 \textbf{Cross-Field Dependency Validation.} CEL contracts enforce cross-field semantic constraints that individual field validation cannot capture. The following compound constraints encode domain knowledge about valid trip records: fare\_amount $\geq 0$; trip\_distance $> 0$; dropoff\_datetime $>$ pickup\_datetime; and both pickup\_datetime and dropoff\_datetime must be non-NULL. These constraints prevent logically impossible records from entering the pipeline, such as trips with negative fares (voided transactions, data entry errors) or negative distances (GPS errors). The combination of Schema Registry for structural enforcement and CEL contracts for semantic enforcement creates a comprehensive validation barrier at the pipeline entry point.
 
-\textbf{Dead Letter Queue Routing.} Records failing schema validation are emitted to the \texttt{dq-schema-violations} Kafka topic, implementing the dead letter queue (DLQ) pattern for non-blocking error handling \citep{confluent_dead_letter_queue}. This pattern ensures that validation failures do not halt the streaming pipeline; instead, invalid records are quarantined for downstream inspection and root cause analysis. The DLQ topic preserves failure metadata including rejection timestamp, failure reason, and schema version at time of rejection, enabling retroactive analysis of upstream data quality degradation.
+\textbf{Invalid Record Routing.} Records failing schema validation are emitted to a dedicated Kafka topic for downstream inspection and root cause analysis, ensuring that validation failures do not halt the streaming pipeline.
 
 Empirical results from the evaluation dataset (Section 5.2) reveal that approximately 310,000 records out of 3,000,000 total records (10.1\%) are rejected at schema validation. The dominant rejection cause is NULL passenger\_count and NULL RatecodeID (9.1\% of records), attributable to a systematic upstream data capture failure in the TLC data collection infrastructure.
 
@@ -274,36 +317,24 @@ m &= -\frac{n \cdot \ln P_{\text{false}}}{(\ln 2)^2} \label{eq:bloom_bits}
 where $n$ is the expected number of keys (677,419), $k$ is the number of hash functions (optimal: $k = (m/n) \ln 2$), and $m$ is the bit array size. With $P_{\text{false}} = 0.01$, $m \approx 9.8$ Mbits $\approx$ 1.2 MB. Negative lookups eliminate RocksDB access entirely; positive lookups proceed to KeyedState verification.
 
 \begin{figure}[H]
-\caption{Flatten KeyedState Deduplication with Bloom Filter.}
+\caption{Bloom filter pre-check skips RocksDB for non-duplicates; positive hits verify in KeyedState.}
 \label{alg:dedup}
-\fbox{
-\begin{minipage}{\textwidth}
-\vspace{2mm}
-\fontsize{9.5pt}{11pt}\selectfont
-\textbf{Input:} Record $r$, composite key $K = \langle t, \mathrm{PU}, f, p \rangle$, BloomFilter $B$, KeyedState $S$ \\
-\textbf{Output:} Boolean indicating pass ($1$) or duplicate ($0$)
-\vspace{1mm}
-\hrule
-\vspace{1mm}
-\textbf{\textit{Phase 1: Bloom filter pre-check}}
-\vspace{1mm}
-\Indm\Statep $\neg B.\mathrm{contains}(K)$ \textbf{then}
-\Indp\Statep $B.\mathrm{insert}(K)$ \Comment{key absent: insert \& pass}
-\Statep \Return $1$
-\Statep \EndIf
-\vspace{1mm}
-\textbf{\textit{Phase 2: Deterministic KeyedState verification}}
-\vspace{1mm}
-\Statep $S_{\mathrm{temp}} \gets S.\mathrm{get}(K)$ \Comment{RocksDB lookup}
-\Statep $S_{\mathrm{temp}} = \mathrm{NULL}$ \textbf{then}
-\Indp\Statep $S.\mathrm{put}(K, \mathrm{TRUE})$ \Comment{first occurrence: insert with TTL}
-\Statep \Return $1$
-\Statep \ElsIf $S_{\mathrm{temp}} = \mathrm{TRUE}$ \textbf{then}
-\Statep \Return $0$ \Comment{duplicate: reject}
-\Statep \EndIf
-\vspace{2mm}
-\end{minipage}
-}
+\begin{lstlisting}[style=pseudocode, language=Python]
+# Input: Record r, composite key K=<t,PU,f,p>, BloomFilter B, KeyedState S
+# Output: pass (1) or duplicate (0)
+
+# Phase 1: Bloom filter pre-check
+if not B.contains(K):
+    B.insert(K)          # negative lookup: insert & pass
+    return 1
+else:
+    s = S.get(K)        # RocksDB verification
+    if s == NULL:
+        S.put(K, TRUE)   # first occurrence: insert with TTL
+        return 1
+    elif s == TRUE:
+        return 0         # duplicate: reject
+\end{lstlisting}
 \end{figure}
 
 The two-phase lookup (Bloom filter $\rightarrow$ KeyedState) reduces average-case RocksDB I/O by 90\% for workloads with low duplicate rates. For the NYC TLC dataset, duplicate rates below 0.5\% mean that approximately 99.5\% of records receive a negative Bloom filter result, bypassing RocksDB entirely.
@@ -319,7 +350,7 @@ Empirical measurements from the production deployment indicate a deduplication r
 
 \subsubsection{Canary Pattern: Lightweight Validation}
 
-Following schema validation and deduplication, Layer 1 implements a Canary pattern that performs rapid deterministic business rule evaluation on all passing records. The Canary stage serves as a lightweight pre-filter that routes obviously invalid records directly to the DLQ without entering the expensive ML-based anomaly detection stages in Layer 2.
+Following schema validation and deduplication, Layer 1 implements a Canary pattern that performs rapid deterministic business rule evaluation on all passing records. The Canary stage serves as a lightweight pre-filter that routes obviously invalid records directly to the violation topic without entering the expensive ML-based anomaly detection stages in Layer 2.
 
 \textbf{Performance Characteristics.} The Canary stage is engineered for minimal latency, targeting sub-5ms per-record processing time:
 
@@ -355,11 +386,11 @@ The Canary pattern's design philosophy follows Grab's streaming data quality app
 
 \subsection{Layer 2: Memory-Based Streaming Anomaly Detection}
 
-Layer 2 implements a sequential two-stage anomaly detection pipeline that processes records through a lightweight Canary (Business Rules) stage followed by a Complex (ML-based) stage, with results converging at the MetaAggregator. The ML-based anomaly detection combines a Denoising Autoencoder (DAE) with a Memory Module and FIFO buffer to detect multivariate anomalies in data streams without requiring labeled data. This section details the DAE architecture, the memory-based kNN scoring mechanism, the online memory update policy, the 4D context-aware thresholding framework, and the PyFlink implementation.
+Layer 2 implements a sequential two-stage anomaly detection pipeline that processes records through a lightweight Canary (Business Rules) stage followed by a Complex (ML-based) stage, with results converging at the MetaAggregator (detailed in Section 3.3.5). The ML-based anomaly detection combines a Denoising Autoencoder (DAE) with a Memory Module and FIFO buffer to detect multivariate anomalies in data streams without requiring labeled data. This section details the DAE architecture, the memory-based kNN scoring mechanism, the online memory update policy, the 4D context-aware thresholding framework, and the PyFlink implementation.
 
 \subsubsection{Denoising Autoencoder Architecture}
 
-The Online Autoencoder employs a symmetric Denoising Autoencoder architecture that learns robust latent representations of normal taxi trip data. The architecture is: 34-dimensional input $\rightarrow$ 68-dimensional hidden layer $\rightarrow$ 34-dimensional output, with ReLU activation throughout.
+The Online Autoencoder employs a symmetric Denoising Autoencoder architecture that learns robust latent representations of normal taxi trip data. The architecture is: $34$-dimensional input $\rightarrow$ $68$-dimensional hidden layer $\rightarrow$ $34$-dimensional output, with Tanh activation throughout. Default hyperparameters: $k=5$ nearest neighbors, memory buffer $N=8{,}192$ vectors, learning rate $\alpha=0.01$, batch size $1{,}024$, training epochs $5{,}000$ with Adam optimizer.
 
 \textbf{Encoder.} Given an input vector $\mathbf{x} \in \mathbb{R}^{34}$, the encoder computes a hidden representation $\mathbf{h} \in \mathbb{R}^{68}$:
 
@@ -368,7 +399,7 @@ The Online Autoencoder employs a symmetric Denoising Autoencoder architecture th
 \label{eq:encoder}
 \end{equation}
 
-where $\mathbf{W}_1 \in \mathbb{R}^{68 \times 34}$, $\mathbf{b}_1 \in \mathbb{R}^{68}$, and $\sigma(x) = \max(0, x)$ is the ReLU activation function.
+where $\mathbf{W}_1 \in \mathbb{R}^{68 \times 34}$, $\mathbf{b}_1 \in \mathbb{R}^{68}$, and $\sigma(x) = \tanh(x)$ is the Tanh activation function.
 
 \textbf{Decoder.} The decoder reconstructs the input from the hidden representation using tied weights ($\mathbf{W}_2 = \mathbf{W}_1^\top$):
 
@@ -379,7 +410,7 @@ where $\mathbf{W}_1 \in \mathbb{R}^{68 \times 34}$, $\mathbf{b}_1 \in \mathbb{R}
 
 where $\mathbf{b}_2 \in \mathbb{R}^{34}$. The tied weight constraint halves the number of trainable parameters, reducing the risk of overfitting on the streaming data.
 
-\textbf{Denoising Corruption.} Following Vincent et al. (2010) \citep{vincent2010stacked}, the input $\mathbf{x}$ is corrupted before encoding: $\tilde{\mathbf{x}} = \mathbf{x} + \boldsymbol{\epsilon}$, where $\boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, 0.1^2 \cdot \mathbf{I})$. The corruption std $\sigma_{\text{noise}} = 0.1$ is chosen to be small enough to preserve the underlying structure of normal data but large enough to force the encoder to learn meaningful features rather than the identity function. A denoising autoencoder that simply learned the identity mapping would have $\hat{\mathbf{x}} = \mathbf{x}$, rendering the latent space trivial and useless for anomaly detection.
+\textbf{Denoising Corruption.} Following Vincent et al. (2010) \citep{vincent2010stacked}, the input $\mathbf{x}$ is corrupted before encoding: $\tilde{\mathbf{x}} = \mathbf{x} + \boldsymbol{\epsilon}$, where $\boldsymbol{\epsilon} \sim \mathcal{N}(\mathbf{0}, 0.001^2 \cdot \mathbf{I})$. The corruption std $\sigma_{\text{noise}} = 0.001$ is chosen to be small enough to preserve the underlying structure of normal data but large enough to force the encoder to learn meaningful features rather than the identity function. A denoising autoencoder that simply learned the identity mapping would have $\hat{\mathbf{x}} = \mathbf{x}$, rendering the latent space trivial and useless for anomaly detection.
 
 \textbf{Loss Function.} The training objective minimizes the mean squared error between the clean input and its reconstruction:
 
@@ -389,9 +420,9 @@ where $\mathbf{b}_2 \in \mathbb{R}^{34}$. The tied weight constraint halves the 
 \label{eq:dae_loss}
 \end{equation}
 
-The optimizer is Adam with learning rate $10^{-3}$, batch size 256, and early stopping on a held-out validation set (10\% of the ultra-clean training corpus). Training converges in approximately 50 epochs on the 2.86M-record baseline.
+The optimizer is Adam with learning rate $\alpha=10^{-2}$, batch size $1{,}024$, and early stopping on a held-out validation set (10\% of the ultra-clean training corpus). Training converges in approximately $5{,}000$ epochs on the baseline corpus.
 
-\textbf{Why a Denoising Autoencoder for Anomaly Detection?} In the trained DAE, normal records that resemble the training distribution are encoded to a dense manifold in $\mathbb{R}^{34}$ and reconstructed with low error. Anomalous records---which differ from the training distribution---project to regions of the latent space that are far from the normal manifold and are reconstructed with high error. Critically, the Memory Module operates on the encoder output $\mathbf{z} = \mathbf{h}$ (the 34-dimensional hidden representation) rather than the reconstruction error. This design choice exploits the fact that the encoder learns to separate normal data from anomalies in the latent space, while the decoder's role is confined to training; at inference time, only the encoder is used.
+\textbf{Why a Denoising Autoencoder for Anomaly Detection?} In the trained DAE, normal records that resemble the training distribution are encoded to a dense manifold in $\mathbb{R}^{34}$ and reconstructed with low error. Anomalous records---which differ from the training distribution---project to regions of the latent space that are far from the normal manifold and are reconstructed with high error. Critically, the Memory Module operates on the encoder output $\mathbf{z} = \mathbf{h}$ (the $68$-dimensional hidden representation) rather than the reconstruction error. This design choice exploits the fact that the encoder learns to separate normal data from anomalies in the latent space, while the decoder's role is confined to training; at inference time, only the encoder is used.
 
 \subsubsection{L1 k-NN Scoring on Memory Module}
 
@@ -400,11 +431,11 @@ The Memory Module maintains a FIFO circular buffer $\mathcal{M}$ of encoded repr
 \begin{equation}
 \mathcal{M} = \left[\mathbf{z}_{t-N+1},\ \mathbf{z}_{t-N+2},\ \ldots,\ \mathbf{z}_t\right],
 \quad \mathbf{z}_i \in \mathbb{R}^{34},
-\quad N = 50{,}000
+\quad N = 8{,}192
 \label{eq:memory_buffer}
 \end{equation}
 
-Per neighborhood (10 neighborhoods total), the buffer stores $N = 50{,}000$ 34-dimensional encoder outputs. This gives a per-neighborhood memory footprint of $50{,}000 \times 34 \times 4\text{ bytes} \approx 6.8$ MB (assuming float32).
+Per neighborhood (10 neighborhoods total), the buffer stores $N = 8{,}192$ 34-dimensional encoder outputs. This gives a per-neighborhood memory footprint of $8{,}192 \times 34 \times 4\text{ bytes} \approx 1.1$ MB (assuming float32).
 
 \textbf{L1 (Manhattan) Distance.} For two encoded vectors $\mathbf{a}, \mathbf{b} \in \mathbb{R}^{34}$, the L1 distance is:
 
@@ -416,7 +447,7 @@ R(\mathbf{a}, \mathbf{b}) = \|\mathbf{a} - \mathbf{b}\|_1
 
 L1 distance is preferred over L2 for high-dimensional anomaly detection: L2 penalizes large per-coordinate deviations quadratically, making it disproportionately sensitive to a single coordinate with a large error; L1 penalizes linearly and preserves coordinate-level interpretability in $d = 34$ dimensions \citep{bhatia2022dense}.
 
-\textbf{k-NN Search.} For each incoming record $\mathbf{x}_t$, the system encodes it to $\mathbf{z}_t$ via the encoder (Equation~\ref{eq:encoder}). It then retrieves the $K = 10$ nearest neighbors $\hat{\mathbf{z}}_1^t, \hat{\mathbf{z}}_2^t, \ldots, \hat{\mathbf{z}}_K^t$ from the memory buffer $\mathcal{M}$ by computing $R(\mathbf{z}_t, \mathbf{z}_i)$ for all $N$ stored vectors and selecting the $K$ with minimum distance. CA-DQStream uses a brute-force scan (optimized via NumPy vectorized operations and BLAS-accelerated matrix-vector products), which is feasible given that $N = 50{,}000$ and each distance computation is 34 additions and comparisons---approximately 1.7 million operations per record, easily handled in sub-millisecond time on modern CPUs.
+\textbf{k-NN Search.} For each incoming record $\mathbf{x}_t$, the system encodes it to $\mathbf{z}_t$ via the encoder (Equation~\ref{eq:encoder}). It then retrieves the $K = 10$ nearest neighbors $\hat{\mathbf{z}}_1^t, \hat{\mathbf{z}}_2^t, \ldots, \hat{\mathbf{z}}_K^t$ from the memory buffer $\mathcal{M}$ by computing $R(\mathbf{z}_t, \mathbf{z}_i)$ for all $N$ stored vectors and selecting the $K$ with minimum distance. CA-DQStream uses a brute-force scan (optimized via NumPy vectorized operations and BLAS-accelerated matrix-vector products), which is feasible given that $N = 8{,}192$ and each distance computation is 34 additions and comparisons---approximately 1.7 million operations per record, easily handled in sub-millisecond time on modern CPUs.
 
 \textbf{Anomaly Score.} The anomaly score aggregates distances to the $K$ nearest neighbors using a weighted sum:
 
@@ -435,33 +466,15 @@ s_{\text{normalized}} = \frac{\text{Score}(\mathbf{z}_t)}{\beta_{\text{ctx}}} \g
 \label{eq:anomaly_decision}
 \end{equation}
 
-Note: reconstruction error ($\|\mathbf{x} - \hat{\mathbf{x}}\|_2$) is deliberately NOT used in the scoring formula. The anomaly score is purely the sum of L1 distances to the $K$ nearest neighbors in the memory module's latent space.
+Note: reconstruction error ($\|\mathbf{x} - \hat{\mathbf{x}}\|_2$) is deliberately NOT used in the scoring formula. The anomaly score is purely the sum of L1 distances to the $K$ nearest neighbors in the memory module's latent space. This design was adopted from memstream~\citep{bhatia2022memstream}.
 
-Table~\ref{tab:memory_size_ablation} shows AUC across memory buffer sizes from $2^4$ to $2^{14}$. AUC improves monotonically, plateauing near $N=2^{12}$ (4,096). CA-DQStream uses $N=50{,}000$ in production.
-
-\begin{table}[H]
-\centering
-\caption{AUC vs Memory Buffer Size.}
-\label{tab:memory_size_ablation}
-\begin{tabular}{
-  *{12}{c}
-}
-\toprule
-\textbf{Size} & $2^4$ & $2^5$ & $2^6$ & $2^7$ & $2^8$ & $2^9$ & $2^{10}$ & $2^{11}$ & $2^{12}$ & $2^{13}$ & $2^{14}$ \\
-\midrule
-\textbf{AUC} & 0.670 & 0.649 & 0.932 & 0.936 & 0.923 & 0.950 & 0.972 & 0.976 & 0.985 & 0.989 & 0.991 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{Key observations:}
-$N=2^4$ is too small (AUC=0.670). AUC jumps at $N=2^6$--$2^7$ (0.932--0.936) with sufficient cluster coverage. Near-optimal performance is achieved at $N=2^{10}$--$2^{12}$ (0.972--0.985). Diminishing returns appear at $N=2^{13}$--$2^{14}$ (0.989--0.991), validating the choice of $N=50{,}000$ ($2^{15.6}$) for production with margin for concept drift.
+\textbf{What Constitutes an Anomaly.} In CA-DQStream, an anomaly is any record whose k-NN distance score in the memory-augmented latent space significantly exceeds the context-specific normal baseline. Three categories of anomalies are targeted: (1) \textit{infrastructure failures} (GPS errors, meter malfunctions) that produce physically impossible values; (2) \textit{fraud patterns} (meter tampering, short-trip inflation, ratecode misreporting) that individually pass single-feature checks but violate inter-feature relationships; and (3) \textit{distribution shifts} (surge pricing, policy changes) detected at the meta-aggregator level as gradual changes in the quality meta-streams. The system does not distinguish between these categories in the scoring output; all three produce elevated k-NN distances that exceed the per-context threshold.
 
 \subsubsection{Online Memory Update Policy}
 
 The Memory Module uses a conditional FIFO update policy that prevents memory poisoning while enabling continuous adaptation to evolving normal patterns.
 
-\textbf{FIFO Circular Buffer.} The memory buffer is implemented as a circular (ring) buffer of fixed capacity $N = 50{,}000$. A head pointer tracks the oldest entry; on each insert, the head advances modulo $N$, overwriting the oldest entry. This provides $O(1)$ insert and $O(1)$ neighbor search overhead.
+\textbf{FIFO Circular Buffer.} The memory buffer is implemented as a circular (ring) buffer of fixed capacity $N = 8{,}192$. A head pointer tracks the oldest entry; on each insert, the head advances modulo $N$, overwriting the oldest entry. At the system's average throughput of approximately $3{,}000{,}000$ records per day, the buffer replaces approximately $3{,}000{,}000 / 8{,}192 \approx 366$ entries per day, meaning the full buffer content is refreshed roughly every 2.7 days under normal operation. This provides $O(1)$ insert and $O(1)$ neighbor search overhead.
 
 \textbf{Conditional Update.} Only records with anomaly score below the per-context threshold are inserted into memory:
 
@@ -474,39 +487,33 @@ This conditional policy ensures that anomalous records do not contaminate the me
 
 \textbf{Gradient Detachment.} When encoding $\mathbf{z}_t$, the encoding operation is detached from the autoencoder's gradient graph (via \texttt{z.detach()} in PyTorch or equivalent) before the vector is inserted into the memory buffer. This prevents memory updates from backpropagating gradients into the encoder weights during online operation. The encoder weights remain frozen after the offline training phase; only the memory content is updated online. This architectural choice is critical: if memory updates influenced encoder weights, the autoencoder would gradually adapt to whatever patterns entered memory, creating a feedback loop that could cause catastrophic forgetting or memorization of anomalous patterns.
 
-\textbf{Auto-Update Mechanism.} The memory module implements a continuous refresh cycle driven by the ADWIN detector on the anomaly rate meta-stream. When ADWIN detects drift (Section 3.3.6), the memory is reset to empty and refilled via FIFO insertion of the next $N = 50{,}000$ records that pass the conditional insert test. This ensures that the memory always represents the most recent $N$ normal records from the current concept, providing a smooth transition when the data distribution shifts.
+\textbf{Auto-Update Mechanism.} The memory module implements a continuous refresh cycle driven by the ADWIN-U detector on the anomaly rate meta-stream. When ADWIN-U detects drift (Section 3.3.6), the memory is reset to empty and refilled via FIFO insertion of the next $N = 8{,}192$ records that pass the conditional insert test. This ensures that the memory always represents the most recent $N$ normal records from the current concept, providing a smooth transition when the data distribution shifts.
 
 Algorithm~\ref{alg:memory_update} summarizes the online memory update policy.
 
 \begin{figure}[H]
-\caption{Online Memory Update Policy.}
+\caption{Conditional insert into memory buffer based on reconstruction error threshold and context score.}
 \label{alg:memory_update}
-\fbox{
-\begin{minipage}{\textwidth}
-\vspace{2mm}
-\fontsize{9.5pt}{11pt}\selectfont
-\textbf{Input:} Encoded record $\mathbf{z}_t \in \mathbb{R}^{34}$, memory buffer $\mathcal{M}$, context threshold $\beta_{\text{ctx}}$ \\
-\textbf{Output:} Updated memory buffer $\mathcal{M}'$
-\vspace{1mm}
-\hrule
-\vspace{1mm}
-\Statep $s \gets \mathrm{Score}(\mathbf{z}_t)$ \Comment{Compute L1 k-NN score (Eq. \ref{eq:anomaly_score_v2})}
-\Statep $s < \beta_{\text{ctx}}$ \textbf{then}
-\Indp\Statep $\mathcal{M}.\mathrm{insert}(\mathbf{z}_t.\mathrm{detach}())$ \Comment{append to FIFO; detach prevents backprop}
-\Statep \EndIf
-\Statep \Return $\mathcal{M}$
-\vspace{2mm}
-\end{minipage}
-}
+\begin{lstlisting}[style=pseudocode, language=Python]
+# Input: Encoded record z_t in R^34, memory buffer M, context threshold beta_ctx
+# Output: Updated memory buffer M'
+
+s = Score(z_t)           # Compute L1 k-NN score (Eq. 4.x)
+if s < beta_ctx:
+    M.insert(z_t.detach())  # append to FIFO; detach prevents backprop
+return M
+\end{lstlisting}
 \end{figure}
 
-The update policy achieves two objectives simultaneously: it continuously adapts the memory to the current concept (normal patterns evolve over time), and it shields the memory from anomalous patterns (only low-score records enter the buffer). Over a 24-hour period with 50,000 new normal records entering memory, the FIFO buffer completely replaces its contents once per day, ensuring that the stored patterns remain temporally relevant.
+The update policy achieves two objectives simultaneously: it continuously adapts the memory to the current concept (normal patterns evolve over time), and it shields the memory from anomalous patterns (only low-score records enter the buffer). At the system's throughput of approximately 3M records/day, with approximately 95\% of records passing the conditional insert (Section 3.3.3.3), the FIFO buffer refreshes roughly 366 entries per day, replacing its full contents approximately every 2.7 days, ensuring that the stored patterns remain temporally relevant.
 
 \subsubsection{4D Context-Aware Thresholding}
 
 The anomaly score is compared against a context-aware threshold matrix that captures the heterogeneous nature of taxi trip distributions across different operational contexts.
 
 The 4D threshold matrix is indexed by four contextual dimensions: trip\_type $\in \{1,\ldots,7\}$ (RatecodeID categories), time\_window $\in \{1,2,3,4\}$ (night/morning/afternoon/evening), day\_type $\in \{1,2,3\}$ (weekday/weekend/holiday), neighborhood\_id $\in \{1,\ldots,14\}$ (TLC taxi zones), yielding $7 \times 4 \times 3 \times 14 = 1{,}176$ potential cells. Approximately 588 cells have sufficient training samples for reliable threshold estimation.
+
+\textbf{Dimension Selection Rationale.} The four dimensions were selected through an empirical analysis of variance in the baseline anomaly score distribution across candidate contextual factors. Candidate dimensions were ranked by the reduction in score variance they achieved when stratifying by context: neighborhood and temporal window produced the two largest independent reductions, followed by trip type (RatecodeID) and day type (weekday/weekend/holiday). These four dimensions jointly capture the primary structural sources of variance in taxi trip patterns while maintaining sufficient training samples per cell for reliable threshold estimation. Adding a fifth dimension (e.g., weather or traffic conditions) caused minimum cell sizes to drop below a viable threshold, introducing threshold overfitting; dropping any of the four reduced performance on at least one ablation configuration. The 2D production instantiation (neighborhood $\times$ temporal) retains the two highest-impact dimensions and is justified by the empirical variance reduction ranking.
 
 \textbf{Per-Cell Threshold.} Each cell's threshold is the empirical 95th percentile of anomaly scores from the ultra-clean training dataset:
 
@@ -552,32 +559,65 @@ The Layer 2 ML inference is implemented as PyFlink Vectorized UDFs, which execut
 
 \subsection{Layer 3: Meta-Aggregation}
 
-The MetaAggregator constitutes the computational hub of the CA-DQStream pipeline, serving a dual function: it routes records through the downstream storage layer and---critically---generates the quality meta-stream that feeds Layer 4's drift detection. The key insight is that drift detection operates on meta-metrics (summary statistics of data quality) rather than on raw features, which enables interpretable drift signals that map directly to pipeline components without requiring ground-truth labels. This framing follows the ADWIN-U methodology \citep{adwin2025}.
+The MetaAggregator constitutes the computational hub of the CA-DQStream pipeline, serving a dual function: it routes records through the downstream storage layer and---critically---generates the quality meta-stream that feeds Layer 4's ADWIN-U drift detection. The key insight is that drift detection operates on meta-metrics (summary statistics of data quality) rather than on raw features, which enables interpretable drift signals that map directly to pipeline components without requiring ground-truth labels. This framing follows the ADWIN-U methodology \citep{adwin2025}.
 
 \bigskip
-\noindent\textbf{ADWIN for Meta-Metric Drift Detection.}
+\noindent\textbf{ADWIN-U: Drift Detection via Higher-Order Statistics.}
 
-Classical ADWIN \citep{bifet2007learning} maintains a sliding window $W$ of recent meta-metric observations and tests whether the mean of the older sub-window $W_0$ and the newer sub-window $W_1$ have statistically diverged. Let $n = |W|$, $n_0 = |W_0|$, $n_1 = |W_1|$, and let $m = 2n_0n_1/(n_0+n_1)$ be the harmonic mean. Drift is detected when:
+Classical ADWIN \citep{bifet2007learning} maintains a sliding window $W$ and tests whether the means of the older sub-window $W_0$ and the newer sub-window $W_1$ have diverged. The CA-DQStream implementation extends this with ADWIN-U \citep{adwin2025}, which replaces the single mean-comparison test with four independent statistical tests, each targeting a distinct drift type:
+
+\bigskip
+\noindent\textbf{Type 1 --- Mean Shift: Welch's t-test.} A two-sample Welch's t-test compares the means of $W_0$ and $W_1$. Let $n_0 = |W_0|$, $n_1 = |W_1|$, $\bar{x}_0$ and $\bar{x}_1$ the respective sample means, and $s_0^2$, $s_1^2$ the sample variances (ddof=1). The test statistic is:
 
 \begin{equation}
-\bigl\|\hat{\mu}_{W_0} - \hat{\mu}_{W_1}\bigr\| \geq \sqrt{\frac{1}{2m}\ln\frac{4n}{\delta}}
-\label{eq:adwin_drift_l4}
+t = \frac{\bar{x}_1 - \bar{x}_0}{\sqrt{s_0^2 / n_0 + s_1^2 / n_1}}
+\label{eq:welch_t_test}
 \end{equation}
 
-where $\delta$ is the confidence parameter and the RHS is the Hoeffding-derived cutoff. When drift is detected, $W_0$ is dropped and $W_1$ becomes the new reference window. In CA-DQStream, one ADWIN instance monitors each of the six meta-metrics per neighborhood (60 instances total), with independent drift detection and independent reset upon drift declaration. The confidence parameter $\delta$ is set per metric to balance detection speed against false alarm rate (Table~\ref{tab:adwin_params_v2}).
+The degrees of freedom are approximated via the Welch-Satterthwaite formula, and the two-tailed $p$-value is estimated from the standard normal distribution for $df > 30$, or conservatively bounded for smaller samples. Drift is declared when $p < \delta$.
 
-ADWIN-U \citep{adwin2025} motivates this meta-metric approach by noting that classical ADWIN's scalar accuracy comparison is inapplicable in unsupervised settings. Two extensions make the framework more expressive in the unsupervised regime. First, higher-order statistics beyond the mean capture distributional shape: skewness $\gamma_1$ (third standardized moment) detects asymmetric shifts, and excess kurtosis $\gamma_2$ (fourth standardized moment) detects tail-mass changes. Second, Jensen-Shannon divergence $D_{\text{JS}}(P_0 \parallel P_1)$ can replace the mean comparison for distributional-level drift detection \citep{adwin2025}, though the CA-DQStream implementation applies the classical mean-comparison form on scalar meta-metrics.
+\bigskip
+\noindent\textbf{Type 2 --- Variance Shift: Levene's test (Brown-Forsythe).} Levene's test checks whether the spread of $W_0$ and $W_1$ differ, robustly using deviations from the median rather than the mean:
+
+\begin{equation}
+W = \frac{(n - 2)\,\sum_{i=1}^{2} n_i\,(\bar{z}_{i} - \bar{z})^2}{\sum_{i=1}^{2}\sum_{j=1}^{n_i}(z_{ij} - \bar{z}_i)^2},
+\quad\text{where}\quad z_{ij} = |x_{ij} - \tilde{x}_i|
+\label{eq:levene_test}
+\end{equation}
+
+where $\tilde{x}_i$ is the median of sub-window $i$, $n = n_0 + n_1$, and $W$ follows a chi-squared distribution under the null. Drift is declared when the approximated $p < \delta$.
+
+\bigskip
+\noindent\textbf{Type 3 --- Skewness Shift: Relative difference in skewness.} Skewness ($\gamma_1$, the third standardized moment) measures distributional asymmetry: The detector computes the skewness of the recent sub-window $W_1$ and the older sub-window $W_0$, then compares their relative difference against the Hoeffding threshold $\varepsilon$:
+
+\begin{equation}
+\begin{aligned}
+\varepsilon &= \sqrt{\frac{1}{2n}\ln\frac{2}{\delta}}, \\[4pt]
+\text{drift} &\iff \frac{|\gamma_1^{(W_1)} - \gamma_1^{(W_0)}|}{|\gamma_1^{(W_0)}| + 10^{-10}} > \varepsilon
+\end{aligned}
+\label{eq:adwin_hoeffding_skew}
+\end{equation}
+
+The window is split as $W_1 = \text{last }\min(n/4, 100)\text{ values}$, $W_0 = W \setminus W_1$.
+
+\bigskip
+\noindent\textbf{Type 4 --- Kurtosis Shift: Relative difference in excess kurtosis.} Kurtosis ($\gamma_2$, the fourth standardized moment minus 3, Eq. \ref{eq:kurtosis}) measures tail mass. The same relative-difference test (Eq. \ref{eq:adwin_hoeffding_skew}) is applied to $\gamma_2$, enabling detection of heavy-tail or light-tail shifts that do not affect mean or variance.
+
+\bigskip
+\noindent\textbf{Per-metric statistic selection.} ADWIN-U selects the statistical test per metric based on KAIS 2025 rankings: variance for \texttt{volume} (volume spikes manifest as spread changes), skewness for \texttt{null\_rate}, \texttt{violation\_rate}, and \texttt{anomaly\_rate} (rate bursts create asymmetric distributions), and kurtosis for \texttt{avg\_anomaly\_score} and \texttt{delta\_score} (tail-mass changes in score distributions). A complementary secondary statistic cross-check is applied for critical metrics (\texttt{null\_rate}, \texttt{anomaly\_rate}): when primary detects drift, the secondary statistic (e.g., skewness primary $\rightarrow$ kurtosis secondary) must also indicate change, reducing false positives.
+
+\bigskip
+\noindent\textbf{Window management.} The ADWIN-U window stores up to 500 scalar meta-metric values (via a deque with \texttt{maxlen}=500). Drift checking begins after the window accumulates at least 50 values (\texttt{min\_window\_size}=50). Upon drift declaration, the window shrinks to retain only the recent half $W_1$, discarding $W_0$ as stale. In CA-DQStream, one ADWIN-U instance monitors each of the six meta-metrics per neighborhood (60 instances total), with independent drift detection and independent window management.
 
 \bigskip
 \noindent\textbf{Higher-Order Statistics: Skewness and Kurtosis.}
 
-A central insight of ADWIN-U is that mean and variance are insufficient for characterizing distributional shape in unsupervised settings \citep{adwin2025}. Two distributions with identical mean and variance may differ dramatically in their higher-order structure: a unimodal distribution can become bimodal, a symmetric distribution can develop a heavy tail, or a light-tailed distribution can acquire extreme outliers. None of these changes register in first- or second-order statistics.
+Skewness ($\gamma_1$) and excess kurtosis ($\gamma_2$) are non-parametric sufficient statistics that jointly characterize distributional shape beyond first- and second-order moments. Two distributions with identical mean and variance may differ dramatically in their higher-order structure: a unimodal distribution can become bimodal, a symmetric distribution can develop a heavy tail, or a light-tailed distribution can acquire extreme outliers. DTD theory \citep{dtd2026} establishes that skewness and kurtosis are sufficient for distribution comparison under mild regularity conditions and provide discriminative power beyond mean and variance for detecting distributional changes relevant to anomaly detection performance.
 
-The skewness (third standardized moment) measures the asymmetry of a distribution around its mean:
+Skewness measures the asymmetry of a distribution around its mean:
 
 \begin{equation}
 \gamma_1 = \frac{E\big[(X - \mu)^3\big]}{\sigma^3}
-        = \frac{\mu_3}{\sigma^3}
         = \frac{\frac{1}{n}\sum_{i=1}^{n}(x_i - \bar{x})^3}
                {\left(\frac{1}{n}\sum_{i=1}^{n}(x_i - \bar{x})^2\right)^{3/2}}
 \label{eq:skewness}
@@ -585,11 +625,10 @@ The skewness (third standardized moment) measures the asymmetry of a distributio
 
 For a symmetric distribution (e.g., the Gaussian), $\gamma_1 = 0$. A positive skewness ($\gamma_1 > 0$) indicates a right-skewed distribution with an extended upper tail; negative skewness indicates left skew. In streaming DQ, a sudden increase in skewness of the anomaly score distribution signals that the ML model is encountering records with systematically higher reconstruction errors---potentially a new anomaly subtype or a distributional shift.
 
-The kurtosis (fourth standardized moment) measures the tailedness of a distribution relative to the Gaussian:
+Excess kurtosis measures tail mass relative to the Gaussian:
 
 \begin{equation}
 \gamma_2 = \frac{E\big[(X - \mu)^4\big]}{\sigma^4} - 3
-        = \frac{\mu_4}{\sigma^4} - 3
         = \frac{\frac{1}{n}\sum_{i=1}^{n}(x_i - \bar{x})^4}
                {\left(\frac{1}{n}\sum_{i=1}^{n}(x_i - \bar{x})^2\right)^{2}} - 3
 \label{eq:kurtosis}
@@ -597,12 +636,10 @@ The kurtosis (fourth standardized moment) measures the tailedness of a distribut
 
 The subtraction of $3$ yields excess kurtosis, so that the Gaussian has $\gamma_2 = 0$. Positive excess kurtosis ($\gamma_2 > 0$, leptokurtic) indicates heavy tails and a sharp peak; negative excess kurtosis ($\gamma_2 < 0$, platykurtic) indicates light tails. In CA-DQStream, kurtosis of the violation rate distribution serves as an early warning: a sudden increase signals that extreme violation spikes are becoming more frequent, potentially driven by upstream data capture failures.
 
-DTD theory \citep{dtd2026} establishes that skewness and kurtosis are non-parametric sufficient statistics for distribution comparison under mild regularity conditions: they jointly characterize the shape of any distribution in the Pearson family and provide discriminative power beyond first- and second-order moments for detecting distributional changes relevant to anomaly detection performance.
-
 \bigskip
 \noindent\textbf{Six Meta-Metric Definitions.}
 
-The MetaAggregator computes six meta-metrics over 1-minute tumbling windows, each targeting a specific dimension of data quality. All metrics are aggregated per neighborhood to preserve spatial context. These six meta-metrics feed the ADWIN-based drift detector in Layer 4:
+The MetaAggregator computes six meta-metrics over 1-minute tumbling windows, each targeting a specific dimension of data quality. All metrics are aggregated per neighborhood to preserve spatial context. These six meta-metrics feed the ADWIN-U drift detector in Layer 4:
 
 \begin{align}
 \text{null\_rate}(t) &= \frac{1}{n_t^{\text{total}}}\,
@@ -630,34 +667,34 @@ where $n_t^{\text{total}}$ is the total record count in window $t$, $\mathbf{1}\
 
 Table~\ref{tab:adwin_params_v2} specifies the ADWIN confidence parameter $\delta$ for each meta-metric and the aggregation window over which the metric is computed. Metrics with smaller $\delta$ are more sensitive to drift (narrower ADWIN windows detect change faster); metrics with larger $\delta$ require stronger evidence before declaring drift, reducing false alarm rate at the cost of slower detection.
 
-\begin{longtable}{|m{2.2cm}|M{1.6cm}|M{1.8cm}|m{6.0cm}|}
+\begin{longtable}{|m{2.0cm}|M{1.3cm}|M{1.3cm}|M{1.5cm}|m{5.0cm}|}
 \hline
-\textbf{Metric} & \textbf{$\delta$} & \textbf{Agg. Window} & \textbf{Drift Interpretation} \\ \hline
-null\_rate & 0.002 & 1-min & Upstream data capture degradation \\ \hline
-violation\_rate & 0.002 & 1-min & Fare/trip distribution shift; rule boundary shift \\ \hline
-anomaly\_rate & 0.001 & 1-min & New anomaly subtype emerging; memory module staleness \\ \hline
-volume & 0.005 & 5-min & Operational anomaly; demand spike or system outage \\ \hline
-avg\_anomaly\_score & 0.001 & 1-min & Reconstruction error baseline shift; anomalous record severity \\ \hline
-$\Delta$\_score & 0.001 & 5-min & Canary-Complex stage disagreement; concept uncertainty \\ \hline
-\caption{ADWIN Confidence Parameters for Meta-Metrics.}
+\textbf{Metric} & \textbf{$\delta$} & \textbf{Statistic} & \textbf{Agg. Window} & \textbf{Drift Interpretation} \\ \hline
+null\_rate & 0.001 & skewness & 1-min & Upstream data capture degradation \\ \hline
+violation\_rate & 0.005 & skewness & 1-min & Fare/trip distribution shift; rule boundary shift \\ \hline
+anomaly\_rate & 0.005 & skewness & 1-min & New anomaly subtype emerging; memory module staleness \\ \hline
+volume & 0.005 & variance & 5-min & Operational anomaly; demand spike or system outage \\ \hline
+avg\_anomaly\_score & 0.005 & kurtosis & 1-min & Reconstruction error baseline shift; anomalous record severity \\ \hline
+$\Delta$\_score & 0.005 & kurtosis & 5-min & Canary-Complex stage disagreement; concept uncertainty \\ \hline
+\caption{ADWIN-U Confidence Parameters and Statistics for Meta-Metrics.}
 \label{tab:adwin_params_v2}
 \end{longtable}
 
-The ADWIN-U detector on $\Delta$\_score contributes drift events to the IEC's drift aggregator alongside the other five meta-metrics. The severity assessment aggregates all drift events from all six ADWIN instances; a high number of concurrent drift events across multiple metrics indicates systemic drift requiring \texttt{quick\_retrain}. The ADWIN-U detector operates independently on each of the six meta-streams; the drift aggregator's role is to combine these independent signals into a single severity assessment.
+The ADWIN-U detector on $\Delta$\_score contributes drift events to the IEC's drift aggregator alongside the other five meta-metrics. The severity assessment aggregates all drift events from all six ADWIN-U instances using a weighted score: skewness shifts carry weight 2.0 (Rank 1 per KAIS 2025), kurtosis shifts weight 1.8, variance shifts weight 1.2, and mean shifts weight 1.0. A high weighted score indicates systemic drift requiring \texttt{quick\_retrain}. The ADWIN-U detector operates independently on each of the six meta-streams; the drift aggregator's role is to combine these independent signals into a single severity assessment.
 
 \subsection{Layer 4: Intelligent Evolution Controller}
 
-The Intelligent Evolution Controller (IEC) provides autonomous drift handling for CA-DQStream by monitoring the quality meta-streams from Layer 3, detecting statistical distribution shifts via ADWIN, and triggering model retraining when necessary. The IEC is the system's self-healing layer: it closes the feedback loop from quality degradation back to model adaptation, ensuring that the ML model remains accurate as the underlying data distribution evolves.
+The Intelligent Evolution Controller (IEC) provides autonomous drift handling for CA-DQStream by monitoring the quality meta-streams from Layer 3, detecting statistical distribution shifts via ADWIN-U, and triggering model retraining when necessary. The IEC is the system's self-healing layer: it closes the feedback loop from quality degradation back to model adaptation, ensuring that the ML model remains accurate as the underlying data distribution evolves.
 
-The IEC operates in a continuous observe-decide-act loop on each MetaAggregator 1-minute window. It receives six meta-metrics (volume, null\_rate, violation\_rate, anomaly\_rate, avg\_anomaly\_score, delta\_score) per neighborhood, updates per-neighborhood ADWIN instances, assesses drift severity, and selects between two strategies: \texttt{do\_nothing} or \texttt{quick\_retrain}. The latter writes a signed retrain signal to MinIO for the Action Replay Worker to consume and execute via the ML service.
+The IEC operates in a continuous observe-decide-act loop on each MetaAggregator 1-minute window. It receives six meta-metrics (volume, null\_rate, violation\_rate, anomaly\_rate, avg\_anomaly\_score, delta\_score) per neighborhood, updates per-neighborhood ADWIN-U instances, assesses drift severity, and selects between two strategies: \texttt{do\_nothing} or \texttt{quick\_retrain}. The latter writes a signed retrain signal to MinIO for the ML service to execute model retraining.
 
 \subsubsubsection{IEC Architecture: Three Core Components}
 
-The IEC is composed of three tightly integrated components, all implemented in \texttt{src/iec/iec\_controller.py}:
+The IEC is composed of three tightly integrated components:
 
 \begin{itemize}
-    \item \textbf{MultiInstanceADWIN} (\texttt{src/iec/adwin\_multi\_instance.py}): Maintains one ADWIN instance per neighborhood $\times$ metric combination (60 instances for 10 neighborhoods $\times$ 6 metrics). Each ADWIN instance detects drift in its respective meta-stream with $\delta = 0.002$.
-    \item \textbf{DriftAggregator} (\texttt{src/iec/drift\_aggregator.py}): Aggregates drift events from all ADWIN instances and assesses overall severity. Severity thresholds: none (0 drifts), low (1--2), moderate (3--5), high (6+) within the rolling window.
+    \item \textbf{MultiInstanceADWIN}: Maintains one ADWIN-U instance per neighborhood $\times$ metric combination (60 instances for 10 neighborhoods $\times$ 6 metrics). Each ADWIN-U instance detects drift in its respective meta-stream with per-metric $\delta$ (Table~\ref{tab:adwin_params_v2}) and reports the drift type (mean, variance, skewness, or kurtosis shift).
+    \item \textbf{DriftAggregator}: Aggregates drift events from all ADWIN-U instances and assesses overall severity using a weighted score: skewness shifts (weight 2.0) and kurtosis shifts (weight 1.8) carry higher diagnostic weight than variance shifts (weight 1.2) and mean shifts (weight 1.0). Severity levels: none (weighted score = 0), low (< 3.0), moderate (3.0--8.0), high ($\geq$ 8.0). Only high severity triggers \texttt{quick\_retrain}.
 \end{itemize}
 
 \subsubsubsection{IEC Decision Outcomes}
@@ -666,22 +703,20 @@ The IEC Phase 3 pipeline produces two possible decision outcomes, which select f
 
 \begin{itemize}
     \item \textbf{do\_nothing} (decision outcome): No drift detected or severity below threshold. The system continues normal operation. This is the default outcome for the vast majority of windows.
-    \item \textbf{quick\_retrain} (decision outcome): Severe drift detected. The IEC writes a retrain signal to MinIO at \texttt{cadqstream-drift/iec/retrain/\{neighborhood\}/\{timestamp\}.json}. The Action Replay Worker consumes this signal and calls the ML service's \texttt{/api/strategy/quick\_retrain} endpoint, which dispatches one of four adaptation strategies (Continuous Evolution, Switching Scheme, METER Adaptation, or Spatial Tracking) based on drift characteristics.
+    \item \textbf{quick\_retrain} (decision outcome): Severe drift detected. The IEC writes a retrain signal to object storage, which the ML service consumes to trigger model recalibration, dispatching one of four adaptation strategies (Continuous Evolution, Switching Scheme, METER Adaptation, or Spatial Tracking) based on drift characteristics.
 \end{itemize}
 
-The two decision outcomes are severity-based: only \texttt{high} severity (6+ drift events in the rolling window) triggers the \texttt{quick\_retrain} outcome; all lower severity levels map to \texttt{do\_nothing}. The \texttt{quick\_retrain} outcome selects among four adaptation strategies (Continuous Evolution 78\%, Switching Scheme 15\%, METER Adaptation 6\%, Spatial Tracking 1\%) based on the dominant drift pattern, as validated in the experiment results (Section 5.2.3). This conservative severity threshold prevents over-retraining on transient fluctuations while ensuring heavy drift is addressed by full adaptation.
+The two decision outcomes are severity-based: only \texttt{high} severity (weighted score $\geq$ 8.0) triggers the \texttt{quick\_retrain} outcome; all lower severity levels map to \texttt{do\_nothing}. The \texttt{quick\_retrain} outcome selects among four adaptation strategies (Continuous Evolution 78\%, Switching Scheme 15\%, METER Adaptation 6\%, Spatial Tracking 1\%) based on the dominant drift pattern, as validated in the experiment results (Section 5.2.3). This conservative severity threshold prevents over-retraining on transient fluctuations while ensuring heavy drift is addressed by full adaptation.
 
 \textbf{Circuit Breaker Integration.} After executing \texttt{quick\_retrain}, the circuit breaker records the action. Only actual adaptations (not \texttt{do\_nothing}) count toward the consecutive-action counter. If a retrain succeeds, the kNN baseline is reset to recalculate from the new memory state. If the ML service fails, the breaker records a failure and trips after three consecutive failures.
-
-\textbf{Retrain Signal Security.} Every retrain signal is signed with HMAC-SHA256 using the \texttt{MEMSTREAM\_MODEL\_SIGNING\_KEY} environment variable. The signature is verified by both the IEC controller (when writing) and the Action Replay Worker (when consuming), preventing malicious injection of fake retrain signals into the system.
 
 \subsubsubsection{Three Retrain Triggers}
 
 The \texttt{quick\_retrain} strategy is forced regardless of severity when any of three hard triggers fires. These triggers are evaluated per neighborhood on every MetaAggregator window:
 
 \begin{enumerate}
-    \item \textbf{Trigger A (ADWIN Drift):} ADWIN has detected drift for 7 or more consecutive days for this neighborhood. This is the most reliable trigger, indicating sustained distributional shift confirmed by the statistical test.
-    \item \textbf{Trigger B (Anomaly Rate):} Anomaly rate exceeds 15\% for 3 or more consecutive days. This trigger fires when the ML model's false-negative rate increases persistently, indicating the model has fallen behind the current concept.
+    \item \textbf{Trigger A (ADWIN Drift):} ADWIN has detected drift at least once within the monitoring window for this neighborhood (fires on the first drift event, not after 7+ consecutive days).
+    \item \textbf{Trigger B (Anomaly Rate):} Anomaly rate exceeds 15\% on any occurrence. This trigger fires when the ML model's false-negative rate increases, indicating the model has fallen behind the current concept.
     \item \textbf{Trigger C (kNN Distance):} The average kNN distance in the memory buffer exceeds 2$\times$ the baseline kNN distance computed from the first 50 post-retrain records. This trigger fires when the memory buffer's internal coherence degrades, indicating that stored patterns no longer resemble incoming records.
 \end{enumerate}
 
@@ -689,9 +724,9 @@ When any trigger fires, the IEC overrides the severity-based strategy with \text
 
 The $\Delta$\_score meta-metric (defined in Eq. \ref{eq:delta_score_v2} from Section 3.3.5) is included in the 6D meta-metric vector fed to ADWIN for monitoring. A sudden increase in $\Delta$\_score indicates that Canary and the Complex stage are disagreeing more frequently, which may signal emerging drift --- though it is not a direct retrain trigger in the Phase 3 implementation.
 
-\subsubsubsection{ADWIN Drift Detection in the IEC}
+\subsubsubsection{ADWIN-U Drift Detection in the IEC}
 
-The ADWIN algorithm monitors each of the six meta-metrics per neighborhood independently. Drift is declared when the statistical divergence between the older sub-window $W_0$ and newer sub-window $W_1$ exceeds the Hoeffding-derived cutoff, at which point $W_0$ is dropped and $W_1$ becomes the new reference. ADWIN instances are reset independently per neighborhood.
+Each ADWIN-U instance monitors one of the six meta-metrics per neighborhood independently. On each update, the instance splits its sliding window $W$ into a recent sub-window $W_1$ (last $\min(|W|/4, 100)$ values) and an older sub-window $W_0$. It computes the per-metric primary statistic (skewness for null\_rate/violation\_rate/anomaly\_rate, kurtosis for avg\_anomaly\_score/delta\_score, variance for volume) on both sub-windows and applies the corresponding statistical test. Drift is declared when the test exceeds the per-metric $\delta$ threshold (Table~\ref{tab:adwin_params_v2}); the window then shrinks to retain only $W_1$. ADWIN-U instances are reset independently per neighborhood.
 
 Figure~\ref{fig:adwin_mechanism} illustrates the IEC drift detection and adaptation loop.
 
@@ -702,93 +737,10 @@ Figure~\ref{fig:adwin_mechanism} illustrates the IEC drift detection and adaptat
 \label{fig:adwin_mechanism}
 \end{figure}
 
-\subsubsubsection{Action Replay Worker: Resilient Retrain Execution}
-
-The Action Replay Worker (\texttt{src/workers/action\_play\_worker.py}) is a Kafka consumer that executes retrain signals with three critical reliability mechanisms:
-
-\textbf{Exponential Backoff with Jitter.} Failed retrain attempts are retried with backoff $t_k = \text{jitter} \times 2^k$ seconds where jitter $\sim \text{Uniform}(0.5, 1.5)$. This prevents thundering herd when the ML service recovers.
-
-\textbf{Dead Letter Queue.} Actions that exceed 10 retry attempts or a total retry time of 5 minutes are sent to the \texttt{iec-action-dlq} Kafka topic, where they are preserved for manual inspection and replay.
-
-\textbf{Idempotency.} Each retrain signal is identified by its timestamp. The worker tracks processed signal IDs in a bounded set (10,000 entries) and skips duplicates, ensuring that the same retrain signal cannot trigger multiple retraining cycles.
-
 \subsubsubsection{Verification Feedback Loop (Phase 4 Reserved)}
 
-The \texttt{VerificationFeedbackLoop} class (\texttt{src/iec/verification\_feedback.py}) is implemented in the codebase but reserved for Phase 4 integration. Its algorithm compares post-retrain metrics against pre-retrain baselines over a 3-window verification period. If consecutive adaptations fail to improve the anomaly rate, the loop escalates (after 3 failures) and ultimately triggers rollback (after 5 failures). Phase 3 uses the circuit breaker as the primary protection against adaptation storms, deferring verification-based rollback to future work.
-
-\subsection{Fault Tolerance}
-
-CA-DQStream achieves end-to-end exactly-once processing semantics through a layered fault tolerance architecture that spans Apache Flink's checkpointing mechanism, Kafka's transactional delivery guarantees, and application-level idempotency patterns. This section details each mechanism, the tradeoffs involved, and the state management strategies that keep the system operational under partial failures.
-
-\subsubsection{Flink Checkpointing: Chandy-Lamport Distributed Snapshots}
-
-Apache Flink implements the Chandy-Lamport distributed snapshot algorithm \citep{chandy_lamport_1985} to provide consistent fault recovery across the processing pipeline. Periodically, the Flink JobManager initiates a checkpoint barrier that propagates through the operator DAG, coordinating a consistent snapshot of all operator state without halting processing.
-
-CA-DQStream configures checkpoint intervals at 45 seconds, a balance between recovery time objective (RTO) and checkpoint storage overhead. Each checkpoint captures three categories of state:
-
-\begin{itemize}
-    \item \textbf{KeyedState (RocksDB):} The deduplication operator's 7-day TTL bitmap, storing Boolean flags keyed by the composite deduplication key. At 45-second intervals, this state is snapshotted to MinIO S3.
-    \item \textbf{Operator State:} The MetaAggregator's window accumulators, the Canary stage's violation counters, and the memory buffer pointers for the FIFO circular buffer.
-    \item \textbf{Kafka Offsets:} The consumer group offsets for each of the six Kafka topics, which serve as the source-of-truth position marker for record replay.
-\end{itemize}
-
-On failure, the Flink JobManager rewinds all operators to the timestamp of the most recent successful checkpoint and replays Kafka records from the captured offsets. This combination ensures that every record is processed exactly once or not at all: records processed before the checkpoint are reflected in the snapshot; records after the checkpoint are replayed from Kafka; records whose processing was in-flight at checkpoint time are recovered by replaying from the offset before the in-flight batch. The exactly-once guarantee applies to all Flink state updates and all Kafka sink writes within the checkpoint barrier window.
-
-The MinIO S3 backend provides the checkpoint storage target, chosen for its S3-compatible API and low-latency PUT operations compared to HDFS. Checkpoint artifacts are retained for 12 hours and automatically pruned by Flink's cleanup policy to bound storage consumption.
-
-\subsubsection{Kafka Transactions and Exactly-Once Semantics}
-
-Kafka's transactional API enables CA-DQStream to achieve exactly-once delivery between the Flink pipeline and downstream Kafka sinks. Each micro-batch of processed records is written to the output topics (e.g., \texttt{dq-anomaly-scores}, \texttt{dq-meta-stream}) within a single Kafka transaction identified by a transaction ID scoped to the Flink checkpoint.
-
-The transaction timeout is configured at \texttt{transaction.timeout.ms = 10 minutes}, ensuring that in-flight transactions do not block the broker's transaction log during long-running checkpoints or network partitions. Upon checkpoint recovery, Flink aborts any transactions whose timeout has elapsed without a commit, effectively discarding partial writes. The idempotent producer configuration (\texttt{enable.idempotence = true}) prevents duplicate delivery of records within a single transaction retry cycle.
-
-The combination of Flink checkpointing (which captures Kafka consumer offsets) and Kafka transactions (which guarantees atomic writes to output topics) yields end-to-end exactly-once semantics: records are guaranteed to appear in downstream topics either exactly once or not at all, even under TaskManager failures, JobManager restarts, or broker failures.
-
-\subsubsection{Dead Letter Queue (DLQ) Pattern}
-
-CA-DQStream employs the Dead Letter Queue (DLQ) pattern for records that fail validation at any processing stage \citep{confluent_dead_letter_queue}. Rather than blocking the pipeline on a malformed record, the record is diverted to a quarantine Kafka topic (\texttt{dq-dlq}) with the error reason and operator ID attached as message headers. This design preserves pipeline throughput under noisy input streams.
-
-However, the DLQ pattern introduces a critical tradeoff that practitioners must manage carefully. The DLQ creates an \textit{incomplete} rather than an \textit{error-free} stream. Records removed from the main pipeline are permanently excluded from downstream processing and analytics; they are not automatically corrected, reprocessed, or reconciled. Without active monitoring, the DLQ introduces \textbf{silent data loss}: operators may remain unaware that a fraction of records never reached the anomaly detection or meta-aggregation stages, leading to understated violation rates and biased quality metrics.
-
-CA-DQStream addresses this risk through two countermeasures. First, the DLQ volume is tracked as a quality metric with alerting configured at a 2\% threshold relative to the input volume. Second, a scheduled reconciliation job periodically compares the input topic record count against the sum of the clean output, violation output, and DLQ output, emitting an alert if the reconciliation gap exceeds 0.1\%. These safeguards ensure that DLQ diversion is observable rather than silent.
-
-CA-DQStream does not use DLQ for records flagged as anomalies by the ML model. Anomalous records (high anomaly scores) remain in the main pipeline and are emitted to the \texttt{dq-if-anomalies} topic for downstream analysis, preserving complete throughput metrics.
-
-\subsubsection{Two-Phase Commit (2PC) for Cross-System Atomicity}
-
-When the anomaly detection pipeline must write results to both Kafka and an external database (e.g., a PostgreSQL materialized view for dashboard queries), CA-DQStream employs a two-phase commit (2PC) coordinator embedded in the Flink SinkFunction. The 2PC protocol proceeds in two phases:
-
-\begin{enumerate}
-    \item \textbf{Prepare Phase:} The SinkFunction sends a prepare message to the external database transaction coordinator, which locks the relevant rows and writes a prepare log entry. Simultaneously, the Kafka producer opens a transaction and writes all records with a prepare commit marker.
-    \item \textbf{Commit Phase:} Upon receiving acknowledgment from both participants, the coordinator issues commit messages. The Kafka transaction is committed atomically; the database transaction is committed, releasing the row locks.
-\end{enumerate}
-
-If either participant fails to acknowledge the prepare message within the transaction timeout (10 minutes), the coordinator issues an abort message to both participants, rolling back any partial writes. This protocol guarantees atomicity across heterogeneous systems but introduces coordination overhead and latency proportional to the network round-trip time between the coordinator, the Kafka broker, and the external database. CA-DQStream uses 2PC only for the dashboard write path; the core anomaly detection and meta-aggregation paths rely on the at-least-once Kafka transaction guarantee, which is sufficient for metric computation.
-
-\subsubsection{Idempotent Operations}
-
-CA-DQStream ensures that reprocessing after failures does not create duplicate records or corrupt state through idempotent operations at every sink stage. The Kafka sink is configured with \texttt{processingGuarantee = EXACTLY\_ONCE}, which combines Kafka transactions with Flink checkpointing as described above. For the MinIO Parquet sinks, CA-DQStream uses an upsert pattern with a composite unique key (record UUID + processing timestamp), enabling downstream consumers to deduplicate on read without requiring application-level dedup logic.
-
-The deduplication operator in Layer 1 is itself idempotent: the Boolean flag in KeyedState records whether a given trip ID has been seen, and re-processing the same record during recovery sets the flag to the same value. The memory buffer update is also idempotent: inserting an identical encoded vector into the FIFO buffer twice produces the same buffer state (since FIFO insertion is order-preserving and the buffer has fixed capacity).
-
-\subsubsection{State Size Management}
-
-Efficient state management is critical for the MetaAggregator and deduplication operators, which maintain state proportional to the window size and the deduplication key cardinality. The deduplication operator's state size and Bloom filter optimization are detailed in Section 3.3.3.2.
-
-For the MetaAggregator's window state, CA-DQStream uses the Flink \texttt{AggregateFunction} pattern rather than \texttt{WindowFunction}. The \texttt{AggregateFunction} maintains an accumulating state object that is incrementally updated as each record arrives, rather than storing all records in the window. This prevents out-of-memory errors on large windows (e.g., 1-hour windows with tens of thousands of records) and reduces checkpoint snapshot size proportionally.
-
-The 4D context threshold matrix (588 cells) is stored as broadcast state rather than keyed state, meaning it is replicated in full to every TaskManager slot but is not checkpointed per-key. This design choice reduces keyed state size from $O(\text{keys} \times \text{threshold\_size})$ to $O(1)$ per key, at the cost of replicating the full matrix across all slots. The broadcast state update path is gated through the IEC's model update mechanism, ensuring that threshold changes are propagated atomically with the checkpoint barrier.
-
-\subsubsection{Model Distribution and GC Overhead}
-
-PyFlink executes Python UDFs for the autoencoder inference in separate Python worker processes spawned per TaskManager slot. The model weights and memory buffer are distributed to all workers via Flink's Broadcast State mechanism, which guarantees that all slots receive the same model version before the model swap.
-
-On a 4-node cluster with 4 TaskManager slots per node (16 total slots), a single model update generates approximately 768 MB of aggregate network traffic ($16 \times 48$ MB per model artifact). The receiving TaskManager processes the incoming broadcast state in a dedicated thread pool, deserializing the model artifact and loading it into the Python worker process heap. This operation triggers garbage collection in the JVM; with G1GC configured on a 4 GB heap, each model update produces a 150--200 ms GC pause per TaskManager.
-
-With an update frequency of 2--3 model updates per day (driven by the IEC's Tier 3 triggers), the total daily GC overhead is approximately $3 \times 4 \times 200\text{ ms} = 2.4$ seconds, representing less than 0.01\% of daily uptime (86,400 seconds). The pipeline continues processing during these GC pauses due to Flink's operator chaining and the async checkpointing mechanism, which overlaps checkpoint uploads with ongoing processing.
+The \texttt{VerificationFeedbackLoop} class is implemented but reserved for Phase 4 integration. Its algorithm compares post-retrain metrics against pre-retrain baselines over a 3-window verification period. If consecutive adaptations fail to improve the anomaly rate, the loop escalates (after 3 failures) and ultimately triggers rollback (after 5 failures). Phase 3 uses the circuit breaker as the primary protection against adaptation storms, deferring verification-based rollback to future work.
 
 \section{Chapter Summary}
 
-This chapter presented the CA-DQStream framework, a context-aware streaming data quality monitoring system built on Apache Flink with four architectural layers. Layer 1 (Schema Filter and Deduplication) implements a deterministic quality gate using Flink KeyedState with a 7-day TTL and Bloom filter optimization, removing structurally invalid and duplicate records before expensive ML processing. An offline warmup phase prepares the training corpus on a subset of ultra-clean historical records, producing an ultra-clean baseline of approximately 2.86M records on which the Online Autoencoder and 4D thresholds are trained. Layer 2 (Memory-Based Streaming Anomaly Detection) processes records through a sequential two-stage pipeline: a lightweight Canary stage (six deterministic business rules) filters obviously invalid records in sub-5ms, followed by a Complex stage (Denoising Autoencoder + Memory Module with k-NN scoring) that detects multivariate anomalies undetectable by single-feature rules. The 4D Context-Aware Thresholding framework partitions the feature space into 588 context cells, reducing false positives in airport zones (where global thresholds catastrophically fail) and false negatives in high-variance residential zones.
-
-Layer 3 (Meta-Aggregation) computes six meta-metrics (null\_rate, violation\_rate, anomaly\_rate, volume, avg\_anomaly\_score, $\Delta$\_score) over 1-minute tumbling windows per neighborhood, emitting a quality meta-stream to Kafka. ADWIN-U provides the theoretical motivation: higher-order statistics (skewness, kurtosis) and distributional divergence measures extend classical ADWIN's mean-comparison mechanism to unsupervised settings where ground-truth labels are unavailable. Layer 4 (Intelligent Evolution Controller) monitors these meta-streams via per-neighborhood ADWIN instances, aggregates drift severity across 60 independent detectors, and triggers \texttt{quick\_retrain} when either severity exceeds a threshold or any of three hard triggers fires (7+ days of sustained drift, 3+ days of anomaly rate above 15\%, or kNN buffer distance exceeding 2$\times$ baseline). A CircuitBreaker prevents action storms. Fault tolerance is ensured by Flink Chandy-Lamport checkpointing combined with Kafka transactional writes, yielding end-to-end exactly-once delivery. The experimental evaluation in Chapter 5 validates these contributions through ablation studies and comparative baselines against sklearn Isolation Forest, demonstrating that CA-DQStream achieves production-grade data quality monitoring with context awareness, low latency, high throughput, and autonomous adaptation to concept drift.
+This chapter presented CA-DQStream, a four-layer context-aware streaming data quality framework on Apache Flink. It combines memory-augmented anomaly detection with context-aware thresholds and an Intelligent Evolution Controller for drift adaptation. The experimental evaluation in Chapter 5 validates these contributions against multiple baselines.

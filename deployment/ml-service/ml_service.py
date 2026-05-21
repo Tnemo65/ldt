@@ -203,7 +203,7 @@ class MLService:
         self.redis_port = int(os.getenv('REDIS_PORT', '6379'))
         self.redis_password = os.getenv('REDIS_PASSWORD', '')
         self.minio_endpoint = os.getenv('MINIO_ENDPOINT', 'minio:9000')
-        self.minio_access = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
+        self.minio_access = os.getenv('MINIO_ACCESS_KEY', '')
         self.minio_secret = os.getenv('MINIO_SECRET_KEY', '')
 
     def initialize(self):

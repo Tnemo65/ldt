@@ -31,8 +31,8 @@ Usage:
 Environment:
   KAFKA_BOOTSTRAP_SERVERS  Default: kafka:9092 (use localhost:29092 for host)
   MINIO_ENDPOINT           Default: http://localhost:9000
-  MINIO_ACCESS_KEY         Default: minioadmin
-  MINIO_SECRET_KEY         Default: minioadmin
+  MINIO_ACCESS_KEY         (required)
+  MINIO_SECRET_KEY         (required)
 """
 
 import argparse
@@ -543,12 +543,12 @@ Examples:
         help="MinIO endpoint without http:// (default: localhost:9000)"
     )
     parser.add_argument(
-        "--minio-user", default="minioadmin",
-        help="MinIO access key (default: minioadmin)"
+        "--minio-user", required=True,
+        help="MinIO access key"
     )
     parser.add_argument(
-        "--minio-pass", default="minioadmin",
-        help="MinIO secret key (default: minioadmin)"
+        "--minio-pass", required=True,
+        help="MinIO secret key"
     )
     parser.add_argument(
         "--topic", default=RAW_TOPIC,

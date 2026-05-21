@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-05-18 22:32:46",
+  "seed": 42,
+  "slice": "valid",
+  "clean_source": "clean_2024.parquet",
+  "slice_start": "2024-11-01",
+  "slice_end": "2024-11-16",
+  "n_raw_total": 38949977,
+  "n_slice": 1764631,
+  "total_rate": 0.08,
+  "total_target": 141170,
+  "total_confirmed": 141151,
+  "actual_ratio_pct": 7.998896086490603,
+  "type_counts": {
+    "1": 20167,
+    "2": 20167,
+    "3": 20167,
+    "4": 20167,
+    "5": 20167,
+    "6": 20167,
+    "7": 20149
+  },
+  "elapsed_s": 14.27
+}

@@ -139,8 +139,8 @@ class MemStreamConfig:
         self.seed: int = 42
 
         # Warmup validation
-        self.warmup_min_samples: int = 8192
-        self.warmup_neighborhood_ids_required: bool = False
+        self.warmup_min_samples: int = 256   # Reduced from 8192: the denoising AE trains effectively on
+        self.warmup_neighborhood_ids_required: bool = False   # 256 samples in batch-size=256 warmup runs.
 
     def validate(self) -> None:
         """Validate production invariants.
@@ -148,9 +148,9 @@ class MemStreamConfig:
         Raises:
             ValueError: If any invariant is violated
         """
-        if self.memory_len < 8192:
+        if self.memory_len < 256:
             raise ValueError(
-                f"memory_len={self.memory_len} is below minimum 8,192"
+                f"memory_len={self.memory_len} is below minimum 256"
             )
         if self.gamma != 0.0:
             raise ValueError(
@@ -1405,11 +1405,14 @@ class SimpleADWIN:
         self.max_window = max_window
         self._window: list = []
         self._total: float = 0.0
+        self.drift_detected: bool = False
+        self.last_drift_type: int = 0
+        self.last_drift_magnitude: float = 0.0
 
     def update(self, value: float) -> bool:
         """Add value and check for drift.
 
-        Returns True if drift is detected.
+        Returns True if drift is detected. Also sets self.drift_detected.
         """
         self._window.append(value)
         self._total += value
@@ -1422,6 +1425,7 @@ class SimpleADWIN:
 
         n = len(self._window)
         if n <= 50:
+            self.drift_detected = False
             return False
 
         # Compare recent vs old window
@@ -1443,14 +1447,20 @@ class SimpleADWIN:
                 cut = len(self._window) // 2
                 self._window = self._window[cut:]
                 self._total = sum(self._window)
+                self.drift_detected = True
+                self.last_drift_magnitude = float(diff)
                 return True
 
+        self.drift_detected = False
         return False
 
     def reset(self) -> None:
         """Reset the detector."""
         self._window.clear()
         self._total = 0.0
+        self.drift_detected = False
+        self.last_drift_type = 0
+        self.last_drift_magnitude = 0.0
 
     def get_window_size(self) -> int:
         """Return current window size."""

@@ -9,13 +9,18 @@ ADWIN-U Architecture:
 - Delta (sensitivity) configurable per metric type
 - Supports higher-order statistics: mean, variance, skewness, kurtosis
 
-Metrics monitored:
-1. volume             -> statistic='variance'  (detect volume spikes)
+Metrics monitored (per KAIS 2025 paper — skewness/kurtosis rank 1):
+1. volume             -> statistic='variance'  (detect volume spikes via variance shift)
 2. null_rate          -> statistic='skewness'  (detect NULL burst asymmetry)
-3. violation_rate     -> statistic='mean'       (detect rule violation level changes)
-4. anomaly_rate       -> statistic='mean'      (detect ML behavior changes)
-5. avg_anomaly_score  -> statistic='mean'      (detect concept drift via score shifts)
-6. delta_score        -> statistic='mean'      (detect canary-vs-ML disagreement shifts)
+3. violation_rate     -> statistic='skewness'  (detect violation burst asymmetry, rank 1)
+4. anomaly_rate       -> statistic='skewness'  (detect anomaly rate distribution shift, rank 1)
+5. avg_anomaly_score  -> statistic='kurtosis'  (detect score tail-mass changes, rank 1)
+6. delta_score        -> statistic='kurtosis'  (detect canary-ML disagreement tail divergence, rank 1)
+
+Secondary statistics per metric (per ADWIN_U defaults):
+- skewness primary -> kurtosis secondary
+- kurtosis primary -> skewness secondary
+- variance primary -> kurtosis secondary
 
 Spec: Phase 1D - ADWIN-U Expansion (ADWIN -> ADWIN-U upgrade)
 """
@@ -53,6 +58,7 @@ class MultiInstanceADWIN:
         default_delta: float = 0.002,
         max_window: int = 500,
         use_secondary_check: bool = False,
+        secondary_check_metrics: Optional[List[str]] = None,
     ):
         """Initialize multi-instance ADWIN-U.
 
@@ -65,8 +71,12 @@ class MultiInstanceADWIN:
                 Lower delta = more conservative (fewer false positives).
             default_delta: Delta for metrics not in delta_config.
             max_window: Maximum window size per ADWIN-U instance.
-            use_secondary_check: Require secondary statistic confirmation.
+            use_secondary_check: Global flag — if True, enable secondary check for all metrics.
                 Reduces false positives but increases detection latency.
+            secondary_check_metrics: Per-metric override for secondary check.
+                List of metric names that should use secondary confirmation even when
+                use_secondary_check=False globally. Default: ['null_rate', 'anomaly_rate'].
+                These critical metrics benefit from cross-statistic validation.
         """
 
         # Default neighborhoods (10 - Phase 1D expansion)
@@ -103,6 +113,11 @@ class MultiInstanceADWIN:
         self.max_window = max_window
         self.use_secondary_check = use_secondary_check
 
+        # Per-metric secondary check: always check critical metrics by default
+        if secondary_check_metrics is None:
+            secondary_check_metrics = ['null_rate', 'anomaly_rate']
+        self.secondary_check_metrics = secondary_check_metrics
+
         # Create ADWIN-U instances (60 total: 10 neighborhoods x 6 metrics)
         self.adwin_instances = {}
 
@@ -114,10 +129,13 @@ class MultiInstanceADWIN:
                 key = f"{neighborhood}_{metric}"
                 delta = delta_config.get(metric, default_delta)
 
+                # Per-metric secondary check: critical metrics always check
+                do_secondary = use_secondary_check or (metric in secondary_check_metrics)
+
                 self.adwin_instances[key] = ADWIN_U.for_metric(
                     metric_name=metric,
                     delta=delta,
-                    use_secondary_check=use_secondary_check,
+                    use_secondary_check=do_secondary,
                 )
 
         LOGGER.info(
@@ -224,10 +242,11 @@ class MultiInstanceADWIN:
 
         if key in self.adwin_instances:
             delta = self.delta_config.get(metric_name, self.default_delta)
+            do_secondary = self.use_secondary_check or (metric_name in self.secondary_check_metrics)
             self.adwin_instances[key] = ADWIN_U.for_metric(
                 metric_name=metric_name,
                 delta=delta,
-                use_secondary_check=self.use_secondary_check,
+                use_secondary_check=do_secondary,
             )
 
     def reset_all(self):
@@ -239,10 +258,11 @@ class MultiInstanceADWIN:
             metric_name = key.rsplit('_', 1)[-1]
             neighborhood = key[:-(len(metric_name) + 1)]
             delta = self.delta_config.get(metric_name, self.default_delta)
+            do_secondary = self.use_secondary_check or (metric_name in self.secondary_check_metrics)
             self.adwin_instances[key] = ADWIN_U.for_metric(
                 metric_name=metric_name,
                 delta=delta,
-                use_secondary_check=self.use_secondary_check,
+                use_secondary_check=do_secondary,
             )
         self.drift_history.clear()
 

@@ -13,8 +13,8 @@ Workflow:
     3. reset() - Reset all state
 
 Retrain Triggers (any fires -> quick_retrain):
-    - Trigger A: ADWIN drift detected for 7+ consecutive days
-    - Trigger B: Anomaly rate > 15% for 3+ consecutive days
+    - Trigger A: ADWIN drift detected >= 1 time within 4 hours
+    - Trigger B: Anomaly rate > 15% (any occurrence)
     - Trigger C: kNN distance > 2x baseline
 
 Retrain Signal written to: cadqstream-drift/iec/retrain/{neighborhood}/{timestamp}.json
@@ -109,24 +109,31 @@ class IECConfig:
     def __init__(
         self,
         max_recent_drifts: int = 10,
-        # Retrain trigger thresholds
-        retrain_adwin_days: int = 7,
+        # Retrain trigger thresholds (demo mode: detect within hours)
+        retrain_adwin_days: int = 1,
         retrain_anomaly_rate_threshold: float = 0.15,
-        retrain_anomaly_rate_days: int = 3,
+        retrain_anomaly_rate_days: int = 0,
         retrain_knn_multiplier: float = 2.0,
         # ADWIN per-neighborhood configuration
         adwin_delta: float = 0.002,
+        # ADWIN-U secondary check (per KAIS 2025)
+        adwin_secondary_check: bool = False,
+        adwin_secondary_check_metrics: Optional[List[str]] = None,
     ):
         """
         Initialize IEC configuration.
 
         Args:
             max_recent_drifts: Max drift events to track
-            retrain_adwin_days: Days of consecutive ADWIN drift for Trigger A
+            retrain_adwin_days: ADWIN drift count threshold for Trigger A
             retrain_anomaly_rate_threshold: Threshold for Trigger B
-            retrain_anomaly_rate_days: Consecutive days for Trigger B
-            retrain_knn_multiplier: kNN multiplier for Trigger C
+            retrain_anomaly_rate_days: Consecutive days threshold for Trigger B
+            retrain_knn_multiplier: kNN multiplier threshold for Trigger C
             adwin_delta: ADWIN delta parameter (sensitivity)
+            adwin_secondary_check: Global secondary check for ADWIN-U. Default False.
+                Per KAIS 2025: secondary check reduces false positives but increases latency.
+            adwin_secondary_check_metrics: List of metrics to always use secondary check.
+                Default: ['null_rate', 'anomaly_rate'].
         """
         self.max_recent_drifts = max_recent_drifts
         self.retrain_adwin_days = retrain_adwin_days
@@ -134,6 +141,8 @@ class IECConfig:
         self.retrain_anomaly_rate_days = retrain_anomaly_rate_days
         self.retrain_knn_multiplier = retrain_knn_multiplier
         self.adwin_delta = adwin_delta
+        self.adwin_secondary_check = adwin_secondary_check
+        self.adwin_secondary_check_metrics = adwin_secondary_check_metrics or ['null_rate', 'anomaly_rate']
 
 
 # =============================================================================
@@ -153,6 +162,12 @@ class IECController:
     Strategies:
     - do_nothing: no drift or minor drift
     - quick_retrain: severe drift — retrain MemStream AE + reset ADWIN thresholds per grid
+
+    Retrain triggers fire when ANY of these conditions hold:
+    - Trigger A: ADWIN drift detected >= 1 time within 4 hours
+    - Trigger B: Anomaly rate > 15% for 0 days (any occurrence)
+    - Trigger C: kNN distance > 2x baseline
+    Multiple triggers (>= 2) force an immediate quick_retrain override.
 
     Flow:
         1. update(meta_metrics) - Update ADWINs, assess severity, check retrain triggers
@@ -175,7 +190,10 @@ class IECController:
         self.config = config or IECConfig()
 
         # Core components
-        self._adwin = MultiInstanceADWIN()
+        self._adwin = MultiInstanceADWIN(
+            use_secondary_check=config.adwin_secondary_check,
+            secondary_check_metrics=config.adwin_secondary_check_metrics,
+        )
         self._aggregator = DriftAggregator(max_recent=self.config.max_recent_drifts)
 
         # Decision cache
@@ -299,6 +317,7 @@ class IECController:
                 event['metric'],
                 drift_type=event.get('drift_type', 0),
                 drift_type_name=event.get('drift_type_name', 'none'),
+                drift_magnitude=event.get('drift_magnitude', 1.0),
             )
 
         # Step 3: Assess severity
@@ -316,7 +335,7 @@ class IECController:
             if has_drift:
                 if tracking['last_adwin_drift'] is not None:
                     days_since_last = (current_time - tracking['last_adwin_drift']) / 86400
-                    if days_since_last <= 2:
+                    if days_since_last <= 0.167:
                         tracking['adwin_drift_days'] += 1
                     else:
                         tracking['adwin_drift_days'] = 1
@@ -324,13 +343,26 @@ class IECController:
                     tracking['adwin_drift_days'] = 1
                 tracking['last_adwin_drift'] = current_time
 
-        # Override strategy to quick_retrain if any trigger fired
+        # Override strategy to quick_retrain if multiple triggers fire
+        # Single trigger only upgrades severity; multiple triggers force override
         if retrain_triggers:
-            strategy = EvolutionStrategy.QUICK_RETRAIN
-            confidence = 0.95
-            LOGGER.warning(
-                f"[IECController] Retrain triggers fired — forcing strategy to quick_retrain"
-            )
+            n_triggers = len(retrain_triggers)
+            if n_triggers >= 2:
+                strategy = EvolutionStrategy.QUICK_RETRAIN
+                confidence = 0.95
+                LOGGER.warning(
+                    f"[IECController] Multiple retrain triggers ({n_triggers}) — forcing strategy to quick_retrain"
+                )
+            else:
+                # Single trigger: upgrade severity but let aggregator decide
+                # Only override if current strategy is do_nothing
+                LOGGER.warning(
+                    f"[IECController] Single retrain trigger — upgrading severity "
+                    f"(strategy={strategy}, confidence={confidence:.3f})"
+                )
+                if strategy == EvolutionStrategy.DO_NOTHING:
+                    strategy = EvolutionStrategy.QUICK_RETRAIN
+                    confidence = 0.85
 
         # Build decision
         self._last_decision = {
@@ -371,9 +403,9 @@ class IECController:
         Check if any retrain trigger has fired.
 
         Triggers:
-            A: ADWIN drift for 7+ consecutive days
-            B: Anomaly rate > 15% for 3+ consecutive days
-            C: kNN distance > 2x baseline
+            A: ADWIN drift detected >= 1 time within 4 hours
+            B: Anomaly rate > threshold (any occurrence)
+            C: kNN distance > retrain_knn_multiplier x baseline
 
         Args:
             meta_metrics: Current meta-metrics
@@ -415,7 +447,18 @@ class IECController:
             else:
                 tracking['anomaly_rate_days_above_threshold'] = 0
 
-            if tracking['anomaly_rate_days_above_threshold'] >= self.config.retrain_anomaly_rate_days:
+            # Fire immediately on any occurrence when retrain_anomaly_rate_days == 0
+            # Otherwise require consecutive days threshold
+            if self.config.retrain_anomaly_rate_days == 0:
+                if anomaly_rate > self.config.retrain_anomaly_rate_threshold:
+                    triggers['Trigger_B_AnomalyRate'] = {
+                        'neighborhood': nb,
+                        'current_rate': anomaly_rate,
+                        'consecutive_days_above_threshold': 1,
+                        'threshold_rate': self.config.retrain_anomaly_rate_threshold,
+                        'threshold_days': 0,
+                    }
+            elif tracking['anomaly_rate_days_above_threshold'] >= self.config.retrain_anomaly_rate_days:
                 triggers['Trigger_B_AnomalyRate'] = {
                     'neighborhood': nb,
                     'current_rate': anomaly_rate,
@@ -632,11 +675,17 @@ class IECController:
 
     def get_stats(self) -> Dict:
         """Get IEC statistics."""
+        agg_stats = self._aggregator.get_stats()
+        agg_detailed = self._aggregator.assess_drift_severity_detailed()
         return {
             'n_processed': self._n_processed,
             'last_decision': self._last_decision,
             'adwin_total_drifts': self._adwin.get_total_drifts(),
-            'aggregator': self._aggregator.get_stats(),
+            'aggregator': {
+                **agg_stats,
+                'weighted_score': agg_detailed.get('weighted_score', 0.0),
+                'drift_types': agg_detailed.get('drift_types', {}),
+            },
             'strategy_counts': self._strategy_counts.copy(),
             'circuit_breaker': None,
             'retrain_tracking': {

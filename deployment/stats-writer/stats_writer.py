@@ -10,9 +10,9 @@ Runs as a sidecar service. Every 60 seconds:
 Also runs as a one-shot via environment variable for Flink checkpoint events.
 
 Environment:
-  MINIO_ENDPOINT (default: minio:9000)
-  MINIO_ACCESS_KEY (default: minioadmin)
-  MINIO_SECRET_KEY (default: minioadmin123)
+  MINIO_ENDPOINT (required)
+  MINIO_ACCESS_KEY (required, set via .env)
+  MINIO_SECRET_KEY (required, set via .env)
   METRICS_URL (default: http://cadqstream-metrics:9250/metrics)
   INTERVAL_SECONDS (default: 60)
 """
@@ -56,20 +56,35 @@ def run_health_server(port=9252):
 
 
 def parse_prometheus_text(content: str) -> dict:
-    """Parse Prometheus text format into a dict of metric_name -> value."""
+    """Parse Prometheus text format into a dict of metric_name -> total value.
+
+    Handles both simple metrics (name value) and labeled metrics
+    (name{label="value"} value). For labeled metrics, sums all label
+    combinations into a single total per metric name.
+    """
+    import re
     metrics = {}
     for line in content.splitlines():
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        # Handle simple metrics: name value
-        parts = line.split(None, 1)
-        if len(parts) == 2:
-            name, val = parts
-            try:
-                metrics[name] = float(val)
-            except ValueError:
-                pass
+        # Match: metric_name{labels} value timestamp (timestamp is optional)
+        match = re.match(r'^([a-zA-Z_:][a-zA-Z0-9_:]*)\{[^}]*\}\s+([0-9.eE+-]+)', line)
+        if match:
+            name = match.group(1)
+            val = float(match.group(2))
+        else:
+            # Simple metric: name value
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                name = parts[0]
+                try:
+                    val = float(parts[1])
+                except ValueError:
+                    continue
+            else:
+                continue
+        metrics[name] = metrics.get(name, 0.0) + val
     return metrics
 
 
@@ -115,15 +130,19 @@ def write_to_minio(stats: dict, endpoint: str, access_key: str, secret_key: str)
 
 
 def build_stats_summary(metrics: dict) -> dict:
-    """Build a pipeline stats record from raw metrics dict."""
+    """Build a pipeline stats record from raw metrics dict.
+
+    All cadqstream_* counters in cadqstream-metrics are labeled (layer, rule, etc.)
+    and are summed here so the total pipeline-wide value is recorded.
+    """
     return {
         'timestamp': datetime.utcnow().isoformat(),
         'records_input': int(metrics.get('cadqstream_records_input_total', 0)),
         'records_valid': int(metrics.get('cadqstream_records_valid_total', 0)),
-        'records_invalid': int(metrics.get('cadqstream_records_violation_total', 0)),
+        'records_invalid': int(metrics.get('cadqstream_violation_records_total', 0)),
         'canary_violations': int(metrics.get('cadqstream_anomalies_canary_total', 0)),
         'ml_anomalies': int(metrics.get('cadqstream_anomalies_ml_total', 0)),
-        'iec_decisions': int(metrics.get('cadqstream_iec_decisions_total', 0)),
+        'iec_decisions': int(metrics.get('cadqstream_iec_strategies_total', 0)),
         'drift_events': int(metrics.get('cadqstream_iec_drift_detected_total', 0)),
     }
 
@@ -153,8 +172,8 @@ def main():
     interval = int(os.getenv('INTERVAL_SECONDS', '60'))
     metrics_url = os.getenv('METRICS_URL', 'http://cadqstream-metrics:9250/metrics')
     minio_endpoint = os.getenv('MINIO_ENDPOINT', 'minio:9000')
-    access_key = os.getenv('MINIO_ACCESS_KEY', 'minioadmin')
-    secret_key = os.getenv('MINIO_SECRET_KEY', 'minioadmin123')
+    access_key = os.getenv('MINIO_ACCESS_KEY', '')
+    secret_key = os.getenv('MINIO_SECRET_KEY', '')
 
     run_health_server(int(os.getenv('HEALTH_PORT', '9252')))
 

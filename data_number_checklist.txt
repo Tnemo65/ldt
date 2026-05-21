@@ -1,0 +1,223 @@
+# CA-DQStream Thesis — Dataset Numbers Checklist
+# ================================================================
+# ANALYZED: data/raw/raw_2025*.parquet  (12 monthly files, Jan-Dec 2025)
+# ACTUAL values are shown below each item. Thesis values are shown in parentheses.
+# Checkboxes are marked [x] for verified, [~] for approximate match, [?] for unclear.
+# ================================================================
+
+---
+
+## 1. DATASET SIZE & VOLUME
+
+- [~] Total records 2025: **48,722,602**  (Thesis ~30M simulated for 12-month period — 63% higher than thesis claim)
+- [ ] Real data: Jan 2024 – Feb 2025, ~42M records  (Not tested — 2024 data not in scope)
+- [ ] Simulated data: Mar 2025 – Feb 2026, ~30M records  (Thesis claim; actual: 48.7M for Jan-Dec 2025 alone)
+- [ ] Training set (Jan 2024): ~2.97M records  (Not tested — 2024 data not in scope)
+- [ ] Validation set (Jul 2024): ~3.08M records  (Not tested — 2024 data not in scope)
+
+ACTUAL 2025 monthly record counts:
+- [x] 2025-01: **3,475,226**   (Thesis 2024-01: 2,964,637)
+- [x] 2025-02: **3,577,543**   (Thesis 2024-02: 3,007,534)
+- [x] 2025-03: **4,145,257**   (Thesis 2024-03: 3,582,613)
+- [x] 2025-04: **3,970,553**   (Thesis 2024-04: 3,514,295)
+- [x] 2025-05: **4,591,845**   (Thesis 2024-05: 3,723,843)
+- [x] 2025-06: **4,322,960**   (Thesis 2024-06: 3,539,172)
+- [x] 2025-07: **3,898,963**   (Thesis 2024-07: 3,076,876)
+- [x] 2025-08: **3,574,091**   (Thesis 2024-08: 2,979,192)
+- [x] 2025-09: **4,251,015**   (Thesis 2024-09: 3,633,025)
+- [x] 2025-10: **4,428,699**   (Thesis 2024-10: 3,833,780)
+- [x] 2025-11: **4,181,444**   (Thesis 2024-11: 3,646,372)
+- [x] 2025-12: **4,305,006**   (Thesis 2024-12: 3,668,381)
+- [x] 2025 TOTAL: **48,722,602**  |  Monthly avg: **4,060,217**
+- [~] Monthly avg 2025: **~4.06M**  (Thesis ~3.08M/day × 30 days ≈ 3M/day; 2025 avg is 35% higher)
+
+---
+
+## 2. RAW DATA SCHEMA & COLUMNS
+
+ACTUAL:
+- [x] Total raw columns: **20**  (Thesis: 24 — the thesis includes 5 derived columns as part of schema, but raw parquet has 20)
+
+ACTUAL columns (20):
+  VendorID, tpep_pickup_datetime, tpep_dropoff_datetime, passenger_count,
+  trip_distance, RatecodeID, store_and_fwd_flag, PULocationID, DOLocationID,
+  payment_type, fare_amount, extra, mta_tax, tip_amount, tolls_amount,
+  improvement_surcharge, total_amount, congestion_surcharge, Airport_fee,
+  cbd_congestion_fee
+
+NOTE: Thesis Table 4.1 shows 24 columns (6 derived: duration_s, speed_mph, hour, month, weekday, date).
+  The raw parquet has 20 columns; derived features are computed in the pipeline.
+  Additional columns in raw vs thesis: cbd_congestion_fee (not in thesis schema),
+  improvement_surcharge (not in thesis schema). Missing from raw: duration_s, speed_mph, hour, month, weekday, date.
+
+- [x] Columns with NULLs in raw data: **5 columns** in raw parquet
+  (passenger_count, RatecodeID, store_and_fwd_flag, congestion_surcharge, Airport_fee)
+  + speed_mph is derived (NULL = 544,069 / 1.12%)
+
+---
+
+## 3. COMPLETENESS VIOLATIONS (Table 4.1)
+
+**Thesis applies to 2024 data (41.2M records). 2025 data (48.7M records) shows significantly higher NULL rates.**
+
+| Check | Actual (2025, 48.7M) | Thesis (2024, 41.2M) | Status |
+|-------|----------------------|----------------------|--------|
+| passenger_count NULL | **11,611,894** / **23.83%** | 4,091,232 / 9.94% | ~MISMATCH (2.4x higher) |
+| RatecodeID NULL | **11,611,894** / **23.83%** | 4,091,232 / 9.94% | ~MISMATCH |
+| store_and_fwd_flag NULL | **11,611,894** / **23.83%** | 4,091,232 / 9.94% | ~MISMATCH |
+| congestion_surcharge NULL | **11,611,894** / **23.83%** | 4,091,232 / 9.94% | ~MISMATCH |
+| Airport_fee NULL | **11,611,894** / **23.83%** | 4,091,232 / 9.94% | ~MISMATCH |
+| speed_mph NULL (derived) | **544,069** / **1.12%** | 778,691 / 1.89% | ~CLOSE |
+| PULocationID out of [1,263] | **103,043** / **0.21%** | 146,201 / 0.36% | ~CLOSE |
+| DOLocationID out of [1,263] | **370,258** / **0.90%** | 324,266 / 0.67% | ~CLOSE |
+| passenger_count out of [1,9] | **260,062** / **0.53%** | 401,638 / 0.98% | ~CLOSE |
+
+---
+
+## 4. MONTHLY NULL RATE TREND (passenger_count, Table 4.3)
+
+**Thesis: 2024 data.  Actual: 2025 data.  NULL rates significantly higher in 2025.**
+
+| Month | Actual 2025 Rows | Actual 2025 NULL% | Thesis 2024 NULL% | Status |
+|-------|-----------------|-------------------|------------------|--------|
+| 01 | 3,475,226 | **15.54%** | 4.73% | ~MISMATCH |
+| 02 | 3,577,543 | **22.56%** | 6.17% | ~MISMATCH |
+| 03 | 4,145,257 | **22.11%** | 11.90% | ~MISMATCH |
+| 04 | 3,970,553 | **18.78%** | 11.63% | ~MISMATCH |
+| 05 | 4,591,845 | **26.05%** | 10.87% | ~MISMATCH |
+| 06 | 4,322,960 | **28.06%** | 11.61% | ~MISMATCH |
+| 07 | 3,898,963 | **26.64%** | 9.07% | ~MISMATCH |
+| 08 | 3,574,091 | **24.80%** | 8.68% | ~MISMATCH |
+| 09 | 4,251,015 | **25.10%** | 13.31% | ~MISMATCH |
+| 10 | 4,428,699 | **22.37%** | 10.27% | ~MISMATCH |
+| 11 | 4,181,444 | **24.27%** | 10.25% | ~MISMATCH |
+| 12 | 4,305,006 | **27.77%** | 8.89% | ~MISMATCH |
+
+NOTE: 2025 NULL rates are consistently 2–3x higher than 2024 thesis values.
+  Thesis trend: gradual increase from 4.73% (Jan) to 13.31% (Sep), then slight decrease.
+  2025 actual: starts at 15.54% (Jan) and stays elevated (18–28% range all year).
+  This suggests the simulated data has higher NULL injection or the data quality
+  degradation is more severe in the simulation than the thesis projected.
+
+---
+
+## 5. VALIDITY VIOLATIONS — NEGATIVE FINANCIAL VALUES (Table 4.2)
+
+| Check | Actual (2025) | Thesis (2024) | Status |
+|-------|--------------|---------------|--------|
+| fare_amount < 0 | Count: **2,848,620** / Rate: **5.85%** | 731,024 / 1.78% | ~MISMATCH (3.3x higher) |
+| min | **-$1,807.60** | -$2,261.20 | ~CLOSE |
+| max | **-$0.01** | -$0.01 | MATCH |
+| mean | **-$9.88** | -$19.04 | ~DIFF |
+| median | **-$4.75** | -$10.00 | ~DIFF |
+| total_amount < 0 | Count: **973,721** / Rate: **2.00%** | 609,344 / 1.48% | ~CLOSE |
+| min | **-$1,832.85** | -$2,265.45 | ~CLOSE |
+| max | **-$0.01** | -$0.01 | MATCH |
+| mean | **-$25.48** | -$27.93 | ~CLOSE |
+| median | **-$16.15** | -$17.20 | ~CLOSE |
+| extra < 0 | Count: **414,216** / Rate: **0.85%** | 304,569 / 0.74% | ~CLOSE |
+| mta_tax < 0 | Count: **762,381** / Rate: **1.56%** | 583,164 / 1.42% | ~CLOSE |
+| improvement_surcharge < 0 | Count: **804,443** / Rate: **1.65%** | (Not in thesis) | N/A |
+| Overlap (fare<0 AND total<0) | **968,747** / **1.99%** | 82.6% of violations | ~CLOSE |
+
+NOTE: fare_amount < 0 rate is 3.3x higher in 2025 (5.85% vs 1.78%).
+  Min/max values are similar in magnitude. Mean/median are lower (less negative on average).
+  improvement_surcharge < 0 is an additional violation not covered in thesis Table 4.2.
+
+---
+
+## 6. VALIDITY VIOLATIONS — PHYSICAL PLAUSIBILITY
+
+| Check | Actual (2025) | Thesis (2024) | Status |
+|-------|--------------|---------------|--------|
+| Speed > 80 mph | **13,700** | 13,245 | ~CLOSE (3.4% higher) |
+| Speed > 100 mph | **12,242** | 12,171 | ~CLOSE (0.6% higher) |
+| Speed > 200 mph | **9,021** | 9,525 | ~CLOSE (5.3% lower) |
+| Speed max | **5,301,620.40 mph** | 5,379,164.60 mph | ~CLOSE |
+| Duration = 0 | **544,069** / **1.12%** | 11,935 / 0.03% | ~MISMATCH (46x higher count) |
+| Duration > 4 hours | **16,720** / **0.034%** | 23,374 / 0.06% | ~CLOSE |
+| fare_amount max | **$863,372.12** | $335,544.44 | ~DIFF (2.6x) |
+| trip_distance max | **397,994.37 miles** | 398,608.62 miles | ~CLOSE |
+| fare_per_mile max | **$539,607.57/mile** | $167,772.22/mile | ~DIFF (3.2x) |
+
+NOTE: Duration=0 count is 46x higher (544K vs 12K) because 2025 has more zero-distance trips overall.
+  fare_amount max is 2.6x higher in 2025. fare_per_mile max is 3.2x higher.
+  Speed thresholds (80/100/200 mph) are very close between 2024 and 2025.
+  Speed max is nearly identical (~5.3M mph).
+
+---
+
+## 7. VALIDITY VIOLATIONS — ZERO-DISTANCE & TEMPORAL
+
+| Check | Actual (2025) | Thesis (2024) | Status |
+|-------|--------------|---------------|--------|
+| Zero-distance trips | **1,402,958** / **2.88%** | 776,305 / 1.89% | ~MISMATCH (1.5x higher) |
+| Zero-distance + positive fare | **1,149,848** | 714,784 | ~MISMATCH (1.6x higher) |
+| Mean fare (zero-dist) | **$19.64** | $24.49 | ~CLOSE |
+| Datetime outside 2025 (pickup) | **29** / **0.0001%** | 88,752 / 0.22% | ~MISMATCH (2024 data) |
+| Datetime outside 2025 (dropoff) | **796** / **0.0016%** | N/A (would include 2026) | ~CLOSE |
+
+NOTE: 2025 has 1.8x more zero-distance trips than thesis projected for 2024.
+  Temporal anomalies in pickup: 29 records (1 from 2007, 1 from 2008, 6 from 2009, 21 from 2024).
+  Temporal anomalies in dropoff: 796 records outside 2025 (14 from 2024, 774 from 2026).
+
+---
+
+## 8. SCHEMA VALIDATION (Layer 1)
+
+| Check | Actual (Jan 2025, 3.5M sample) | Thesis (2024, 3M sample) | Status |
+|-------|--------------------------------|---------------------------|--------|
+| Schema rejection (NULL passenger OR Ratecode) | **540,149** / **15.54%** | ~310,000 / 10.1% | ~MISMATCH |
+
+NOTE: Schema rejection rate is 15.54% in Jan 2025, higher than the thesis 10.1%.
+  This aligns with the higher NULL rate in 2025 data (23.83% vs 9.94% in 2024).
+
+---
+
+## 9. FEATURE ENGINEERING
+
+- [ ] Total feature vector dimension: 34D  (Not tested — requires pipeline run)
+- [ ] Feature categories: 8 groups  (Not tested)
+- [ ] Ablation baseline (B1-B4): 21 features  (Not tested)
+- [ ] Cyclic hour encoding: hour_23 ↔ hour_0 distance = 0.26 on unit circle  (Not tested)
+
+---
+
+## 10. AUTOENCODER ARCHITECTURE & HYPERPARAMETERS
+
+- [ ] All hyperparameters (Not tested — requires pipeline run)
+
+---
+
+## 11. MEMORY BUFFER ABLATION (Table 4.5)
+
+- [ ] All AUC vs N values (Not tested — requires pipeline run)
+
+---
+
+## 12–26. REMAINDER
+
+- [ ] Not tested — requires pipeline execution and/or 2024 data files
+
+---
+
+## SUMMARY: KEY DISCREPANCIES (2025 actual vs thesis 2024 claims)
+
+| Metric | Thesis (2024) | Actual (2025) | Discrepancy |
+|--------|--------------|---------------|-------------|
+| Total records (12-month) | ~30M (simulated) | **48.7M** | +62% |
+| Monthly avg | ~3M/day | **4.06M/month** | +35% |
+| NULL rate (5-col avg) | 9.94% | **23.83%** | +2.4x |
+| Jan NULL rate (passenger_count) | 4.73% | **15.54%** | +3.3x |
+| Sep NULL rate (passenger_count) | 13.31% | **25.10%** | +1.9x |
+| fare_amount < 0 rate | 1.78% | **5.85%** | +3.3x |
+| Zero-distance rate | 1.89% | **2.88%** | +1.5x |
+| Duration=0 count | 11,935 | **544,069** | +46x |
+| Schema rejection rate | 10.1% | **15.54%** | +1.5x |
+
+### Conclusion:
+The 2025 simulated data has **significantly worse data quality** than the 2024 real data described in the thesis.
+NULL rates are 2–3x higher, fare anomalies are 3x higher, and zero-distance trips are 1.5x more frequent.
+This likely reflects the GMM-based simulation injecting more extreme/corrupted values than the thesis baseline projected.
+The monthly volume is also 35% higher than the thesis projected daily average would suggest.
+

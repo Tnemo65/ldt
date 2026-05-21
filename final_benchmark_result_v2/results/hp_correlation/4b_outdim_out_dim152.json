@@ -1,0 +1,19 @@
+{
+  "sweep": "4b_outdim",
+  "param": "out_dim",
+  "value": 152,
+  "config_id": "4b_outdim_out_dim152",
+  "auc_roc": 0.9962923694877021,
+  "auc_pr": 0.906271972602013,
+  "f1": 0.05808651612389343,
+  "precision": 0.029911999999999994,
+  "recall": 0.9999999999999933,
+  "fpr": 0.9999999999999998,
+  "acc": 0.029912,
+  "best_threshold": 0.05808651612389343,
+  "score_normal_mean": 144.4009092749544,
+  "score_anomaly_mean": 1058.9902246877707,
+  "separation_ratio": 7.333681138188747,
+  "train_time_s": 475.0785171985626,
+  "status": "MATCHED"
+}

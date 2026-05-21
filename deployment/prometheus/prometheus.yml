@@ -62,17 +62,12 @@ scrape_configs:
         target_label: instance
         replacement: 'flink-jobmanager'
 
-  # ── Flink TaskManager ────────────────────────────────────────────────────────
-  # TaskManager metrics are on a separate port from the JobManager.
-  # Used by memstream-alerts.yaml rules (e.g. FlinkTaskManagerDown).
-  - job_name: 'flink-taskmanager'
-    static_configs:
-      - targets: ['ldt-flink-taskmanager:9249']
-    metrics_path: /metrics
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: instance
-        replacement: 'flink-taskmanager'
+
+  # ── Flink TaskManager (REMOVED) ──────────────────────────────────────────
+  # TaskManager runs as Python-only process - no JVM metrics, no port 9249.
+  # TM JVM metrics (heap/CPU/GC) are scraped via flink-jobmanager:9248.
+  # Pipeline metrics come from cadqstream-metrics:9250. TM health via cadqstream-app.
+  # ────────────────────────────────────────────────────────────────────────────
 
   # ── MinIO ──────────────────────────────────────────────────────────────────
   # MinIO exposes Prometheus metrics on the main API port (9000)
@@ -95,11 +90,9 @@ scrape_configs:
     metrics_path: /metrics
     scrape_interval: 30s
 
-  # Cadqstream Pipeline Application Metrics (custom cadqstream_* metrics)
-  # Scraped from cadqstream-metrics service (port 9250) which aggregates
-  # HTTP POSTs from the Flink pipeline and exposes them for Prometheus.
-  # ROOT CAUSE FIX: Removed bearer_token — the /metrics endpoint is public.
-  # Previous bearer_token caused 401/403 errors and empty scrape results.
+  # ── Cadqstream Pipeline Application Metrics ──────────────────────────────────
+  # Custom cadqstream_* metrics from cadqstream-metrics service (port 9250)
+  # which aggregates HTTP POSTs from the Flink pipeline and exposes them.
   - job_name: 'cadqstream-app'
     static_configs:
       - targets: ['cadqstream-metrics:9250']

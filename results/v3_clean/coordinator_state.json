@@ -1,9 +1,0 @@
-{
-  "completed_phases": [
-    "data_prep",
-    "table_a_batch",
-    "gpu_lstm"
-  ],
-  "started_at": "2026-05-11T23:27:01.830789",
-  "last_updated": "2026-05-12T05:37:53.422013"
-}

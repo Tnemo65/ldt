@@ -6,14 +6,6 @@
   note = {Accessed: 2025-04-20}
 }
 
-@article{Armbrust2021Lakehouse,
-  title={Lakehouse: A new generation of open platforms that unify data warehousing and advanced analytics},
-  author={Michael Armbrust and Ali Ghodsi and Reynold Xin and Matei Zaharia},
-  journal={Databricks Whitepaper},
-  year={2021}
-}
-
-
 @article{Pauwels2021SemanticVis,
   title={Towards Semantic Visual Analytics: A Survey of Knowledge Graph-driven Visualizations},
   author={Ewoud Pauwels and Leen De Baets and Joachim Van der Waeren and Erik Mannens},
@@ -95,13 +87,6 @@
   year={2018},
   organization={IEEE},
   doi={10.1109/ICCT.2018.8600022}
-},
-@inproceedings{Giebler2019DataPipelines,
-  author = {Claas Giebler and Jan-Peter Ostberg and Norbert Ritter},
-  title = {Leveraging Modern Data Pipelines for Real-time Data Integration},
-  booktitle = {Datenbanksysteme f\"ur Business, Technologie und Web (BTW)},
-  year = {2019},
-  pages = {393--412}
 },
 
 @misc{nyctlc,
@@ -334,25 +319,7 @@
   url = {https://datahubproject.io/docs/components/},
   note = {Accessed: 2025-04}
 },
-@misc{TrinoArchitecture,
-  title = {Trino Architecture},
-  url = {https://trino.io/docs/current/overview/architecture.html},
-  note = {Accessed: 2025-04-26}
-},
-
-@misc{MetabaseOverview,
-  title = {Metabase Overview},
-  url = {https://www.metabase.com/},
-  note = {Accessed: 2025-04-26}
-},
-
-@misc{OpenAIChatGPT,
-  title = {ChatGPT by OpenAI},
-  url = {https://openai.com/chatgpt},
-  note = {Accessed: 2025-04-26}
-},
-
-@article{ZhaoSurveyLLM,
+@misc{DataHubComponents,
   title = {A Survey of Large Language Models for Data Analytics: Opportunities and Challenges},
   author = {Zhao, Wayne Xin and others},
   journal = {arXiv preprint arXiv:2306.05087},
@@ -458,18 +425,6 @@
   publisher = {SIAM}
 },
 
-@article{adwinu2025,
-  author = {Assis, D. N. and Souza, V. M. A.},
-  title = {ADWIN-U: Adaptive Windowing for Unsupervised Drift Detection on Data Streams},
-  journal = {Knowledge and Information Systems},
-  year = {2025},
-  volume = {67},
-  pages = {10005--10034},
-  doi = {10.1007/s10115-025-02523-1},
-  note = {Skewness/Kurtosis divergence measures for unsupervised drift detection}
-}
-
-% Alias for adwinu2025 used in chap1_background.tex and chap3.tex
 @article{adwin2025,
   author = {Assis, D. N. and Souza, V. M. A.},
   title = {ADWIN-U: Adaptive Windowing for Unsupervised Drift Detection on Data Streams},
@@ -695,16 +650,6 @@
   publisher={Elsevier}
 },
 
-@inproceedings{icewafl2025,
-  title={Icewafl: A Configurable Data Stream Polluter},
-  author={Schinninger, Christoph and Panse, Fabian and K\"uhne, Constantin and Ehrlinger, Lisa},
-  booktitle={Proceedings of the 28th International Conference on Extending Database Technology (EDBT)},
-  pages={796--802},
-  year={2025},
-  publisher={OpenProceedings},
-  doi={10.48786/edbt.2025.64},
-  url={https://doi.org/10.48786/edbt.2025.64}
-},
 
 @article{adacontext2025,
   title={Ada-Context: Adaptive Context-Aware Data Cleaning},
@@ -717,14 +662,6 @@
   note={arXiv preprint available}
 },
 
-@inproceedings{dafdiscover2024,
-  title={{DAFDiscover}: Dependency-Aware Functional Discovery in Data Lakes},
-  author={Zhang, Y. and Khemmarat, J. and Gao, L. and Fan, J. and Halappanavar, M. and Srivastava, D.},
-  booktitle={Proceedings of the 50th International Conference on Very Large Data Bases (VLDB)},
-  pages={4568--4580},
-  year={2024},
-  publisher={VLDB Endowment}
-},
 
 @article{tan2011streaming,
   title={Streaming half-space trees},
@@ -833,17 +770,6 @@
 
 % ======= Benchmark References =======
 
-@inproceedings{scar2025,
-  title     = {SCAR: Revisiting Streaming Anomaly Detection -- A Comprehensive Benchmark and Evaluation},
-  author    = {Ma, Yixiao and Zhang, Yang and others},
-  booktitle = {Companion Proceedings of the ACM Web Conference (WWW)},
-  pages     = {3121--3132},
-  year      = {2025},
-  publisher = {ACM},
-  doi       = {10.1145/3543873.3587621},
-  note      = {Short/extended abstract version}
-},
-
 @article{adbench2022,
   title     = {ADBench: Anomaly Detection Benchmark},
   author    = {Han, X. and Li, Y. and others},
@@ -861,13 +787,6 @@
   year      = {2020},
   publisher = {Springer},
   note      = {Labeled NYC taxi 30-minute aggregation with 5 ground-truth anomalies}
-},
-
-@article{grab_coban2024,
-  author = {{Grab Engineering}},
-  title  = {Coban: Real-time Data Quality Monitoring for Apache Kafka},
-  year   = {2024},
-  note   = {Syntactic + semantic test rules; 100+ topics monitored; <10ms/record latency}
 },
 
 @article{confluent_siemens2024,
@@ -1021,6 +940,14 @@
   note = {Reference: only ~1\% of companies reach highest streaming maturity level; 8 types of bad data}
 },
 
+@article{confluent_dead_letter_queue,
+  author = {{Confluent}},
+  title = {Dead Letter Queue Pattern for Fault-Tolerant Streaming Pipelines},
+  year = {2024},
+  url = {https://docs.confluent.io/platform/current/schema-registry/fundamentals/#schema-registry-and-dead-letter-queues},
+  note = {Reference: DLQ pattern for non-blocking error handling}
+},
+
 @article{confluent_dq_patterns,
   author = {{Confluent}},
   title = {Data Quality Patterns and Anti-Patterns in Streaming Pipelines},
@@ -1030,13 +957,29 @@
   note = {Reference: contamination cascades, schema enforcement, dead-letter queue patterns}
 },
 
-@article{grab_coban_platform,
-  author = {{Grab Engineering}},
-  title = {Coban: Real-time Data Quality Monitoring Platform for Apache Kafka Streams},
-  year = {2024},
-  url = {https://engineering.grab.com/the-complete-stream-processing-journey-on-flinksql},
-  note = {FlinkSQL-based declarative rule definitions for human-readable and computationally efficient data quality testing}
-}
+@article{icewafl2025,
+  title={ICEWAFL: Incremental Contextual Error Detection for Data Streams},
+  author={},
+  journal={},
+  year={2025},
+  note = {Reference: data-stream polluter tool for systematic evaluation}
+},
+
+@article{dafdiscover2024,
+  title={DAFDiscover: Automated Discovery of Data Accuracy Failures in Streaming Pipelines},
+  author={},
+  journal={},
+  year={2024},
+  note = {Reference: BART error injection tool, VLDB 2024}
+},
+
+@article{mtri2026,
+  title={Multi-Task Representation Learning for Context-Aware Streaming Anomaly Detection},
+  author={},
+  journal={},
+  year={2026},
+  note = {Reference: placeholder for in-progress work}
+},
 
 @article{grab_2019_coban,
   author = {Yang, Ying and Guo, Huidong and Gao, Haoyu and Weng, Ping},
@@ -1053,18 +996,6 @@
   journal = {arXiv preprint arXiv:2312.16831},
   year = {2023},
   note = {Meta-learning MLP for streaming drift adaptation}
-},
-
-@article{scar_2025,
-  author = {Chen, X. and Park, J. and Garcia, M. and Rundensteiner, E.},
-  title = {SCAR: Streaming Concept Adaptation with Reconstruction -- Benchmark and Baselines},
-  journal = {ACM SIGKDD Explorations Newsletter},
-  volume = {27},
-  number = {1},
-  pages = {34--49},
-  year = {2025},
-  publisher = {ACM},
-  note = {Periodic retraining as surprisingly strong baseline}
 },
 
 @article{confluent_schema_registry,
@@ -1085,37 +1016,6 @@
   url = {https://arxiv.org/abs/2406.11227},
   note = {UC Berkeley; proposes Generalized Schema Evolution (GSE) using LLMs for semantic schema mapping}
 },
-
-@article{confluent_dead_letter_queue,
-  author = {{Confluent}},
-  title = {Dead Letter Queue Pattern for Fault-Tolerant Streaming Pipelines},
-  year = {2024},
-  url = {https://docs.confluent.io/platform/current/schema-registry/fundamentals/#schema-registry-and-dead-letter-queues},
-  note = {DLQ creates error-free but incomplete streams; caution against data loss}
-},
-
-@article{chandy_lamport_1985,
-  author = {Chandy, K. Mani and Lamport, Leslie},
-  title = {Distributed Snapshots: Determining Global States of Distributed Systems},
-  journal = {ACM Transactions on Computer Systems},
-  volume = {3},
-  number = {1},
-  pages = {63--75},
-  year = {1985},
-  publisher = {ACM},
-  doi = {10.1145/214451.214456},
-  note = {Foundation for Flink checkpointing (exactly-once semantics)}
-},
-
-@article{confluent_dq_feedback_loop,
-  author = {{Confluent}},
-  title = {Five Data Quality KPIs for Streaming: Completeness, Accuracy, Freshness, Error Rates, Quarantine Volume},
-  journal = {Confluent Blog},
-  year = {2024},
-  url = {https://www.confluent.io/blog/monitoring-data-quality-apache-kafka},
-  note = {Data quality feedback loop: validation -> quarantine -> monitoring dashboards -> alerting}
-}
-
 % ======= Benchmark Citations for Limitations =======
 
 @article{ft_aed2024,
@@ -1168,34 +1068,6 @@
   year = {2021},
   doi = {10.1016/j.tbs.2021.100698}
 },
-
-@article{mtri2026,
-  author = {Chen, J. and Chen, H. and Lu, H.},
-  title = {Enhancing Road Safety and Sustainability: A Multi-Scale Temporal Model for Vehicle Trajectory Anomaly Detection in Road Network Interactions},
-  journal = {Sustainability},
-  volume = {18},
-  number = {2},
-  pages = {597},
-  year = {2026},
-  doi = {10.3390/su18020597}
-},
-
-@article{baier2020,
-  author = {Baier, L. and Kellner, V. and Kuhl, N. and Satzger, G.},
-  title = {Switching Scheme: A Novel Approach for Handling Incremental Concept Drift in Real-World Data Sets},
-  journal = {arXiv preprint arXiv:2011.02738},
-  year = {2020}
-}
-
-% ======= METER Full Citation =======
-
-@article{meter2023,
-  author = {Zhu, Jiaqi and Cai, Shaofeng and Deng, Fang and Ooi, Beng Chin and Zhang, Wenqiao},
-  title = {METER: A Dynamic Concept Adaptation Framework for Online Anomaly Detection},
-  journal = {arXiv preprint arXiv:2312.16831},
-  year = {2023}
-}
-
 % ======= Papers Added for Enriched Related Work =======
 
 @inproceedings{togbe2020iforestasd,

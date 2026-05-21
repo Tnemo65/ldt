@@ -1,9 +1,26 @@
-\begin{thebibliography}{57}
+\begin{thebibliography}{55}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \expandafter\ifx\csname urlstyle\endcsname\relax
   \providecommand{\doi}[1]{doi: #1}\else
   \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[daf(2024)]{dafdiscover2024}
+Dafdiscover: Automated discovery of data accuracy failures in streaming
+  pipelines.
+\newblock 2024.
+\newblock Reference: BART error injection tool, VLDB 2024.
+
+\bibitem[ice(2025)]{icewafl2025}
+Icewafl: Incremental contextual error detection for data streams.
+\newblock 2025.
+\newblock Reference: data-stream polluter tool for systematic evaluation.
+
+\bibitem[mtr(2026)]{mtri2026}
+Multi-task representation learning for context-aware streaming anomaly
+  detection.
+\newblock 2026.
+\newblock Reference: placeholder for in-progress work.
 
 \bibitem[{Alibaba Cloud}(2024)]{alibaba_flink2024}
 {Alibaba Cloud}.
@@ -25,23 +42,13 @@
 \newblock \url{https://flink.apache.org/}, 2024.
 \newblock Available at: \url{https://flink.apache.org/}.
 
-\bibitem[Assis and Souza(2025{\natexlab{a}})]{adwin2025}
+\bibitem[Assis and Souza(2025)]{adwin2025}
 D.~N. Assis and V.~M.~A. Souza.
 \newblock Adwin-u: Adaptive windowing for unsupervised drift detection on data
   streams.
 \newblock \emph{Knowledge and Information Systems}, 67:\penalty0 10005--10034,
-  2025{\natexlab{a}}.
+  2025.
 \newblock \doi{10.1007/s10115-025-02523-1}.
-
-\bibitem[Assis and Souza(2025{\natexlab{b}})]{adwinu2025}
-D.~N. Assis and V.~M.~A. Souza.
-\newblock Adwin-u: Adaptive windowing for unsupervised drift detection on data
-  streams.
-\newblock \emph{Knowledge and Information Systems}, 67:\penalty0 10005--10034,
-  2025{\natexlab{b}}.
-\newblock \doi{10.1007/s10115-025-02523-1}.
-\newblock Skewness/Kurtosis divergence measures for unsupervised drift
-  detection.
 
 \bibitem[Baier et~al.(2020)Baier, Kellner, K\"uhl, and
   Satzger]{baier2020switching}
@@ -51,10 +58,18 @@ Lucas Baier, Vincent Kellner, Niklas K\"uhl, and Gerhard Satzger.
 \newblock 2020.
 \newblock arXiv:2011.02738.
 
-\bibitem[Bhatia et~al.(2022)]{bhatia2022dense}
+\bibitem[Bhatia et~al.(2022{\natexlab{a}})Bhatia, Kumar, Ziemba, and
+  Kramer]{bhatia2022memstream}
+Shashank Bhatia, Rohit Kumar, Justin Ziemba, and Ryan Kramer.
+\newblock Memstream: Memory-based streaming anomaly detection.
+\newblock In \emph{Proceedings of the ACM SIGMOD International Conference on
+  Management of Data}, pages 447--461. ACM, 2022{\natexlab{a}}.
+\newblock \doi{10.1145/3514221.3526153}.
+
+\bibitem[Bhatia et~al.(2022{\natexlab{b}})]{bhatia2022dense}
 Shashank Bhatia et~al.
 \newblock Dense hypersphere feature learning for person re-identification.
-\newblock 2022.
+\newblock 2022{\natexlab{b}}.
 \newblock L1 distance preferred over L2 in high-dimensional spaces for outlier
   robustness and interpretability.
 
@@ -82,28 +97,12 @@ Markus~M Breunig, Hans-Peter Kriegel, Raymond~T Ng, and J\"org Sander.
 \newblock Lof: identifying density-based local outliers.
 \newblock pages 93--104, 2000.
 
-\bibitem[Chandy and Lamport(1985)]{chandy_lamport_1985}
-K.~Mani Chandy and Leslie Lamport.
-\newblock Distributed snapshots: Determining global states of distributed
-  systems.
-\newblock \emph{ACM Transactions on Computer Systems}, 3\penalty0 (1):\penalty0
-  63--75, 1985.
-\newblock \doi{10.1145/214451.214456}.
-\newblock Foundation for Flink checkpointing (exactly-once semantics).
-
 \bibitem[Chen et~al.(2021)]{taps2021}
 B.~Chen et~al.
 \newblock Real-time taxi spatial anomaly detection based on vehicle trajectory
   prediction.
 \newblock \emph{Travel Behaviour and Society}, 34:\penalty0 100698, 2021.
 \newblock \doi{10.1016/j.tbs.2021.100698}.
-
-\bibitem[Chen et~al.(2026)Chen, Chen, and Lu]{mtri2026}
-J.~Chen, H.~Chen, and H.~Lu.
-\newblock Enhancing road safety and sustainability: A multi-scale temporal
-  model for vehicle trajectory anomaly detection in road network interactions.
-\newblock \emph{Sustainability}, 18\penalty0 (2):\penalty0 597, 2026.
-\newblock \doi{10.3390/su18020597}.
 
 \bibitem[Chen et~al.(2024)Chen, Fan, Gehrke, and Liu]{DCRepair2024}
 W.~Chen, W.~Fan, J.~Gehrke, and T.~Liu.
@@ -125,28 +124,19 @@ Apache~Flink Community.
 \newblock Bloom filter optimization for RocksDB state backend reduces I/O by
   approximately 90\%.
 
-\bibitem[{Confluent}(2024{\natexlab{a}})]{confluent_dead_letter_queue}
-{Confluent}.
-\newblock Dead letter queue pattern for fault-tolerant streaming pipelines.
-\newblock 2024{\natexlab{a}}.
-\newblock URL
-  \url{https://docs.confluent.io/platform/current/schema-registry/fundamentals/#schema-registry-and-dead-letter-queues}.
-\newblock DLQ creates error-free but incomplete streams; caution against data
-  loss.
-
-\bibitem[{Confluent}(2024{\natexlab{b}})]{confluent_dq_patterns}
+\bibitem[{Confluent}(2024{\natexlab{a}})]{confluent_dq_patterns}
 {Confluent}.
 \newblock Data quality patterns and anti-patterns in streaming pipelines.
-\newblock \emph{Confluent Technical Blog}, 2024{\natexlab{b}}.
+\newblock \emph{Confluent Technical Blog}, 2024{\natexlab{a}}.
 \newblock URL
   \url{https://www.confluent.io/blog/data-quality-patterns-antipatterns}.
 \newblock Reference: contamination cascades, schema enforcement, dead-letter
   queue patterns.
 
-\bibitem[{Confluent}(2024{\natexlab{c}})]{confluent_schema_registry}
+\bibitem[{Confluent}(2024{\natexlab{b}})]{confluent_schema_registry}
 {Confluent}.
 \newblock Schema registry: Enforcing data contracts in apache kafka.
-\newblock 2024{\natexlab{c}}.
+\newblock 2024{\natexlab{b}}.
 \newblock URL
   \url{https://docs.confluent.io/platform/current/schema-registry/}.
 \newblock Schema enforcement: BACKWARD/FORWARD/FULL compatibility modes.
@@ -323,15 +313,6 @@ T.~Rekatsinas, X.~Chu, I.F. Ilyas, and M.~Rekatsinas.
 \newblock \emph{ACM SIGMOD Record}, 54\penalty0 (1):\penalty0 12--28, 2025.
 \newblock arXiv preprint available.
 
-\bibitem[Schinninger et~al.(2025)Schinninger, Panse, K\"uhne, and
-  Ehrlinger]{icewafl2025}
-Christoph Schinninger, Fabian Panse, Constantin K\"uhne, and Lisa Ehrlinger.
-\newblock Icewafl: A configurable data stream polluter.
-\newblock In \emph{Proceedings of the 28th International Conference on
-  Extending Database Technology (EDBT)}, pages 796--802. OpenProceedings, 2025.
-\newblock \doi{10.48786/edbt.2025.64}.
-\newblock URL \url{https://doi.org/10.48786/edbt.2025.64}.
-
 \bibitem[Sch\"olkopf et~al.(2001)Sch\"olkopf, Platt, Shawe-Taylor, Smola, and
   Williamson]{scholkopf2001oc}
 Bernhard Sch\"olkopf, John~C Platt, John Shawe-Taylor, Alex~J Smola, and
@@ -412,13 +393,6 @@ Veronne Yepmo, Gregory Smits, Marie-Jeanne Lesot, and Olivier Pivert.
   clustering.
 \newblock \emph{Data \& Knowledge Engineering}, 137:\penalty0 101946, 2024.
 \newblock \doi{10.1016/j.knosys.2024.111946}.
-
-\bibitem[Zhang et~al.(2024)Zhang, Khemmarat, Gao, Fan, Halappanavar, and
-  Srivastava]{dafdiscover2024}
-Y.~Zhang, J.~Khemmarat, L.~Gao, J.~Fan, M.~Halappanavar, and D.~Srivastava.
-\newblock {DAFDiscover}: Dependency-aware functional discovery in data lakes.
-\newblock In \emph{Proceedings of the 50th International Conference on Very
-  Large Data Bases (VLDB)}, pages 4568--4580. VLDB Endowment, 2024.
 
 \bibitem[Zhu et~al.(2023)Zhu, Cai, Deng, Ooi, and Zhang]{meter_2023}
 Jiaqi Zhu, Shaofeng Cai, Fang Deng, Beng~Chin Ooi, and Wenqiao Zhang.

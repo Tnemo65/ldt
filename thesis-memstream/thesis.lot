@@ -2,14 +2,18 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {3.1}{\ignorespaces Qualitative comparison of CA-DQStream against existing DQ frameworks.}}{15}{table.3.1}%
+\contentsline {table}{\numberline {3.1}{\ignorespaces Qualitative comparison of CA-DQStream against existing DQ frameworks.}}{12}{table.3.1}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {4.1}{\ignorespaces Completeness Violations in NYC Yellow Taxi Raw Data (2024, 41.2M records).}}{19}{table.caption.8}%
-\contentsline {table}{\numberline {4.2}{\ignorespaces Validity Violations: Negative Financial Values (2024, 41.2M records).}}{20}{table.caption.9}%
-\contentsline {table}{\numberline {4.3}{\ignorespaces Monthly NULL Rate Trend in passenger\_count (Schema Evolution).}}{20}{table.caption.10}%
-\contentsline {table}{\numberline {4.4}{\ignorespaces 34D Feature Vector for Online Autoencoder.}}{25}{table.4.4}%
-\contentsline {table}{\numberline {4.5}{\ignorespaces AUC vs Memory Buffer Size.}}{30}{table.caption.23}%
-\contentsline {table}{\numberline {4.6}{\ignorespaces ADWIN Confidence Parameters for Meta-Metrics.}}{34}{table.4.6}%
+\contentsline {table}{\numberline {4.1}{\ignorespaces Completeness Violations in NYC Yellow Taxi Raw Data (Jan-Dec 2025, 48.7M records).}}{15}{table.caption.8}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Validity Violations: Negative Financial Values (Jan-Dec 2025, 48.7M records).}}{16}{table.caption.9}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Monthly NULL Rate Trend in passenger\_count (Jan-Dec 2025, 48.7M records).}}{16}{table.caption.10}%
+\contentsline {table}{\numberline {4.4}{\ignorespaces 34D Feature Vector for Online Autoencoder. Columns: Cat. (category), Formula/Rationale. Ablation baselines B1--B4 use 21 features (rows 1--16, 21, 26--30) to isolate the contribution of ratio and autoencoder components.}}{23}{table.4.4}%
+\contentsline {table}{\numberline {4.5}{\ignorespaces ADWIN-U Confidence Parameters and Statistics for Meta-Metrics.}}{31}{table.4.5}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {5.2}{\ignorespaces AUC-PR and Runtime Comparison with Streaming Anomaly Detection Methods.}}{44}{table.caption.44}%
+\contentsline {table}{\numberline {5.1}{\ignorespaces Detection Performance and Runtime Comparison (1M-record evaluation set, 14.78\% anomaly rate). CA-DQStream uses the optimal configuration from grid search: $N=2{,}048$, $k=10$, $D=76$, $\sigma _{\mathrm {noise}}=0.001$.}}{38}{table.caption.41}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces AUC-PR vs Memory Buffer Size.}}{38}{table.caption.42}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Stage 1: Coarse Grid Search over Memory Length and $k$. Fixed: $\gamma =0.0$, $\beta =0.001$, $\sigma _{\mathrm {noise}}=0.001$, lr=$0.01$, $D=38$, epochs=$5{,}000$, Adam(0.9, 0.999).}}{39}{table.caption.43}%
+\contentsline {table}{\numberline {5.4}{\ignorespaces Stage 2: Fine-Tuning of Epochs and Learning Rate. Top Stage 1 config ($N=1{,}024$, $k=10$); epochs $\in \{500, 1000, 2000, 5000, 10000\}$, lr $\in \{0.005, 0.01\}$. Fixed: $\gamma =0.0$, $\beta =0.001$, $\sigma _{\mathrm {noise}}=0.001$, $D=38$, Adam(0.9, 0.999).}}{39}{table.caption.44}%
+\contentsline {table}{\numberline {5.5}{\ignorespaces Stage 3: Architecture Search over Hidden Dimension $D$. Fixed: $\gamma =0.0$, $\beta =0.001$, $\sigma _{\mathrm {noise}}=0.001$, lr=$0.01$, epochs=$1{,}000$, Adam(0.9, 0.999). Best config in bold.}}{39}{table.caption.45}%
+\contentsline {table}{\numberline {5.6}{\ignorespaces Ablation Study: Component-wise Contribution to Detection Performance on the 500K-Record Evaluation Set. Metrics: AUC-PR, AUC-ROC, F1 (optimal threshold). Separation ratio: mean anomaly score / mean normal score.}}{40}{table.caption.46}%
 \addvspace {10\p@ }

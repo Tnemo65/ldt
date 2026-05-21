@@ -75,7 +75,7 @@ if (-not $SkipBuild) {
 
 # Build cadqstream-metrics image (tag must match docker-compose.yml: ldt-cadqstream-metrics:latest)
 Write-Host "  Building ldt-cadqstream-metrics:latest..."
-$metricsBuild = docker build -t ldt-cadqstream-metrics:latest (Join-Path $DEPLOYMENT_DIR "cadqstream-metrics") 2>&1
+$metricsBuild = docker build -t ldt-cadqstream-metrics:latest (Join-Path $DEPLOYMENT_DIR "cadqstream-metrics") -f (Join-Path $DEPLOYMENT_DIR "cadqstream-metrics\Dockerfile") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] cadqstream-metrics build failed!" -ForegroundColor Red
     Write-Host $metricsBuild
@@ -84,8 +84,9 @@ if ($LASTEXITCODE -ne 0) {
 Write-Host "  [OK] ldt-cadqstream-metrics:latest built."
 
 # Build ML service image (tag must match docker-compose.yml: ldt-ml-service:latest)
+# ml-service Dockerfile expects project-root paths (deployment/ml-service/requirements.txt, src/api/ml_service.py)
 Write-Host "  Building ldt-ml-service:latest..."
-$mlBuild = docker build -t ldt-ml-service:latest (Join-Path $DEPLOYMENT_DIR "ml-service") 2>&1
+$mlBuild = docker build -t ldt-ml-service:latest $DEPLOYMENT_DIR -f (Join-Path $DEPLOYMENT_DIR "ml-service\Dockerfile") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] ml-service build failed!" -ForegroundColor Red
     Write-Host $mlBuild
@@ -95,7 +96,7 @@ Write-Host "  [OK] ldt-ml-service:latest built."
 
 # Build action-replay-worker image (tag must match docker-compose.yml: ldt-action-replay-worker:latest)
 Write-Host "  Building ldt-action-replay-worker:latest..."
-$arwBuild = docker build -t ldt-action-replay-worker:latest (Join-Path $DEPLOYMENT_DIR "action-replay-worker") 2>&1
+$arwBuild = docker build -t ldt-action-replay-worker:latest (Join-Path $DEPLOYMENT_DIR "action-replay-worker") -f (Join-Path $DEPLOYMENT_DIR "action-replay-worker\Dockerfile") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] action-replay-worker build failed!" -ForegroundColor Red
     Write-Host $arwBuild
@@ -105,7 +106,7 @@ Write-Host "  [OK] ldt-action-replay-worker:latest built."
 
 # Build stats-writer image (tag must match docker-compose.yml: ldt-stats-writer:latest)
 Write-Host "  Building ldt-stats-writer:latest..."
-$swBuild = docker build -t ldt-stats-writer:latest (Join-Path $DEPLOYMENT_DIR "stats-writer") 2>&1
+$swBuild = docker build -t ldt-stats-writer:latest (Join-Path $DEPLOYMENT_DIR "stats-writer") -f (Join-Path $DEPLOYMENT_DIR "stats-writer\Dockerfile") 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] stats-writer build failed!" -ForegroundColor Red
     Write-Host $swBuild

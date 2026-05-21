@@ -71,8 +71,8 @@ def _get_minio_client():
         return boto3.client(
             's3',
             endpoint_url=endpoint,
-            aws_access_key_id=os.getenv('MINIO_ACCESS_KEY', os.getenv('AWS_ACCESS_KEY_ID', 'minioadmin')),
-            aws_secret_access_key=os.getenv('MINIO_SECRET_KEY', os.getenv('AWS_SECRET_ACCESS_KEY', 'minioadmin')),
+            aws_access_key_id=os.getenv('MINIO_ACCESS_KEY', os.getenv('AWS_ACCESS_KEY_ID', '')),
+            aws_secret_access_key=os.getenv('MINIO_SECRET_KEY', os.getenv('AWS_SECRET_ACCESS_KEY', '')),
             config=cfg,
         )
     except Exception as e:
